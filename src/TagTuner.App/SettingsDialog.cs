@@ -28,12 +28,12 @@ public static class SettingsDialog
         var backups = new BackupStore(settings.ResolvedBackupFolder);
 
         // ── Sprache ──────────────────────────────────────────────
-        var languages = new[] { ("Deutsch", "de"), ("Englisch", "en") };
+        var languages = new[] { ("English", "en"), ("German", "de") };
         var language = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             ItemsSource = languages.Select(l => Strings.T(l.Item1)).ToList(),
-            SelectedIndex = Strings.Current == "en" ? 1 : 0,
+            SelectedIndex = Strings.Current == "de" ? 1 : 0,
         };
 
         // ── Standardprofil ───────────────────────────────────────
@@ -99,9 +99,9 @@ public static class SettingsDialog
         // ── Aufbau ───────────────────────────────────────────────
         var panel = new StackPanel { Spacing = 14, Width = 460 };
 
-        panel.Children.Add(Group("Sprache",
+        panel.Children.Add(Group("Language",
             language,
-            Hint(Strings.T("Wirkt nach einem Neustart der App."))));
+            Hint(Strings.T("Takes effect after a restart."))));
 
         panel.Children.Add(Group("Standardprofil",
             Row(Field("Dateiformat", fmt), Field("Samplerate", rate)),
@@ -222,13 +222,14 @@ public static class SettingsDialog
 
         panel.Children.Add(Group("Explorer-Kontextmenü",
             shellState,
-            Hint("Fügt „TagTuner“ zum Rechtsklick-Menü für Audiodateien und Ordner hinzu. " +
-                 "Ein einzelner Eintrag. Welcher Bereich geöffnet wird, fragt die App. " +
-                 "Keine Administratorrechte nötig."),
+            Hint(Strings.T(
+                "Adds a TagTuner entry to the right click menu for audio files and folders. " +
+                "One entry, no submenu: it opens the folder the file is in. " +
+                "No administrator rights needed.")),
             shellRow));
 
         // ── Aktualisierung ───────────────────────────────────────
-        var behaviours = new[] { ("Nie", "never"), ("Fragen", "ask"), ("Automatisch", "auto") };
+        var behaviours = new[] { ("Never", "never"), ("Ask", "ask"), ("Automatically", "auto") };
         var updateMode = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -237,30 +238,30 @@ public static class SettingsDialog
         };
 
         var updateState = Hint(settings.SkippedVersion is { Length: > 0 } skipped
-            ? Strings.T("Version {0} wurde übersprungen.", skipped)
+            ? Strings.T("Version {0} was skipped.", skipped)
             : "");
 
-        var checkBtn = new Button { Content = Strings.T("Jetzt nach Updates suchen") };
+        var checkBtn = new Button { Content = Strings.T("Check for updates now") };
         checkBtn.Click += async (_, _) =>
         {
             checkBtn.IsEnabled = false;
-            updateState.Text = Strings.T("Wird gesucht…");
+            updateState.Text = Strings.T("Searching…");
 
             var found = await UpdateService.CheckAsync(AppInfo.Version);
             checkBtn.IsEnabled = true;
 
             updateState.Text = found switch
             {
-                { Failed: true } => Strings.T("Suche fehlgeschlagen: {0}", found.Error ?? ""),
-                { HasUpdate: true } => Strings.T("Version {0} ist verfügbar.", found.Version ?? ""),
-                _ => Strings.T("TagTuner ist aktuell ({0}).", AppInfo.Version),
+                { Failed: true } => Strings.T("Check failed: {0}", found.Error ?? ""),
+                { HasUpdate: true } => Strings.T("Version {0} is available.", found.Version ?? ""),
+                _ => Strings.T("TagTuner is up to date ({0}).", AppInfo.Version),
             };
         };
 
-        panel.Children.Add(Group("Aktualisierung",
-            Field(Strings.T("Beim Start"), updateMode),
-            Hint(Strings.T("„Nie“ verhindert jede Verbindung. „Fragen“ meldet sich, wenn es etwas Neues gibt. " +
-                           "„Automatisch“ lädt und installiert ohne Rückfrage.")),
+        panel.Children.Add(Group("Updates",
+            Field(Strings.T("On start"), updateMode),
+            Hint(Strings.T("\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
+                           "\"Automatically\" downloads and installs without asking.")),
             updateState,
             checkBtn));
 

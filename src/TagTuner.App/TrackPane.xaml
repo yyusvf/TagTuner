@@ -17,13 +17,13 @@
             <Border Grid.Column="1" x:Name="ScopeBadge" CornerRadius="9" Padding="7,1"
                     VerticalAlignment="Center" Visibility="Collapsed"
                     Background="{StaticResource WarnDimBrush}">
-                <TextBlock Text="mit Unterordnern" FontSize="10"
+                <TextBlock Text="with subfolders" FontSize="10"
                            Foreground="{StaticResource WarnBrush}" />
             </Border>
             <TextBlock Grid.Column="2" x:Name="CountLabel" FontSize="11.5"
                        VerticalAlignment="Bottom" Margin="0,0,0,2"
                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            <HyperlinkButton Grid.Column="3" Content="Alle wählen" FontSize="11.5"
+            <HyperlinkButton Grid.Column="3" Content="Select all" FontSize="11.5"
                              Padding="6,2" Click="OnSelectAll" />
         </Grid>
 
@@ -57,14 +57,14 @@
                         VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Spacing="3" Tag="Title"
                             Background="Transparent" Tapped="OnHeaderTapped">
-                    <TextBlock Text="TITEL" Style="{StaticResource ColHeader}" />
+                    <TextBlock Text="TITLE" Style="{StaticResource ColHeader}" />
                     <TextBlock x:Name="SortTitle" Style="{StaticResource ColHeader}"
                                Foreground="{StaticResource AccentBrush}" />
                 </StackPanel>
                 <TextBlock Text="·" Style="{StaticResource ColHeader}" />
                 <StackPanel Orientation="Horizontal" Spacing="3" Tag="Artist"
                             Background="Transparent" Tapped="OnHeaderTapped">
-                    <TextBlock Text="INTERPRET" Style="{StaticResource ColHeader}" />
+                    <TextBlock Text="ARTIST" Style="{StaticResource ColHeader}" />
                     <TextBlock x:Name="SortArtist" Style="{StaticResource ColHeader}"
                                Foreground="{StaticResource AccentBrush}" />
                 </StackPanel>
@@ -87,7 +87,7 @@
             <StackPanel Grid.Column="4" Tag="SampleRate" Orientation="Horizontal"
                         Spacing="3" Background="Transparent"
                         Tapped="OnHeaderTapped">
-                <TextBlock Text="SAMPLERATE" Style="{StaticResource ColHeader}" />
+                <TextBlock Text="SAMPLE RATE" Style="{StaticResource ColHeader}" />
                 <TextBlock x:Name="SortSampleRate" Style="{StaticResource ColHeader}"
                            Foreground="{StaticResource AccentBrush}" />
             </StackPanel>

@@ -2667,7 +2667,7 @@ public sealed partial class MainWindow : Window
         }
 
         var text = new System.Text.StringBuilder();
-        text.AppendLine(Strings.T("Version {0} ist verfügbar, installiert ist {1}.",
+        text.AppendLine(Strings.T("Version {0} is available, {1} is installed.",
                                   found.Version ?? "?", AppInfo.Version));
 
         if (!string.IsNullOrWhiteSpace(found.Notes))
@@ -2679,15 +2679,15 @@ public sealed partial class MainWindow : Window
 
         var dialog = new ContentDialog
         {
-            Title = Strings.T("Aktualisierung verfügbar"),
+            Title = Strings.T("Update available"),
             Content = new ScrollViewer
             {
                 MaxHeight = 320,
                 Content = new TextBlock { Text = text.ToString().TrimEnd(), TextWrapping = TextWrapping.Wrap },
             },
-            PrimaryButtonText = Strings.T("Installieren"),
-            SecondaryButtonText = Strings.T("Diese Version überspringen"),
-            CloseButtonText = Strings.T("Später"),
+            PrimaryButtonText = Strings.T("Install"),
+            SecondaryButtonText = Strings.T("Skip this version"),
+            CloseButtonText = Strings.T("Later"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Root.XamlRoot,
         };
@@ -2712,7 +2712,7 @@ public sealed partial class MainWindow : Window
     {
         if (found.SetupUrl is null) return;
 
-        StatusText.Text = Strings.T("Aktualisierung wird geladen…");
+        StatusText.Text = Strings.T("Downloading the update…");
         ShowProgress(true, 0);
 
         try
@@ -2732,7 +2732,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             ShowProgress(false, 0);
-            StatusText.Text = Strings.T("Aktualisierung fehlgeschlagen: {0}", ex.Message);
+            StatusText.Text = Strings.T("Update failed: {0}", ex.Message);
         }
     }
 

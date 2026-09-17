@@ -1,105 +1,103 @@
 # TagTuner
 
-Ein Fenster, in dem Musikordner wie Playlisten behandelt werden. Tags
-bearbeiten, Format und Samplerate angleichen, Cover setzen, Reihenfolge per
-Ziehen ändern. Für Windows.
+One window where music folders are treated like playlists. Edit tags, align
+format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
 ![Version](https://img.shields.io/badge/version-0.4.0-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
-## Installation
+## Install
 
-Lade `TagTuner-x.y.z-Setup.exe` aus den
-[Releases](https://github.com/yyusvf/TagTuner/releases) und führe sie aus. Es
-werden keine Administratorrechte gebraucht, und ffmpeg ist bereits enthalten.
+Download `TagTuner-x.y.z-Setup.exe` from the
+[releases](https://github.com/yyusvf/TagTuner/releases) and run it. No
+administrator rights are needed and ffmpeg is already included.
 
-Wer nichts installieren möchte, nimmt das ZIP, entpackt es und startet
-`TagTuner.exe` daraus.
+If you would rather not install anything, take the ZIP, unpack it and run
+`TagTuner.exe` from there.
 
-## Was die App macht
+## What it does
 
-**Ordner sind Playlisten.** Beim Öffnen eines Ordners liest TagTuner nach, ob
-alle Dateien dasselbe Format und dieselbe Samplerate haben. Ist er
-einheitlich, gilt das als Ziel des Ordners. Ist er gemischt oder leer, greift
-das Standardprofil aus den Einstellungen.
+**Folders are playlists.** When you open a folder, TagTuner checks whether all
+files share the same format and sample rate. If they do, that becomes the
+target for the folder. If the folder is mixed or empty, the default profile
+from the settings applies.
 
-**Dateien hineinziehen.** Wer eine Datei in einen Ordner zieht, bekommt sie
-auf dessen Format und Samplerate gebracht, mit Album, Interpret, Jahr und
-Genre aus dem Ordner und der nächsten freien Track-Nummer. Ob das geschieht,
-lässt sich global und je Ordner einstellen.
+**Drop files in.** A file dropped into a folder is brought to that folder's
+format and sample rate, gets album, artist, year and genre from the folder,
+and the next free track number. You can turn this on or off globally and per
+folder.
 
-**Metadaten links, immer sichtbar.** Titel, Interpret, Album, Jahr, Track,
-Disc, Genre, Album-Interpret, Komponist und Kommentar. Bei mehreren
-ausgewählten Dateien zeigt jedes Feld nur, worin sie sich einig sind; alles
-andere bleibt beim Schreiben unangetastet. Ist nichts ausgewählt, gilt der
-ganze Ordner.
+**Metadata on the left, always visible.** Title, artist, album, year, track,
+disc, genre, album artist, composer and comment. With several files selected,
+each field only shows what they agree on; anything else stays untouched when
+writing. With nothing selected, the whole folder is the target.
 
-**Cover.** Setzen, kopieren, einfügen, entfernen, verkleinern. Ein nicht
-quadratisches Bild lässt sich vorher zuschneiden. Was schon quadratisch und
-JPEG oder PNG ist, wird unverändert übernommen.
+**Covers.** Set, copy, paste, remove, shrink. A picture that is not square can
+be cropped first. Anything already square and JPEG or PNG is taken as is.
 
-**Konvertieren.** MP3, FLAC, WAV, AIFF, M4A und OGG. Die Bitrate wird nie
-angefasst, sie fällt nur an, wenn ohnehin verlustbehaftet kodiert wird.
+**Converting.** MP3, FLAC, WAV, AIFF, M4A and OGG. The bitrate is never
+touched on its own; it only comes into play when a lossy encode happens
+anyway.
 
-**Vorschau-Player.** Abspielen per Doppelklick oder Leertaste, Lautstärke
-unten links. Läuft weiter, solange nicht genau die abgespielte Datei
-beschrieben wird.
+**Preview player.** Play with a double click or the space bar, volume at the
+bottom left. Playback keeps running unless the file being played is the one
+being written.
 
-**Bibliothek.** Eigene Ordner hinzufügen, nach Ordnern und Liedern suchen,
-Ordner mit Cover und Interpret in einer Baumansicht. Auf Wunsch werden nur
-Ordner gezeigt, unter denen Musik liegt.
+**Library.** Add your own folders, search folders and songs, browse a tree
+that shows cover and artist per folder. Optionally only folders that actually
+contain music.
 
-**Tabs und geteilte Ansicht.** Mehrere Ordner offen halten und Dateien
-zwischen zwei Hälften ziehen. Strg kopiert statt zu verschieben.
+**Tabs and split view.** Keep several folders open and drag files between two
+halves. Hold Ctrl to copy instead of move.
 
-## Sicherheit der Daten
+## Your files are backed up
 
-Vor jedem Schreibvorgang legt TagTuner eine Kopie der Datei an, außerhalb der
-Musikbibliothek unter `%APPDATA%\TagTuner\Backups`. Der Verlauf zeigt, was
-wann geschehen ist, und macht es rückgängig. Wie lange Sicherungen liegen
-bleiben, steht in den Einstellungen.
+Before every write, TagTuner copies the file to
+`%APPDATA%\TagTuner\Backups`, outside your music library. The history shows
+what happened when and undoes it. How long backups are kept is a setting.
 
-Nach jeder Konvertierung wird das Ergebnis zurückgelesen und geprüft: Stimmt
-die Samplerate, ist das Cover noch da. Fehlt es, wird es erneut eingesetzt.
+After every conversion the result is read back and checked: is the sample rate
+right, is the cover still there. If the cover was dropped, it is put back.
 
-## Sprache
+## Language
 
-Deutsch und Englisch. Beim ersten Start entscheidet die Sprache des Systems,
-danach die Einstellung.
+English and German. The system language decides on first run, the setting
+after that.
 
-## Aktualisierung
+## Updates
 
-TagTuner sucht beim Start höchstens einmal am Tag nach einer neuen Fassung.
-In den Einstellungen lässt sich das auf „Nie", „Fragen" oder „Automatisch"
-stellen. „Nie" heißt nie, es geht dann keine Anfrage hinaus.
+TagTuner checks for a new version on start, at most once a day. In the
+settings this can be set to never, ask or automatic. Never means never, no
+request goes out at all.
 
-## Selbst bauen
+## Building it yourself
 
-Gebraucht werden das .NET 10 SDK und Inno Setup 6.
+You need the .NET 10 SDK and Inno Setup 6.
 
 ```powershell
 dotnet build
 dotnet run --project src\TagTuner.App
 
-# Setup und portables ZIP nach dist\
+# Setup and portable ZIP into dist\
 .\tools\build-release.ps1 -Version 0.4.0
 ```
 
-ffmpeg liegt nicht im Repository. `tools\fetch-ffmpeg.ps1` holt es nach
-`tools\ffmpeg\`, von wo der Build es einpackt.
+ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
+`tools\ffmpeg\`, from where the build picks it up.
 
-## Aufbau
+## Layout
 
 ```
-src/TagTuner.Core/   Formate, Konvertierung, Tags, Sicherungen, Einstellungen
-src/TagTuner.App/    Oberfläche (WinUI 3)
-installer/           Inno-Setup-Skript
-tools/               Build- und Hilfsskripte
+src/TagTuner.Core/   formats, conversion, tags, backups, settings
+src/TagTuner.App/    user interface (WinUI 3)
+installer/           Inno Setup script
+tools/               build and helper scripts
 ```
 
-Der Kern kennt keine Oberfläche und lässt sich ohne Fenster testen. Getagged
-wird mit TagLib#, konvertiert mit ffmpeg als eigenem Prozess.
+The core knows nothing about the user interface and can be tested without a
+window. Tagging is done with TagLib#, converting with ffmpeg as a separate
+process.
 
-## Lizenz
+## License
 
 MIT

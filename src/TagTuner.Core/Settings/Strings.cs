@@ -3,28 +3,30 @@ using System.Globalization;
 namespace TagTuner.Core.Settings;
 
 /// <summary>
-/// Die Oberfläche auf Deutsch und Englisch.
+/// The user interface in English and German.
 ///
-/// Geschlüsselt wird mit dem deutschen Text selbst, nicht mit Kürzeln. Das
-/// hält die Aufrufstellen lesbar, und was noch nicht übersetzt ist, erscheint
-/// auf Deutsch statt leer oder als Schlüsselname.
+/// English is the source language: the code and the markup carry the English
+/// wording, and this table holds the German. Anything that is not in the
+/// table shows up in English, which is a readable fallback rather than an
+/// empty label or a key name.
 /// </summary>
 public static class Strings
 {
-    private static bool _english;
+    private static bool _german;
 
-    /// <summary>„de" oder „en".</summary>
-    public static string Current => _english ? "en" : "de";
+    /// <summary>Either "en" or "de".</summary>
+    public static string Current => _german ? "de" : "en";
 
     /// <summary>
-    /// Legt die Sprache fest. Leer heißt: noch nie gewählt, dann entscheidet
-    /// das System. Alles außer Deutsch bekommt Englisch.
+    /// Picks the language. An empty value means the user never chose one, in
+    /// which case the system decides. Everything that is not German gets
+    /// English.
     /// </summary>
     public static void Use(string? language)
     {
-        _english = string.IsNullOrWhiteSpace(language)
-            ? !SystemIsGerman()
-            : !language.StartsWith("de", StringComparison.OrdinalIgnoreCase);
+        _german = string.IsNullOrWhiteSpace(language)
+            ? SystemIsGerman()
+            : language.StartsWith("de", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool SystemIsGerman()
@@ -37,204 +39,272 @@ public static class Strings
         catch { return false; }
     }
 
-    /// <summary>Die Sprache, die beim allerersten Start gelten soll.</summary>
+    /// <summary>The language to use on the very first run.</summary>
     public static string Initial() => SystemIsGerman() ? "de" : "en";
 
-    /// <summary>Der Text in der eingestellten Sprache.</summary>
-    public static string T(string german) =>
-        _english && English.TryGetValue(german, out var text) ? text : german;
+    /// <summary>The text in the chosen language.</summary>
+    public static string T(string english) =>
+        _german && German.TryGetValue(english, out var text) ? text : english;
 
-    /// <summary>Wie <see cref="T(string)"/>, mit Platzhaltern wie in string.Format.</summary>
-    public static string T(string german, params object?[] args) =>
-        string.Format(CultureInfo.CurrentCulture, T(german), args);
+    /// <summary>Like <see cref="T(string)"/>, with placeholders as in string.Format.</summary>
+    public static string T(string english, params object?[] args) =>
+        string.Format(CultureInfo.CurrentCulture, T(english), args);
 
-    /// <summary>Für Tests und für die Prüfung auf Lücken.</summary>
-    public static IReadOnlyDictionary<string, string> Table => English;
+    /// <summary>For tests and for finding gaps.</summary>
+    public static IReadOnlyDictionary<string, string> Table => German;
 
-    private static readonly Dictionary<string, string> English = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string> German = new(StringComparer.Ordinal)
     {
-        // ── Spalten und Listen ──────────────────────────────────
-        ["TITEL"] = "TITLE",
-        ["INTERPRET"] = "ARTIST",
+        // ── Columns and lists ───────────────────────────────────
+        ["TITLE"] = "TITEL",
+        ["ARTIST"] = "INTERPRET",
         ["ALBUM"] = "ALBUM",
         ["FORMAT"] = "FORMAT",
-        ["SAMPLERATE"] = "SAMPLE RATE",
-        ["BIBLIOTHEK"] = "LIBRARY",
-        ["METADATEN"] = "METADATA",
-        ["ORDNER-ANALYSE"] = "FOLDER ANALYSIS",
+        ["SAMPLE RATE"] = "SAMPLERATE",
+        ["LIBRARY"] = "BIBLIOTHEK",
+        ["METADATA"] = "METADATEN",
+        ["FOLDER ANALYSIS"] = "ORDNER-ANALYSE",
         ["AUDIO"] = "AUDIO",
-        ["BEIM ABLEGEN"] = "ON DROP",
-        ["Alle wählen"] = "Select all",
-        ["mit Unterordnern"] = "with subfolders",
-        ["kodiert neu"] = "re-encodes",
+        ["ON DROP"] = "BEIM ABLEGEN",
+        ["Select all"] = "Alle wählen",
+        ["with subfolders"] = "mit Unterordnern",
+        ["re-encodes"] = "kodiert neu",
+        ["on"] = "an",
+        ["off"] = "aus",
 
-        // ── Metadatenfelder ─────────────────────────────────────
-        ["Titel"] = "Title",
-        ["Interpret"] = "Artist",
+        // ── Metadata fields ─────────────────────────────────────
+        ["Title"] = "Titel",
+        ["Artist"] = "Interpret",
         ["Album"] = "Album",
-        ["Jahr"] = "Year",
+        ["Year"] = "Jahr",
         ["Track"] = "Track",
         ["Disc"] = "Disc",
         ["Genre"] = "Genre",
-        ["Album-Interpret"] = "Album artist",
-        ["Komponist"] = "Composer",
-        ["Kommentar"] = "Comment",
-        ["Dateiformat"] = "File format",
-        ["Samplerate"] = "Sample rate",
-        ["<verschieden>"] = "<mixed>",
-        ["kein Cover"] = "no cover",
-        ["Cover nicht lesbar"] = "cover not readable",
-        ["keine Auswahl"] = "nothing selected",
-        ["unbekannt"] = "unknown",
+        ["Album artist"] = "Album-Interpret",
+        ["Composer"] = "Komponist",
+        ["Comment"] = "Kommentar",
+        ["File format"] = "Dateiformat",
+        ["Sample rate"] = "Samplerate",
+        ["<mixed>"] = "<verschieden>",
+        ["no cover"] = "kein Cover",
+        ["cover not readable"] = "Cover nicht lesbar",
+        ["nothing selected"] = "keine Auswahl",
+        ["unknown"] = "unbekannt",
 
-        // ── Knöpfe ──────────────────────────────────────────────
-        ["Anwenden"] = "Apply",
-        ["Zurücksetzen"] = "Reset",
-        ["Abbrechen"] = "Cancel",
-        ["Übernehmen"] = "Apply",
-        ["Schließen"] = "Close",
-        ["OK"] = "OK",
-        ["Ordner angleichen"] = "Align folder",
-        ["Unterordner einbeziehen"] = "Include subfolders",
-        ["Nur diesen Ordner zeigen"] = "Show this folder only",
-        ["Umbenennen…"] = "Rename…",
-        ["Cover für alle setzen…"] = "Set cover for all…",
-        ["Ordner und Lieder suchen…"] = "Search folders and songs…",
+        // ── Buttons ─────────────────────────────────────────────
+        ["Apply"] = "Anwenden",
+        ["Reset"] = "Zurücksetzen",
+        ["Cancel"] = "Abbrechen",
+        ["Save"] = "Speichern",
+        ["Close"] = "Schließen",
+        ["Later"] = "Später",
+        ["Install"] = "Installieren",
+        ["Align folder"] = "Ordner angleichen",
+        ["Align folder ({0})"] = "Ordner angleichen ({0})",
+        ["Include subfolders"] = "Unterordner einbeziehen",
+        ["Show this folder only"] = "Nur diesen Ordner zeigen",
+        ["Rename…"] = "Umbenennen…",
+        ["Set cover for all…"] = "Cover für alle setzen…",
+        ["Search folders and songs…"] = "Ordner und Lieder suchen…",
+        ["Reset to the global setting"] = "Auf die globale Einstellung zurücksetzen",
+        ["Reset per-folder settings"] = "Eigene Ordnereinstellungen zurücksetzen",
+        ["Check for updates now"] = "Jetzt nach Updates suchen",
+        ["Register"] = "Registrieren",
+        ["Remove"] = "Entfernen",
+        ["Delete all backups"] = "Alle Sicherungen löschen",
 
-        // ── Kurzhinweise ────────────────────────────────────────
-        ["Zurück"] = "Back",
-        ["Vor"] = "Forward",
-        ["Ordner in neuem Tab öffnen"] = "Open folder in a new tab",
-        ["Ansicht teilen"] = "Split the view",
-        ["Verlauf und Rückgängig"] = "History and undo",
-        ["Einstellungen"] = "Settings",
-        ["Bibliothek verwalten"] = "Manage library",
-        ["Tab schließen"] = "Close tab",
-        ["Ordner ist uneinheitlich"] = "Folder is not uniform",
-        ["Abspielen und Pause, oder Leertaste in der Liste"] =
-            "Play and pause, or press space in the list",
-        ["Rechtsklick: Cover setzen oder entfernen"] = "Right click: set or remove cover",
-        ["Wird gesichert und lässt sich über den Verlauf zurückholen"] =
-            "Backed up first, can be undone from the history",
+        // ── Tooltips ────────────────────────────────────────────
+        ["Back"] = "Zurück",
+        ["Forward"] = "Vor",
+        ["Open folder in a new tab"] = "Ordner in neuem Tab öffnen",
+        ["Split the view"] = "Ansicht teilen",
+        ["History and undo"] = "Verlauf und Rückgängig",
+        ["Settings"] = "Einstellungen",
+        ["Manage library"] = "Bibliothek verwalten",
+        ["Close tab"] = "Tab schließen",
+        ["Folder is not uniform"] = "Ordner ist uneinheitlich",
+        ["Play and pause, or press space in the list"] =
+            "Abspielen und Pause, oder Leertaste in der Liste",
+        ["Right click: set or remove cover"] = "Rechtsklick: Cover setzen oder entfernen",
+        ["Backed up first, can be undone from the history"] =
+            "Wird gesichert und lässt sich über den Verlauf zurückholen",
 
-        // ── Kontextmenüs ────────────────────────────────────────
-        ["Abspielen"] = "Play",
-        ["Im Explorer anzeigen"] = "Show in Explorer",
-        ["Im Explorer öffnen"] = "Open in Explorer",
-        ["Zum Ordner springen"] = "Go to folder",
-        ["Pfad kopieren"] = "Copy path",
-        ["Löschen"] = "Delete",
-        ["In neuem Tab öffnen"] = "Open in a new tab",
-        ["Unterordner durchsuchen"] = "Search subfolders",
-        ["Aus Bibliothek entfernen"] = "Remove from library",
-        ["Ordner hinzufügen…"] = "Add folder…",
-        ["Cover setzen…"] = "Set cover…",
-        ["Cover kopieren"] = "Copy cover",
-        ["Cover einfügen"] = "Paste cover",
-        ["Cover entfernen"] = "Remove cover",
-        ["Größe anpassen…"] = "Resize…",
+        // ── Context menus ───────────────────────────────────────
+        ["Play"] = "Abspielen",
+        ["Show in Explorer"] = "Im Explorer anzeigen",
+        ["Open in Explorer"] = "Im Explorer öffnen",
+        ["Go to folder"] = "Zum Ordner springen",
+        ["Copy path"] = "Pfad kopieren",
+        ["Copy {0} paths"] = "{0} Pfade kopieren",
+        ["Delete"] = "Löschen",
+        ["Delete {0} files"] = "{0} Dateien löschen",
+        ["Open in a new tab"] = "In neuem Tab öffnen",
+        ["Search subfolders"] = "Unterordner durchsuchen",
+        ["Remove from library"] = "Aus Bibliothek entfernen",
+        ["Add folder…"] = "Ordner hinzufügen…",
+        ["Show hidden again ({0})"] = "Ausgeblendete zurückholen ({0})",
+        ["Set cover…"] = "Cover setzen…",
+        ["Set cover for {0}…"] = "Cover für {0} setzen…",
+        ["Copy cover"] = "Cover kopieren",
+        ["Paste cover"] = "Cover einfügen",
+        ["Paste cover into {0}"] = "Cover in {0} einfügen",
+        ["Remove cover"] = "Cover entfernen",
+        ["Remove cover from {0}"] = "Cover aus {0} entfernen",
+        ["Resize…"] = "Größe anpassen…",
 
-        // ── Einstellungen ───────────────────────────────────────
-        ["Standardprofil"] = "Default profile",
-        ["Bibliothek"] = "Library",
-        ["Namensschema"] = "Naming scheme",
-        ["Kodierung"] = "Encoding",
-        ["Sicherungen"] = "Backups",
-        ["Aktualisierung"] = "Updates",
-        ["Explorer-Kontextmenü"] = "Explorer context menu",
-        ["Sprache"] = "Language",
-        ["Deutsch"] = "German",
-        ["Englisch"] = "English",
-        ["Nur Ordner mit Audiodateien zeigen"] = "Only show folders containing audio",
-        ["Format und Samplerate angleichen"] = "Align format and sample rate",
-        ["Tags vom Ordner übernehmen"] = "Inherit tags from the folder",
-        ["Dateiname → Titel"] = "File name → title",
-        ["Titel → Dateiname"] = "Title → file name",
-        ["Standard-Bitrate"] = "Default bitrate",
-        ["Automatisch löschen"] = "Delete automatically",
-        ["Registrieren"] = "Register",
-        ["Entfernen"] = "Remove",
-        ["Eingetragen ✓"] = "Registered ✓",
-        ["Nicht eingetragen"] = "Not registered",
-        ["Eigene Ordnereinstellungen zurücksetzen"] = "Reset per-folder settings",
-        ["Kein Ordner weicht davon ab."] = "No folder deviates from this.",
-        ["Jetzt nach Updates suchen"] = "Check for updates now",
-        ["Nie"] = "Never",
-        ["Fragen"] = "Ask",
-        ["Automatisch"] = "Automatically",
-        ["ffmpeg fehlt"] = "ffmpeg is missing",
+        // ── Settings ────────────────────────────────────────────
+        ["Language"] = "Sprache",
+        ["German"] = "Deutsch",
+        ["English"] = "Englisch",
+        ["Takes effect after a restart."] = "Wirkt nach einem Neustart der App.",
+        ["Default profile"] = "Standardprofil",
+        ["Library"] = "Bibliothek",
+        ["Naming scheme"] = "Namensschema",
+        ["Encoding"] = "Kodierung",
+        ["Backups"] = "Sicherungen",
+        ["Updates"] = "Aktualisierung",
+        ["Explorer context menu"] = "Explorer-Kontextmenü",
+        ["On drop"] = "Beim Ablegen",
+        ["On start"] = "Beim Start",
+        ["Only show folders containing audio"] = "Nur Ordner mit Audiodateien zeigen",
+        ["Align format and sample rate"] = "Format und Samplerate angleichen",
+        ["Inherit tags from the folder"] = "Tags vom Ordner übernehmen",
+        ["File name → title"] = "Dateiname → Titel",
+        ["Title → file name"] = "Titel → Dateiname",
+        ["Default bitrate"] = "Standard-Bitrate",
+        ["Delete automatically"] = "Automatisch löschen",
+        ["Never"] = "Nie",
+        ["After 7 days"] = "Nach 7 Tagen",
+        ["After 30 days"] = "Nach 30 Tagen",
+        ["Ask"] = "Fragen",
+        ["Automatically"] = "Automatisch",
+        ["Registered ✓"] = "Eingetragen ✓",
+        ["Not registered"] = "Nicht eingetragen",
+        ["not found"] = "nicht gefunden",
+        ["Result: "] = "Ergebnis: ",
+        ["No folder deviates from this."] = "Kein Ordner weicht davon ab.",
+        ["{0} folder has its own setting and is not affected."] =
+            "{0} Ordner hat eine eigene Einstellung und bleibt davon unberührt.",
+        ["{0} folders have their own setting and are not affected."] =
+            "{0} Ordner haben eine eigene Einstellung und bleiben davon unberührt.",
 
-        // ── Verlauf ─────────────────────────────────────────────
-        ["Verlauf"] = "History",
-        ["Zeit"] = "Time",
-        ["Art"] = "Kind",
-        ["Beschreibung"] = "Description",
-        ["Rückgängig"] = "Undo",
-        ["Der Verlauf ist leer."] = "The history is empty.",
+        // ── Explorer context menu ───────────────────────────────
+        ["Adds a TagTuner entry to the right click menu for audio files and folders. " +
+         "One entry, no submenu: it opens the folder the file is in. " +
+         "No administrator rights needed."] =
+            "Fügt einen TagTuner-Eintrag zum Rechtsklick-Menü für Audiodateien und Ordner " +
+            "hinzu. Ein einzelner Eintrag ohne Untermenü: Er öffnet den Ordner, in dem die " +
+            "Datei liegt. Keine Administratorrechte nötig.",
+        ["Failed: "] = "Fehlgeschlagen: ",
 
-        // ── Fortschritt und Status ──────────────────────────────
-        ["Wird eingelesen…"] = "Reading…",
-        ["Wird gesucht…"] = "Searching…",
-        ["Bibliothek wird einmalig eingelesen…"] = "Reading the library once…",
-        ["Unterordner werden gezählt…"] = "Counting subfolders…",
-        ["wird berechnet…"] = "calculating…",
-        ["Keine Auswahl."] = "Nothing selected.",
+        // ── History ─────────────────────────────────────────────
+        ["History"] = "Verlauf",
+        ["Time"] = "Zeit",
+        ["Kind"] = "Art",
+        ["Description"] = "Beschreibung",
+        ["Undo"] = "Rückgängig",
+        ["The history is empty."] = "Der Verlauf ist leer.",
+
+        // ── Progress and status ─────────────────────────────────
+        ["Reading…"] = "Wird eingelesen…",
+        ["Searching…"] = "Wird gesucht…",
+        ["Reading the library once…"] = "Bibliothek wird einmalig eingelesen…",
+        ["Counting subfolders…"] = "Unterordner werden gezählt…",
+        ["calculating…"] = "wird berechnet…",
+        ["Nothing selected."] = "Keine Auswahl.",
+        ["ffmpeg is missing"] = "ffmpeg fehlt",
 
         // ── Cover ───────────────────────────────────────────────
-        ["Coverausschnitt wählen"] = "Choose the cover area",
-        ["Covergröße anpassen"] = "Resize cover",
-        ["Kantenlänge (höchstens)"] = "Maximum edge length",
-        ["JPEG-Qualität"] = "JPEG quality",
-        ["Vorschau nicht möglich"] = "Preview not possible",
-        ["Bild nicht lesbar"] = "Image not readable",
-        ["Bild ist leer"] = "Image is empty",
-        ["Das Format wird nicht unterstützt."] = "That format is not supported.",
-        ["Die Datei enthält keine Daten."] = "The file contains no data.",
-        ["Kein Bild in der Zwischenablage"] = "No image in the clipboard",
-        ["Zwischenablage nicht lesbar"] = "Clipboard not readable",
-        ["Kopieren fehlgeschlagen"] = "Copy failed",
-        ["Umwandeln fehlgeschlagen"] = "Conversion failed",
-        ["Bild nicht verarbeitbar"] = "Image cannot be processed",
-        ["Das Umwandeln ist fehlgeschlagen."] = "Converting the image failed.",
-        ["Das Bild ließ sich nicht neu kodieren."] = "The image could not be re-encoded.",
-        ["Format trägt kein Cover"] = "Format carries no cover",
-        ["Cover setzen"] = "Set cover",
-        ["Cover verkleinern"] = "Shrink cover",
-        ["unverändert"] = "unchanged",
-        ["zugeschnitten"] = "cropped",
-        ["neu kodiert"] = "re-encoded",
-        ["größer als das Original"] = "larger than the original",
+        ["Choose the cover area"] = "Coverausschnitt wählen",
+        ["The image is not square. Drag the frame over the part you want to keep as the cover."] =
+            "Das Bild ist nicht quadratisch. Zieh den Rahmen an die Stelle, die als Cover " +
+            "gespeichert werden soll.",
+        ["Selection: {0} × {0} pixels"] = "Ausschnitt: {0} × {0} Pixel",
+        ["Original {0} × {1} · {2}"] = "Original {0} × {1} · {2}",
+        ["Resize cover"] = "Covergröße anpassen",
+        ["Maximum edge length"] = "Kantenlänge (höchstens)",
+        ["JPEG quality"] = "JPEG-Qualität",
+        ["{0} × {0} pixels"] = "{0} × {0} Pixel",
+        ["Preview not possible"] = "Vorschau nicht möglich",
+        ["Before {0} ({1} × {2}, {3})"] = "Vorher {0} ({1} × {2}, {3})",
+        ["After {0} as JPEG"] = "Nachher {0} als JPEG",
+        ["{0} % smaller"] = "{0} % kleiner",
+        ["larger than the original"] = "größer als das Original",
+        ["Image not readable"] = "Bild nicht lesbar",
+        ["That format is not supported."] = "Das Format wird nicht unterstützt.",
+        ["No image in the clipboard"] = "Kein Bild in der Zwischenablage",
+        ["Copy an image or an image file and try again."] =
+            "Kopier ein Bild oder eine Bilddatei und versuch es noch einmal.",
+        ["Clipboard not readable"] = "Zwischenablage nicht lesbar",
+        ["Copy failed"] = "Kopieren fehlgeschlagen",
+        ["Image cannot be processed"] = "Bild nicht verarbeitbar",
+        ["Converting the image failed."] = "Das Umwandeln ist fehlgeschlagen.",
+        ["Resizing failed"] = "Umwandeln fehlgeschlagen",
+        ["The image could not be re-encoded."] = "Das Bild ließ sich nicht neu kodieren.",
+        ["Cover not readable"] = "Cover nicht lesbar",
+        ["Format carries no cover"] = "Format trägt kein Cover",
+        ["{0} cannot store a cover."] = "{0} kann kein Cover speichern.",
+        ["Set cover"] = "Cover setzen",
+        ["Paste cover ({0}, unchanged)"] = "Cover einfügen ({0}, unverändert)",
+        ["Shrink cover ({0})"] = "Cover verkleinern ({0})",
+        ["{0} ({1}, {2})"] = "{0} ({1}, {2})",
+        ["unchanged"] = "unverändert",
+        ["cropped"] = "zugeschnitten",
+        ["re-encoded"] = "neu kodiert",
+        ["Cover copied ({0}, unchanged)"] = "Cover kopiert ({0}, unverändert)",
+        ["{0} file(s) will be changed. Each one is backed up first."] =
+            "{0} Datei(en) werden geändert. Vorher wird je Datei eine Sicherung angelegt.",
+        ["⚠ {0} file(s) stay untouched: {1} carries no cover."] =
+            "⚠ {0} Datei(en) bleiben unangetastet: {1} trägt kein Cover.",
 
-        // ── Meldungen und Dialoge ───────────────────────────────
-        ["Abgeschlossen"] = "Finished",
-        ["Mit Fehlern abgeschlossen"] = "Finished with errors",
-        ["Fehlgeschlagen:"] = "Failed:",
-        ["Hinweise:"] = "Notes:",
-        ["Dateien angleichen"] = "Align files",
-        ["Dateien verschieben"] = "Move files",
-        ["Verschieben"] = "Move",
-        ["Track-Nummern neu vergeben"] = "Renumber tracks",
-        ["Neu nummerieren"] = "Renumber",
-        ["Auf den ganzen Ordner anwenden"] = "Apply to the whole folder",
-        ["Auf alle anwenden"] = "Apply to all",
-        ["Datei löschen"] = "Delete file",
-        ["Nichts gefunden"] = "Nothing found",
-        ["Einlesen"] = "Read",
+        // ── Dialogs and messages ────────────────────────────────
+        ["Finished"] = "Abgeschlossen",
+        ["Finished with errors"] = "Mit Fehlern abgeschlossen",
+        ["{0} file(s) processed."] = "{0} Datei(en) verarbeitet.",
+        ["Failed:"] = "Fehlgeschlagen:",
+        ["Notes:"] = "Hinweise:",
+        ["{0} file(s) processed, backup created"] = "{0} Datei(en) verarbeitet, Sicherung angelegt",
+        ["Align files"] = "Dateien angleichen",
+        ["Move files"] = "Dateien verschieben",
+        ["Move"] = "Verschieben",
+        ["Renumber tracks"] = "Track-Nummern neu vergeben",
+        ["Renumber"] = "Neu nummerieren",
+        ["Apply to the whole folder"] = "Auf den ganzen Ordner anwenden",
+        ["Apply to all"] = "Auf alle anwenden",
+        ["Delete file"] = "Datei löschen",
+        ["Nothing found"] = "Nichts gefunden",
+        ["Read"] = "Einlesen",
+        ["Update available"] = "Aktualisierung verfügbar",
+        ["Skip this version"] = "Diese Version überspringen",
+        ["Downloading the update…"] = "Aktualisierung wird geladen…",
+        ["Update failed: {0}"] = "Aktualisierung fehlgeschlagen: {0}",
+        ["Version {0} is available, {1} is installed."] =
+            "Version {0} ist verfügbar, installiert ist {1}.",
+        ["Version {0} is available."] = "Version {0} ist verfügbar.",
+        ["Version {0} was skipped."] = "Version {0} wurde übersprungen.",
+        ["TagTuner is up to date ({0})."] = "TagTuner ist aktuell ({0}).",
+        ["Check failed: {0}"] = "Suche fehlgeschlagen: {0}",
+        ["\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
+         "\"Automatically\" downloads and installs without asking."] =
+            "„Nie“ verhindert jede Verbindung. „Fragen“ meldet sich, wenn es etwas Neues gibt. " +
+            "„Automatisch“ lädt und installiert ohne Rückfrage.",
 
-        // ── Analyse ─────────────────────────────────────────────
-        ["Ziel-Format"] = "Target format",
-        ["Ziel-Samplerate"] = "Target sample rate",
-        ["Formate"] = "Formats",
-        ["Sampleraten"] = "Sample rates",
-        ["aus Standardprofil"] = "from the default profile",
-        ["Kanäle"] = "Channels",
-        ["Dauer"] = "Duration",
-        ["Größe"] = "Size",
+        // ── Analysis ────────────────────────────────────────────
+        ["Target format"] = "Ziel-Format",
+        ["Target sample rate"] = "Ziel-Samplerate",
+        ["Formats"] = "Formate",
+        ["Sample rates"] = "Sampleraten",
+        ["from the default profile"] = "aus Standardprofil",
+        ["Channels"] = "Kanäle",
+        ["Duration"] = "Dauer",
+        ["Size"] = "Größe",
         ["Bitrate"] = "Bitrate",
-        ["Ordner-Ziel"] = "Folder target",
-        ["Auswahl"] = "Selection",
-        ["Ordner"] = "Folder",
-        ["Gesamtdauer"] = "Total duration",
-        ["Gesamtgröße"] = "Total size",
+        ["Folder target"] = "Ordner-Ziel",
+        ["Selection"] = "Auswahl",
+        ["Folder"] = "Ordner",
+        ["{0} files"] = "{0} Dateien",
+        ["Total duration"] = "Gesamtdauer",
+        ["Total size"] = "Gesamtgröße",
+        ["Present"] = "Vorhanden",
     };
 }

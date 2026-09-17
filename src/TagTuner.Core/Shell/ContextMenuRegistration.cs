@@ -6,9 +6,10 @@ namespace TagTuner.Core.Shell;
 /// Der Eintrag „TagTuner" im Rechtsklick-Menü des Explorers.
 ///
 /// Schreibt ausschließlich nach HKCU — keine Administratorrechte nötig.
-/// Ein einzelner, anklickbarer Eintrag ohne Untermenü: Welcher Bereich
-/// geöffnet wird, fragt die App selbst, wo sie es in der Sprache des
-/// Nutzers und mit der Datei vor Augen tun kann.
+/// Ein einzelner, anklickbarer Eintrag ohne Untermenü. Er öffnet den Ordner,
+/// in dem die Datei liegt, und stellt sie dort ausgewählt dar. Ein Untermenü
+/// gab es in der Electron-Fassung, weil die drei getrennte Bereiche hatte;
+/// hier ist alles ein Fenster.
 /// </summary>
 public static class ContextMenuRegistration
 {

@@ -2,15 +2,15 @@
     x:Class="TagTuner.App.CoverCropDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Coverausschnitt wählen"
-    PrimaryButtonText="Übernehmen"
-    CloseButtonText="Abbrechen"
+    Title="Choose the cover area"
+    PrimaryButtonText="Apply"
+    CloseButtonText="Cancel"
     DefaultButton="Primary">
 
     <StackPanel Spacing="12" Width="380">
         <TextBlock FontSize="12" TextWrapping="Wrap"
                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                   Text="Das Bild ist nicht quadratisch. Zieh den Rahmen an die Stelle, die als Cover gespeichert werden soll." />
+                   Text="The image is not square. Drag the frame over the part you want to keep as the cover." />
 
         <!-- Die Bühne ist immer 360×360 groß; das Bild liegt darin zentriert
              und der Rahmen bewegt sich nur über dem Bild, nie daneben. -->
