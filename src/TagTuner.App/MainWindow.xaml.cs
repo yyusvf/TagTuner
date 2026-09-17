@@ -1,0 +1,2784 @@
+using TagTuner.Core.Audio;
+using TagTuner.Core.Folders;
+using TagTuner.Core.Metadata;
+using TagTuner.Core.Model;
+using TagTuner.Core.Safety;
+using TagTuner.Core.Settings;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.ApplicationModel.DataTransfer;
+
+namespace TagTuner.App;
+
+public sealed partial class MainWindow : Window
+{
+    private readonly AppSettings _settings = AppSettings.Load();
+    private readonly HistoryStore _history = new();
+
+    private readonly List<FolderTab> _tabs = [];
+    private int _active;
+    private int? _split;          // Index des Tabs in der unteren Hälfte
+
+    private bool _suppressSelection;
+
+    /// <summary>
+    /// Der Stand der Felder direkt nach dem Laden einer Auswahl.
+    ///
+    /// „Geändert" wird daraus abgeleitet statt über ein Flag im TextChanged:
+    /// WinUI löst TextChanged verzögert aus, sodass das Befüllen der Felder
+    /// noch als Nutzereingabe ankam — die App meldete „Tags schreiben",
+    /// obwohl niemand etwas angefasst hatte.
+    /// </summary>
+    private readonly Dictionary<TextBox, string> _loaded = [];
+
+    private static readonly int[] Rates = [44100, 48000, 88200, 96000, 176400, 192000];
+
+    private AudioPlayer _player = null!;
+    private CancellationTokenSource? _search;
+
+    /// <summary>
+    /// Der Suchindex. Wird beim ersten Suchen gebaut und nach jedem eigenen
+    /// Schreibvorgang verworfen.
+    /// </summary>
+    private Task<LibraryIndex>? _index;
+
+    private FolderTab ActiveTab => _tabs[_active];
+    private TrackPane ActivePane => _activePane;
+    private TrackPane _activePane = null!;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        // Sprache steht vor allem anderen fest; danach einmal über das
+        // Markup, damit die festen Beschriftungen stimmen.
+        Strings.Use(_settings.Language);
+        Localizer.Apply(Root);
+
+        Title = "TagTuner";
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+
+        // Die Fenstertasten sitzen sonst oben am Rand und die eigenen Knoepfe
+        // mittig in der 48 Pixel hohen Leiste — sie stehen dann versetzt.
+        // „Tall" gibt den Systemtasten dieselbe Hoehe, dann fluchten sie.
+        AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Tall;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(
+            (int)_settings.WindowWidth, (int)_settings.WindowHeight));
+
+        _activePane = PaneA;
+        foreach (var pane in new[] { PaneA, PaneB })
+        {
+            pane.SelectionChanged += OnPaneSelectionChanged;
+            pane.Activated += OnPaneActivated;
+            pane.FilesDropped += OnPaneFilesDropped;
+            pane.ReorderCompleted += OnPaneReordered;
+            pane.TracksMoved += OnPaneTracksMoved;
+            pane.DeleteRequested += OnPaneDeleteRequested;
+            pane.PlayRequested += (_, track) => _player.Play(track);
+            pane.SortRequested += OnPaneSortRequested;
+            pane.NavigateRequested += (_, path) => NavigateActive(path);
+            pane.ColumnsResized += (_, _) =>
+            {
+                _settings.TrackColumnWidths = Columns.ToArray();
+                _settings.Save();
+            };
+        }
+
+        MetaCol.Width = new GridLength(_settings.MetaWidth);
+        TreeCol.Width = new GridLength(_settings.TreeWidth);
+        SideCol.Width = new GridLength(_settings.SideWidth);
+        Columns.Restore(_settings.TrackColumnWidths);
+
+        FFormat.ItemsSource = AudioFormats.Targets;
+        FRate.ItemsSource = Rates.Select(FormatRate).ToList();
+        FFormat.SelectionChanged += (_, _) => UpdatePlan();
+        FRate.SelectionChanged += (_, _) => UpdatePlan();
+        foreach (var box in TagBoxes())
+            box.TextChanged += (_, _) => { if (!_suppressSelection) UpdatePlan(); };
+
+        UpdateFfmpegHint();
+
+        _player = new AudioPlayer(DispatcherQueue, _settings.Volume);
+        _player.Changed += UpdatePlayerBar;
+        _player.Failed += message => StatusText.Text = message;
+        VolumeSlider.Value = _settings.Volume * 100;
+        UpdatePlayerBar();
+
+        // Am Baum selbst lauschen statt in der Zeilenvorlage: Dort kamen die
+        // Zeigerereignisse nachweislich nicht an — das Protokoll blieb leer,
+        // während der Ordner sich trotzdem öffnete. handledEventsToo sorgt
+        // dafür, dass wir den Druck auch dann sehen, wenn die Liste ihn schon
+        // für sich verbucht hat.
+        FolderTree.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(OnTreePressedAnywhere),
+            handledEventsToo: true);
+
+        BuildTreeRoots();
+
+        var start = App.Launch.FolderToOpen ?? _settings.LastFolder;
+        if (string.IsNullOrWhiteSpace(start) || !Directory.Exists(start))
+            start = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+
+        _tabs.Add(new FolderTab(start));
+        PaneA.Bind(ActiveTab);
+
+        RebuildChrome();
+        _ = LoadTabAsync(ActiveTab, App.Launch.File);
+
+        Fire(CheckForUpdatesAsync(), "Update-Suche");
+
+        Closed += (_, _) =>
+        {
+            _settings.WindowWidth = AppWindow.Size.Width;
+            _settings.WindowHeight = AppWindow.Size.Height;
+            _settings.MetaWidth = MetaCol.ActualWidth;
+            _settings.TreeWidth = TreeCol.ActualWidth;
+            _settings.SideWidth = SideCol.ActualWidth;
+            _settings.TrackColumnWidths = Columns.ToArray();
+            _settings.LastFolder = ActiveTab.Path;
+            _settings.Volume = _player.Volume;
+            _settings.Save();
+            _player.Dispose();
+        };
+    }
+
+    private TextBox[] TagBoxes() =>
+        [FTitle, FArtist, FAlbum, FYear, FTrack, FGenre, FAlbumArtist, FComposer, FComment, FDisc];
+
+    private static string FormatRate(int hz) =>
+        hz % 1000 == 0 ? $"{hz / 1000} kHz" : $"{hz / 1000.0:0.0} kHz";
+
+    private static Brush Res(string key) => (Brush)Application.Current.Resources[key];
+
+    /// <summary>
+    /// Startet eine Aufgabe und protokolliert, wenn sie scheitert.
+    /// <c>_ = MachWasAsync()</c> verschluckt jede Ausnahme spurlos.
+    /// </summary>
+    private void Fire(Task work, string label) => _ = Watch(work, label);
+
+    private async Task Watch(Task work, string label)
+    {
+        try { await work; }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"{label} fehlgeschlagen: {ex.Message}";
+        }
+    }
+
+    private static TrackColumnLayout Columns =>
+        (TrackColumnLayout)Application.Current.Resources["TrackColumns"];
+
+    /// <summary>
+    /// Worauf sich die Metadatenspalte bezieht: die Auswahl, oder — wenn
+    /// nichts gewählt ist — der ganze Ordner. So zeigt ein frisch geöffneter
+    /// Ordner sofort, worin seine Dateien sich einig sind.
+    /// </summary>
+    private List<AudioTrack> TargetTracks()
+    {
+        var sel = ActivePane.Selected();
+        return sel.Count > 0 ? sel : [.. ActiveTab.Tracks];
+    }
+
+    private bool FolderScope => ActivePane.Selected().Count == 0 && ActiveTab.Tracks.Count > 0;
+
+    // ══ Titelleiste ══════════════════════════════════════════════
+
+    private void RebuildChrome()
+    {
+        RebuildCrumbs();
+        RebuildTabs();
+        BackBtn.IsEnabled = ActiveTab.CanGoBack;
+        ForwardBtn.IsEnabled = ActiveTab.CanGoForward;
+        SplitBtn.Background = _split is null ? new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                                             : Res("AccentDimBrush");
+        SplitBtn.Foreground = _split is null ? Res("TextFillColorPrimaryBrush") : Res("AccentBrush");
+    }
+
+    /// <summary>
+    /// Der Pfad als Breadcrumbs, linksbündig und nur so breit wie nötig.
+    /// Reicht der Platz nicht, schiebt sich der Anfang nach links heraus —
+    /// der Ordner, in dem man steht, bleibt sichtbar.
+    /// </summary>
+    private void RebuildCrumbs()
+    {
+        var parts = ActiveTab.Crumbs();
+        CrumbHost.Children.Clear();
+
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var last = i == parts.Count - 1;
+
+            if (i > 0)
+            {
+                CrumbHost.Children.Add(new TextBlock
+                {
+                    Text = "›",
+                    FontSize = 12,
+                    Margin = new Thickness(6, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = Res("TextFillColorTertiaryBrush"),
+                });
+            }
+
+            var text = new TextBlock
+            {
+                Text = parts[i],
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = last ? Microsoft.UI.Text.FontWeights.SemiBold
+                                  : Microsoft.UI.Text.FontWeights.Normal,
+                Foreground = last ? Res("TextFillColorPrimaryBrush") : Res("TextFillColorSecondaryBrush"),
+            };
+
+            if (!last)
+            {
+                // Auf einen Vorfahren klicken springt dorthin.
+                var target = string.Join(Path.DirectorySeparatorChar, parts.Take(i + 1));
+                if (!target.Contains(Path.DirectorySeparatorChar)) target += Path.DirectorySeparatorChar;
+                text.PointerEntered += (s, _) => ((TextBlock)s).Foreground = Res("AccentBrush");
+                text.PointerExited += (s, _) => ((TextBlock)s).Foreground = Res("TextFillColorSecondaryBrush");
+                text.Tapped += (_, _) => { if (Directory.Exists(target)) NavigateActive(target); };
+            }
+
+            CrumbHost.Children.Add(text);
+        }
+
+        // Ans Ende scrollen, damit bei Platzmangel der aktuelle Ordner steht.
+        DispatcherQueue.TryEnqueue(() =>
+            CrumbScroll.ChangeView(CrumbScroll.ScrollableWidth, null, null, disableAnimation: true));
+    }
+
+    /// <summary>
+    /// Deckelt die Pfadleiste auf den Platz, der neben den Tabs übrig bleibt,
+    /// und hält die Werkzeugknöpfe von den Fenstertasten des Systems fern.
+    /// Deren Breite hängt an der Anzeigeskalierung, darum bei jeder
+    /// Größenänderung neu.
+    /// </summary>
+    private void OnTitleBarResized(object sender, SizeChangedEventArgs e)
+    {
+        var scale = Root.XamlRoot?.RasterizationScale ?? 1.0;
+        var inset = AppWindow.TitleBar.RightInset / scale;
+
+        // Meldet das System die Breite (noch) nicht, lieber die drei Tasten
+        // grosszuegig freihalten als die Knoepfe darunter verschwinden lassen.
+        CaptionSpacer.Width = inset > 0 ? inset : 141;
+    }
+
+    /// <summary>Die Pfadleiste darf nur den Platz nehmen, den die Tabs übrig lassen.</summary>
+    private void OnCrumbSlotResized(object sender, SizeChangedEventArgs e)
+    {
+        CrumbBar.MaxWidth = Math.Max(70, e.NewSize.Width);
+        CrumbScroll.ChangeView(CrumbScroll.ScrollableWidth, null, null, disableAnimation: true);
+    }
+
+    /// <summary>
+    /// Baut die Tab-Leiste neu.
+    ///
+    /// Jeder Tab ist ein echter <see cref="Button"/>, kein angetippter Border:
+    /// In der angepassten Titelleiste zählt alles, was kein Bedienelement ist,
+    /// zur Ziehfläche des Fensters. Ein Border mit Tapped bekam den Klick
+    /// deshalb nie zu sehen — das Fenster wurde stattdessen verschoben.
+    /// </summary>
+    private void RebuildTabs()
+    {
+        TabStrip.Children.Clear();
+
+        for (var i = 0; i < _tabs.Count; i++)
+        {
+            var idx = i;
+            var tab = _tabs[i];
+            var isActive = i == _active;
+            var isSplit = _split == i;
+
+            var label = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            if (tab.IsMixed)
+            {
+                label.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse
+                {
+                    Width = 6,
+                    Height = 6,
+                    Fill = Res("WarnBrush"),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+            }
+
+            label.Children.Add(new TextBlock
+            {
+                Text = tab.Name,
+                FontSize = 12,
+                MaxWidth = 130,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = isActive ? Res("TextFillColorPrimaryBrush") : Res("TextFillColorSecondaryBrush"),
+            });
+
+            var open = new Button
+            {
+                Content = label,
+                Padding = new Thickness(9, 0, _tabs.Count > 1 ? 2 : 9, 0),
+                Height = 30,
+                MinWidth = 0,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+            };
+            ToolTipService.SetToolTip(open, tab.Path + (tab.IsMixed ? "\nOrdner ist uneinheitlich" : ""));
+            open.Click += (_, _) => ActivateTab(idx);
+
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            row.Children.Add(open);
+
+            if (_tabs.Count > 1)
+            {
+                var close = new Button
+                {
+                    Content = "\uE711",
+                    FontFamily = new FontFamily("Segoe Fluent Icons"),
+                    FontSize = 9,
+                    Width = 20,
+                    Height = 20,
+                    MinWidth = 0,
+                    Padding = new Thickness(0),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                    Foreground = Res("TextFillColorTertiaryBrush"),
+                };
+                ToolTipService.SetToolTip(close, "Tab schließen");
+                close.Click += (_, _) => CloseTab(idx);
+                row.Children.Add(close);
+            }
+
+            TabStrip.Children.Add(new Border
+            {
+                Child = row,
+                Height = 30,
+                CornerRadius = new CornerRadius(5),
+                Background = isActive ? Res("AccentDimBrush") : Res("ControlFillColorDefaultBrush"),
+                BorderThickness = new Thickness(1),
+                BorderBrush = isActive ? Res("AccentBrush")
+                            : isSplit ? Res("ControlStrokeColorDefaultBrush")
+                            : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            });
+        }
+    }
+
+    // ══ Tabs ═════════════════════════════════════════════════════
+
+    private void ActivateTab(int index)
+    {
+        if (index < 0 || index >= _tabs.Count) return;
+        _active = index;
+        if (_split == index) _split = null;   // nicht zweimal derselbe Tab
+
+        PaneA.Bind(ActiveTab);
+        _activePane = PaneA;
+        ApplySplitLayout();
+        RebuildChrome();
+        UpdateAnalysisPanel();
+        UpdateMetaPanel();
+
+        if (ActiveTab.Analysis is null) _ = LoadTabAsync(ActiveTab);
+    }
+
+    private void CloseTab(int index)
+    {
+        if (_tabs.Count < 2) return;
+        _tabs.RemoveAt(index);
+
+        if (_split is int sp)
+        {
+            if (sp == index) _split = null;
+            else if (sp > index) _split = sp - 1;
+        }
+        if (_active >= _tabs.Count) _active = _tabs.Count - 1;
+        else if (_active > index) _active--;
+        if (_split == _active) _split = null;
+
+        ActivateTab(_active);
+    }
+
+    private void OpenTab(string path)
+    {
+        var existing = _tabs.FindIndex(t =>
+            string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase));
+        if (existing >= 0) { ActivateTab(existing); return; }
+
+        _tabs.Add(new FolderTab(path));
+        ActivateTab(_tabs.Count - 1);
+    }
+
+    private void OnAddTab(object sender, RoutedEventArgs e)
+    {
+        // Ein zweiter Tab auf denselben Ordner ist sinnlos — neu geöffnet
+        // wird der übergeordnete, von dort navigiert man weiter.
+        var parent = Path.GetDirectoryName(ActiveTab.Path.TrimEnd(Path.DirectorySeparatorChar));
+        OpenTab(parent is not null && Directory.Exists(parent) ? parent : ActiveTab.Path);
+    }
+
+    private void OnToggleSplit(object sender, RoutedEventArgs e)
+    {
+        if (_split is not null)
+        {
+            _split = null;
+        }
+        else
+        {
+            if (_tabs.Count < 2)
+            {
+                var parent = Path.GetDirectoryName(ActiveTab.Path.TrimEnd(Path.DirectorySeparatorChar));
+                _tabs.Add(new FolderTab(parent is not null && Directory.Exists(parent)
+                    ? parent : ActiveTab.Path));
+            }
+            _split = Enumerable.Range(0, _tabs.Count).First(i => i != _active);
+        }
+
+        ApplySplitLayout();
+        RebuildChrome();
+
+        if (_split is int s && _tabs[s].Analysis is null) _ = LoadTabAsync(_tabs[s]);
+    }
+
+    private void ApplySplitLayout()
+    {
+        if (_split is int s && s < _tabs.Count)
+        {
+            PaneB.Bind(_tabs[s]);
+            PaneB.Visibility = Visibility.Visible;
+            Splitter.Visibility = Visibility.Visible;
+            PaneHost.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+        }
+        else
+        {
+            PaneB.Visibility = Visibility.Collapsed;
+            Splitter.Visibility = Visibility.Collapsed;
+            PaneHost.RowDefinitions[2].Height = GridLength.Auto;
+        }
+
+        PaneA.SetActive(_activePane == PaneA);
+        PaneB.SetActive(_activePane == PaneB);
+    }
+
+    // ══ Navigation ═══════════════════════════════════════════════
+
+    private void NavigateActive(string path)
+    {
+        // Sonst liest ein zweiter Klick auf denselben Ordner alles noch einmal
+        // ein und wirft dabei die Auswahl weg.
+        if (string.Equals(ActiveTab.Path, path, StringComparison.OrdinalIgnoreCase)
+            && ActiveTab.Analysis is not null)
+        {
+            return;
+        }
+
+        ActiveTab.Navigate(path);
+        RebuildChrome();
+        Fire(LoadTabAsync(ActiveTab), "LoadTabAsync");
+    }
+
+    private void OnBack(object sender, RoutedEventArgs e)
+    {
+        if (ActiveTab.Back() is not null) { RebuildChrome(); _ = LoadTabAsync(ActiveTab); }
+    }
+
+    private void OnForward(object sender, RoutedEventArgs e)
+    {
+        if (ActiveTab.Forward() is not null) { RebuildChrome(); _ = LoadTabAsync(ActiveTab); }
+    }
+
+    // ══ Baum ═════════════════════════════════════════════════════
+
+    private void BuildTreeRoots()
+    {
+        FolderTree.RootNodes.Clear();
+        foreach (var root in FolderScanner.Roots(_settings.LibraryPaths, _settings.HiddenRoots))
+            FolderTree.RootNodes.Add(NodeFor(root, isRoot: true));
+    }
+
+    /// <summary>Eine Baumzeile samt Cover, das im Hintergrund nachgeladen wird.</summary>
+    private TreeViewNode NodeFor(FolderEntry entry, bool isRoot = false)
+    {
+        var folder = new LibraryFolder(entry)
+        {
+            IsCustomRoot = entry.IsCustomRoot,
+            IsRoot = isRoot,
+        };
+        folder.BeginLoad(DispatcherQueue);
+
+        return new TreeViewNode
+        {
+            Content = folder,
+            HasUnrealizedChildren = FolderScanner.HasSubfolders(entry.Path, _settings.OnlyAudioFolders),
+        };
+    }
+
+    /// <summary>Zweige erst beim Aufklappen lesen — „C:\" darf nicht die Platte durchlaufen.</summary>
+    private void OnTreeExpanding(TreeView sender, TreeViewExpandingEventArgs args)
+    {
+        var node = args.Node;
+        _justExpanding = node;
+        _justExpandingAt = DateTime.UtcNow;
+
+        if (!node.HasUnrealizedChildren) return;
+
+        node.Children.Clear();
+        if (node.Content is not LibraryFolder folder) return;
+
+        foreach (var child in FolderScanner.Subfolders(folder.Path, _settings.OnlyAudioFolders))
+            node.Children.Add(NodeFor(child));
+
+        node.HasUnrealizedChildren = false;
+    }
+
+    private void OnTreeItemInvoked(TreeView sender, TreeViewItemInvokedEventArgs args)
+    {
+        if (args.InvokedItem is TreeViewNode { Content: LibraryFolder folder })
+        {
+            NavigateActive(folder.Path);
+        }
+    }
+
+    /// <summary>
+    /// Linksklick öffnet den Ordner, Mausradklick in einem weiteren Tab.
+    ///
+    /// Zwei Dinge haben sich unterwegs als untauglich erwiesen und sind
+    /// deshalb nicht mehr drin:
+    ///
+    /// Die Handler in der Zeilenvorlage bekamen nie ein Zeigerereignis, und
+    /// <c>Tapped</c> entsteht erst beim Loslassen — bis dahin hatte die Liste
+    /// den ersten Klick schon verbraucht. Darum hängt das hier am Baum und an
+    /// PointerPressed.
+    ///
+    /// Und der Versuch, Pfeil von Inhalt zu unterscheiden, ist gescheitert:
+    /// Das angeklickte Element ist immer der Pfeil-Grid der Vorlage, der
+    /// ScrollContentPresenter darüber erbt von ContentPresenter, und die
+    /// gemessene Klickposition lag selbst mitten auf dem Namen in der
+    /// Pfeilzone. Also wird nicht mehr unterschieden: Ein Klick öffnet den
+    /// Ordner, und ob dabei auf- oder zugeklappt wird, entscheidet die
+    /// TreeView allein. Zuklappen funktioniert damit wieder.
+    /// </summary>
+    private void OnTreePressedAnywhere(object sender, PointerRoutedEventArgs e)
+    {
+        var button = e.GetCurrentPoint(FolderTree).Properties;
+        if (!button.IsLeftButtonPressed && !button.IsMiddleButtonPressed)
+        {
+            return;
+        }
+
+        if (Ancestor<TreeViewItem>(e.OriginalSource as DependencyObject) is not { } item)
+        {
+            return;
+        }
+
+        if (FolderTree.NodeFromContainer(item) is not { } node ||
+            node.Content is not LibraryFolder folder)
+        {
+            return;
+        }
+
+
+        if (button.IsMiddleButtonPressed)
+        {
+            OpenTab(folder.Path);
+            e.Handled = true;
+            return;
+        }
+
+        OpenFolderNode(node, folder);
+    }
+
+    /// <summary>
+    /// Ordner öffnen und dabei auf- oder zuklappen.
+    ///
+    /// Das Aufklappen beim Klick ist der Teil, der den Ordner zuverlässig mit
+    /// einem Klick öffnet — ohne ihn brauchte es wieder zwei. Damit sich
+    /// trotzdem etwas zuklappen lässt, ohne den schmalen Pfeil treffen zu
+    /// müssen, klappt ein erneuter Klick auf den bereits geöffneten Ordner
+    /// ihn wieder zu.
+    /// </summary>
+    /// <summary>
+    /// Der zuletzt von der TreeView selbst zugeklappte Knoten.
+    ///
+    /// Reihenfolge laut Protokoll: Klickt man einen offenen Ordner an, meldet
+    /// die TreeView <c>Collapsed</c> noch bevor unser Zeiger-Handler läuft.
+    /// Bei einem geschlossenen Ordner kommt stattdessen später ein
+    /// <c>Expanding</c>. Daran lässt sich ablesen, was der Klick gerade
+    /// bewirkt hat — und das ist verlässlicher als <c>IsExpanded</c>, das
+    /// während der Klickverarbeitung etwas anderes meldet als das, was auf
+    /// dem Schirm steht.
+    /// </summary>
+    private TreeViewNode? _justCollapsed;
+    private DateTime _justCollapsedAt;
+
+    /// <summary>
+    /// Der zuletzt aufgeklappte Knoten, um ein Paar aus Expanding und sofort
+    /// folgendem Collapsed zu erkennen.
+    ///
+    /// Beim ersten Klick auf einen frischen Ordner meldet die TreeView beides
+    /// im selben Moment, ohne dass sich etwas geaendert haette. Ohne diese
+    /// Unterscheidung galt jeder erste Klick als Zuklapp-Klick, und der
+    /// Ordner blieb zu.
+    /// </summary>
+    private TreeViewNode? _justExpanding;
+    private DateTime _justExpandingAt;
+
+    /// <summary>
+    /// Öffnet den Ordner und sorgt dafür, dass ein Klick reicht.
+    ///
+    /// Ohne das Aufklappen braucht es zwei Klicks: Der erste wählt den
+    /// Eintrag nur aus, erst der zweite klappt auf. Erzwingt man es dagegen
+    /// bei jedem Klick, lässt sich nichts mehr zuklappen — die TreeView
+    /// klappt zu, und das Erzwingen macht es sofort wieder auf.
+    ///
+    /// Deshalb: aufklappen, außer die TreeView hat gerade eben von sich aus
+    /// zugeklappt. Dann war es ein Zuklapp-Klick und bleibt zu.
+    /// </summary>
+    private void OpenFolderNode(TreeViewNode node, LibraryFolder folder)
+    {
+        var closedByThisClick = ReferenceEquals(_justCollapsed, node)
+            && (DateTime.UtcNow - _justCollapsedAt).TotalMilliseconds < 250;
+
+        _justCollapsed = null;
+
+        NavigateActive(folder.Path);
+
+        if (closedByThisClick)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            node.IsExpanded = true;
+        });
+    }
+
+    private void OnTreeCollapsed(TreeView sender, TreeViewCollapsedEventArgs args)
+    {
+        var churn = ReferenceEquals(_justExpanding, args.Node)
+            && (DateTime.UtcNow - _justExpandingAt).TotalMilliseconds < 40;
+
+        if (!churn)
+        {
+            _justCollapsed = args.Node;
+            _justCollapsedAt = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>Der nächste Vorfahre dieses Typs im sichtbaren Baum.</summary>
+    private static T? Ancestor<T>(DependencyObject? from) where T : class
+    {
+        for (var node = from; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (node is T match) return match;
+        return null;
+    }
+
+    private static LibraryFolder? FolderOf(object source) =>
+        (source as FrameworkElement)?.DataContext is TreeViewNode { Content: LibraryFolder f } ? f : null;
+
+    private void OnTreeRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (FolderOf(sender) is not { } folder) return;
+
+        var menu = new MenuFlyout();
+        menu.Items.Add(Item("\uE8A7", "In neuem Tab öffnen", () => OpenTab(folder.Path)));
+        menu.Items.Add(Item("\uE721", "Unterordner durchsuchen", () => OpenRecursive(folder.Path)));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Item("\uE8DA", "Im Explorer öffnen", () => Reveal(folder.Path)));
+
+        if (folder.IsRoot)
+            menu.Items.Add(Item("\uE738", "Aus Bibliothek entfernen",
+                () => RemoveRoot(folder)));
+
+        menu.ShowAt((UIElement)sender, e.GetPosition((UIElement)sender));
+        e.Handled = true;
+
+        static MenuFlyoutItem Item(string glyph, string text, Action run)
+        {
+            var item = new MenuFlyoutItem { Text = text, Icon = new FontIcon { Glyph = glyph } };
+            item.Click += (_, _) => run();
+            return item;
+        }
+    }
+
+    /// <summary>Öffnet einen Ordner samt allem darunter — in einem eigenen Tab.</summary>
+    private void OpenRecursive(string path)
+    {
+        var existing = _tabs.FindIndex(t =>
+            string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase));
+
+        if (existing >= 0)
+        {
+            _tabs[existing].Recursive = true;
+            ActivateTab(existing);
+            _ = LoadTabAsync(_tabs[existing]);
+            return;
+        }
+
+        // Schon beim Anlegen rekursiv, damit ActivateTab nicht erst flach
+        // einliest und gleich darauf noch einmal.
+        _tabs.Add(new FolderTab(path) { Recursive = true });
+        ActivateTab(_tabs.Count - 1);
+    }
+
+    private static void Reveal(string path)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{path}\"",
+                UseShellExecute = true,
+            });
+        }
+        catch { }
+    }
+
+    // ══ Bibliothek ═══════════════════════════════════════════════
+
+    /// <summary>
+    /// Der Plus-Knopf: Ordner hinzufügen, und — falls welche ausgeblendet
+    /// sind — sie wieder zurückholen. Ohne diesen zweiten Eintrag gäbe es
+    /// keinen Weg zurück, wenn man Musik oder ein Laufwerk entfernt hat.
+    /// </summary>
+    private void OnLibraryMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = new MenuFlyout();
+
+        var add = new MenuFlyoutItem
+        {
+            Text = "Ordner hinzufügen…",
+            Icon = new FontIcon { Glyph = "\uE8F4" },
+        };
+        add.Click += OnAddLibraryPath;
+        menu.Items.Add(add);
+
+        if (_settings.HiddenRoots.Count > 0)
+        {
+            var back = new MenuFlyoutItem
+            {
+                Text = $"Ausgeblendete zurückholen ({_settings.HiddenRoots.Count})",
+                Icon = new FontIcon { Glyph = "\uE7A7" },
+            };
+            back.Click += (_, _) =>
+            {
+                _settings.HiddenRoots.Clear();
+                _settings.Save();
+                BuildTreeRoots();
+                StatusText.Text = "Ausgeblendete Ordner sind wieder da";
+            };
+            menu.Items.Add(back);
+        }
+
+        menu.ShowAt((FrameworkElement)sender);
+    }
+
+    private async void OnAddLibraryPath(object sender, RoutedEventArgs e)
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.FileTypeFilter.Add("*");
+
+        // Unverpackt weiss der Picker nicht, zu welchem Fenster er gehört —
+        // ohne das Handle wirft er beim Öffnen.
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+        var folder = await picker.PickSingleFolderAsync();
+        if (folder is null) return;
+
+        var path = folder.Path;
+        if (_settings.LibraryPaths.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusText.Text = $"„{folder.Name}“ ist schon in der Bibliothek";
+            return;
+        }
+
+        _settings.LibraryPaths.Add(path);
+        _settings.Save();
+        InvalidateIndex();
+        BuildTreeRoots();
+        StatusText.Text = $"„{folder.Name}“ zur Bibliothek hinzugefügt";
+    }
+
+    /// <summary>
+    /// Selbst hinzugefügte Wurzeln werden aus der Liste gestrichen. Musik,
+    /// Downloads und die Laufwerke stammen nicht aus einer Liste, sondern
+    /// werden bei jedem Start ermittelt — die lassen sich nur ausblenden.
+    /// </summary>
+    private void RemoveRoot(LibraryFolder folder)
+    {
+        if (folder.IsCustomRoot)
+            _settings.LibraryPaths.RemoveAll(p =>
+                string.Equals(p, folder.Path, StringComparison.OrdinalIgnoreCase));
+        else
+            _settings.HiddenRoots.Add(folder.Path);
+
+        _settings.Save();
+        InvalidateIndex();
+        BuildTreeRoots();
+        StatusText.Text = $"„{folder.Name}“ aus der Bibliothek entfernt. Der Ordner selbst bleibt.";
+    }
+
+    /// <summary>Alles, worin gesucht wird: eigene Pfade plus die Systemwurzeln ohne Laufwerke.</summary>
+    private List<string> SearchRoots()
+    {
+        var roots = new List<string>(_settings.LibraryPaths);
+
+        // Laufwerkswurzeln bleiben draussen — „C:\" abzusuchen dauert ewig
+        // und liefert vor allem Windows-Eigenes.
+        foreach (var entry in FolderScanner.Roots())
+            if (!entry.Path.TrimEnd(Path.DirectorySeparatorChar).EndsWith(':'))
+                roots.Add(entry.Path);
+
+        return [.. roots.Distinct(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    private Task<LibraryIndex> IndexAsync()
+    {
+        var roots = SearchRoots();
+        var onlyAudio = _settings.OnlyAudioFolders;
+        return _index ??= Task.Run(() => LibraryIndex.Build(roots, onlyAudio));
+    }
+
+    /// <summary>Nach Änderungen an Dateien stimmt der Index nicht mehr.</summary>
+    private void InvalidateIndex() => _index = null;
+
+    private async void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _search?.Cancel();
+        var query = SearchBox.Text.Trim();
+
+        if (query.Length < 2)
+        {
+            SearchPanel.Visibility = Visibility.Collapsed;
+            SearchList.ItemsSource = null;
+            return;
+        }
+
+        SearchPanel.Visibility = Visibility.Visible;
+
+        var cts = new CancellationTokenSource();
+        _search = cts;
+
+        try
+        {
+            // Nur so lange warten, dass ein zügiges Tippen nicht jeden
+            // Buchstaben einzeln durchreicht. Das Filtern selbst kostet nichts
+            // mehr, seit es über den Index läuft.
+            await Task.Delay(120, cts.Token);
+
+            var building = _index is null;
+            if (building) SearchInfo.Text = "Bibliothek wird einmalig eingelesen…";
+
+            var index = await IndexAsync();
+            if (cts.IsCancellationRequested) return;
+
+            var hits = LibrarySearch.Find(index, query);
+            SearchList.ItemsSource = hits;
+
+            var folders = hits.Count(h => h.Kind == HitKind.Folder);
+            var tracks = hits.Count - folders;
+            SearchInfo.Text = hits.Count == 0
+                ? $"Nichts gefunden für „{query}“."
+                : $"{folders} Ordner, {tracks} Lieder"
+                  + (hits.Count >= LibrarySearch.DefaultLimit ? " (mehr vorhanden)" : "");
+        }
+        catch (OperationCanceledException) { }
+        finally { if (_search == cts) _search = null; }
+    }
+
+    /// <summary>
+    /// Ein Ordnertreffer wird geöffnet, ein Liedtreffer öffnet seinen Ordner
+    /// und wählt das Lied darin aus.
+    /// </summary>
+    private async void OnSearchHitClicked(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not SearchHit hit) return;
+
+        if (hit.Kind == HitKind.Folder)
+        {
+            NavigateActive(hit.Path);
+            return;
+        }
+
+        var folder = Path.GetDirectoryName(hit.Path);
+        if (folder is null) return;
+
+        ActiveTab.Navigate(folder);
+        ActiveTab.SelectedPaths.Add(hit.Path);
+        RebuildChrome();
+        await LoadTabAsync(ActiveTab);
+    }
+
+    // ══ Wiedergabe ═══════════════════════════════════════════════
+
+    private void OnTogglePlay(object sender, RoutedEventArgs e)
+    {
+        if (_player.Current is not null) { _player.Toggle(); return; }
+
+        if (ActivePane.Selected().FirstOrDefault() is { } track) _player.Play(track);
+        else if (ActiveTab.Tracks.FirstOrDefault() is { } first) _player.Play(first);
+    }
+
+    private void OnVolumeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_player is null) return;
+        _player.Volume = e.NewValue / 100.0;
+    }
+
+    /// <summary>
+    /// WinUI-Panels schneiden ihren Inhalt nicht ab. Ohne diese Maske stünde
+    /// der Lautstärkeregler auch bei Breite 0 noch sichtbar da.
+    /// </summary>
+    private void OnVolumeHostResized(object sender, SizeChangedEventArgs e)
+    {
+        VolumeHost.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
+        {
+            Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height),
+        };
+    }
+
+    private const double VolumeWidth = 108;
+
+    /// <summary>Fährt die Lautstärke neben dem Abspielknopf heraus oder wieder ein.</summary>
+    private void ShowVolume(bool show)
+    {
+        var target = show ? VolumeWidth : 0;
+        if (Math.Abs(VolumeHost.Width - target) < 0.5) return;
+
+        var story = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+
+        var width = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            To = target,
+            Duration = TimeSpan.FromMilliseconds(180),
+            // Breite ist eine Layout-Eigenschaft — ohne das laeuft nichts.
+            EnableDependentAnimation = true,
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+            {
+                EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut,
+            },
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(width, VolumeHost);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(width, "Width");
+        story.Children.Add(width);
+
+        var fade = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            To = show ? 1 : 0,
+            Duration = TimeSpan.FromMilliseconds(show ? 220 : 120),
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fade, VolumeHost);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fade, "Opacity");
+        story.Children.Add(fade);
+
+        story.Begin();
+    }
+
+    private void UpdatePlayerBar()
+    {
+        var track = _player.Current;
+
+        PlayBtn.Content = _player.IsPlaying ? "\uE769" : "\uE768";
+        // Die Leiste wird schon im Konstruktor gefüllt, bevor der erste Tab
+        // existiert — ActiveTab wäre dort ein Zugriff ins Leere.
+        var haveTracks = _tabs.Count > 0 && ActiveTab.Tracks.Count > 0;
+
+        PlayBtn.IsEnabled = track is not null
+            || haveTracks
+            || ActivePane.Selected().Count > 0;
+
+        ShowVolume(track is not null);
+
+        if (track is null)
+        {
+            NowPlaying.Text = "";
+            NowTime.Text = "";
+            return;
+        }
+
+        NowPlaying.Text = string.IsNullOrWhiteSpace(track.Title) ? track.FileName : track.Title;
+
+        NowTime.Text = $"{Clock(_player.Position)} / {Clock(_player.Duration)}";
+
+        static string Clock(TimeSpan t) =>
+            t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+    }
+
+    // ══ Panelbreiten ═════════════════════════════════════════════
+
+    private ColumnDefinition? _panelCol;
+    private bool _panelFromRight;
+    private double _panelStartX;
+    private double _panelStartWidth;
+
+    private void OnPanelGripPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var grip = (GripArea)sender;
+        (_panelCol, _panelFromRight) = (string)grip.Tag switch
+        {
+            "meta" => (MetaCol, false),
+            "tree" => (TreeCol, false),
+            _ => (SideCol, true),
+        };
+
+        _panelStartX = e.GetCurrentPoint(Work).Position.X;
+        _panelStartWidth = _panelCol.ActualWidth;
+        grip.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnPanelGripMoved(object sender, PointerRoutedEventArgs e)
+    {
+        ((GripArea)sender).ShowResizeCursor(true);
+        if (_panelCol is null) return;
+
+        // Die rechte Spalte waechst nach links, darum dort das Vorzeichen drehen.
+        var dx = e.GetCurrentPoint(Work).Position.X - _panelStartX;
+        if (_panelFromRight) dx = -dx;
+
+        var width = Math.Max(_panelCol.MinWidth, _panelStartWidth + dx);
+        _panelCol.Width = new GridLength(width);
+        e.Handled = true;
+    }
+
+    private void OnPanelGripReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_panelCol is null) return;
+        _panelCol = null;
+        ((GripArea)sender).ReleasePointerCapture(e.Pointer);
+
+        _settings.MetaWidth = MetaCol.ActualWidth;
+        _settings.TreeWidth = TreeCol.ActualWidth;
+        _settings.SideWidth = SideCol.ActualWidth;
+        _settings.Save();
+        e.Handled = true;
+    }
+
+    private void OnPanelGripExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_panelCol is null) ((GripArea)sender).ShowResizeCursor(false);
+    }
+
+    // ══ Löschen ══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Dateien aus dem Kontextmenü entfernen. Vorher gesichert, damit der
+    /// Verlauf sie zurücklegen kann — ein endgültiges Löschen bietet die App
+    /// bewusst nicht an.
+    /// </summary>
+    private async void OnPaneDeleteRequested(object? sender, IReadOnlyList<AudioTrack> tracks)
+    {
+        if (tracks.Count == 0) return;
+
+        var names = string.Join("\n", tracks.Take(6).Select(t => "• " + t.FileName));
+        if (tracks.Count > 6) names += $"\n• … und {tracks.Count - 6} weitere";
+
+        if (!await Confirm(tracks.Count == 1 ? "Datei löschen" : $"{tracks.Count} Dateien löschen",
+                $"{names}\n\nJede Datei wird vorher gesichert und lässt sich über den Verlauf " +
+                "zurückholen.", "Löschen"))
+            return;
+
+        ReleaseIfAffected(tracks);
+        SetBusy(true, $"{tracks.Count} Datei(en) löschen");
+
+        var backups = new BackupStore(_settings.ResolvedBackupFolder);
+        var files = new List<HistoryFile>();
+        var errors = new List<string>();
+
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            try
+            {
+                var backup = backups.Create(tracks[i].Path);
+                File.Delete(tracks[i].Path);
+                files.Add(new HistoryFile { Original = tracks[i].Path, BackupPath = backup });
+            }
+            catch (Exception ex) { errors.Add($"{tracks[i].FileName}: {ex.Message}"); }
+
+            ShowProgress(true, (i + 1) * 100.0 / tracks.Count);
+        }
+
+        if (files.Count > 0) _history.Add("delete", $"{files.Count} Datei(en) gelöscht", files);
+
+        InvalidateIndex();
+        SetBusy(false, null);
+        await MergeTabAsync(ActiveTab);
+        await ReportAsync(files.Count, errors, []);
+    }
+
+    // ══ Laden ════════════════════════════════════════════════════
+
+    private async Task LoadTabAsync(FolderTab tab, string? selectFile = null)
+    {
+        var path = tab.Path;
+        StatusText.Text = "Wird eingelesen…";
+
+        var recursive = tab.Recursive;
+
+        // Eine ganze Bibliothek einzulesen dauert Sekunden. Ohne Anzeige sieht
+        // das aus, als haenge die App.
+        if (recursive)
+        {
+            Progress.IsIndeterminate = true;
+            ShowProgress(true, 0);
+        }
+
+
+        var tracks = await Task.Run(() => recursive
+            ? FolderScanner.TracksRecursive(path)
+            : FolderScanner.Tracks(path));
+
+
+        Progress.IsIndeterminate = false;
+        ShowProgress(false, 0);
+
+        if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase)) return;
+
+
+        tab.Tracks.Clear();
+        foreach (var t in TrackSorting.Apply(tracks, tab.Sort, tab.SortDescending))
+            tab.Tracks.Add(t);
+        tab.Analysis = FolderAnalysis.Of(tracks);
+        tab.Target = tab.Analysis.ResolveTarget(_settings.DefaultFormat, _settings.DefaultSampleRate);
+
+        if (selectFile is not null)
+            tab.SelectedPaths.Add(selectFile);
+
+        PaneFor(tab)?.Refresh();
+        // Kein Pfad in der Statuszeile: Der steht oben in der Pfadleiste, und
+        // hier soll stehen, was zuletzt getan wurde.
+        StatusText.Text = "";
+
+        RebuildTabs();
+        UpdateAnalysisPanel();
+        UpdateMetaPanel();
+    }
+
+    /// <summary>
+    /// Liest den Ordner neu, tauscht aber nur aus, was sich wirklich geändert
+    /// hat.
+    ///
+    /// <see cref="LoadTabAsync"/> leert die Liste und füllt sie neu. Damit
+    /// baut die Ansicht jede Zeile neu auf: Die Bildlaufposition springt an
+    /// den Anfang, die Cover werden erneut geholt, und die Auswahl geht durch
+    /// das Leeren verloren, bevor sie wiederhergestellt wird. Nach dem
+    /// Schreiben von Tags ändern sich aber meist nur ein oder zwei Zeilen.
+    /// </summary>
+    private async Task MergeTabAsync(FolderTab tab)
+    {
+        var path = tab.Path;
+        var recursive = tab.Recursive;
+
+        var fresh = await Task.Run(() => recursive
+            ? FolderScanner.TracksRecursive(path)
+            : FolderScanner.Tracks(path));
+
+        // Zwischenzeitlich woandershin navigiert.
+        if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase)) return;
+
+        var wanted = TrackSorting.Apply(fresh, tab.Sort, tab.SortDescending);
+        var wantedPaths = new HashSet<string>(
+            wanted.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
+
+        // 1. Weg, was es nicht mehr gibt.
+        for (var i = tab.Tracks.Count - 1; i >= 0; i--)
+            if (!wantedPaths.Contains(tab.Tracks[i].Path)) tab.Tracks.RemoveAt(i);
+
+        // 2. Reihenfolge herstellen und Neues einfügen.
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            var at = IndexOf(tab.Tracks, wanted[i].Path);
+
+            if (at < 0) tab.Tracks.Insert(i, wanted[i]);
+            else if (at != i) tab.Tracks.Move(at, i);
+            else if (Changed(tab.Tracks[i], wanted[i])) tab.Tracks[i] = wanted[i];
+        }
+
+        tab.Analysis = FolderAnalysis.Of(wanted);
+        tab.Target = tab.Analysis.ResolveTarget(_settings.DefaultFormat, _settings.DefaultSampleRate);
+
+        PaneFor(tab)?.Refresh();
+        RebuildTabs();
+        UpdateAnalysisPanel();
+        UpdateMetaPanel();
+
+        static int IndexOf(IList<AudioTrack> list, string path)
+        {
+            for (var i = 0; i < list.Count; i++)
+                if (string.Equals(list[i].Path, path, StringComparison.OrdinalIgnoreCase)) return i;
+            return -1;
+        }
+
+        // Nur was in der Zeile oder den Feldern zu sehen ist. Wird hier zu viel
+        // verglichen, wird zu viel ausgetauscht, und der Vorteil ist dahin.
+        static bool Changed(AudioTrack a, AudioTrack b) =>
+            a.Title != b.Title || a.Artist != b.Artist || a.Album != b.Album
+            || a.AlbumArtist != b.AlbumArtist || a.Genre != b.Genre
+            || a.Composer != b.Composer || a.Comment != b.Comment
+            || a.Track != b.Track || a.Disc != b.Disc || a.Year != b.Year
+            || a.Format != b.Format || a.SampleRate != b.SampleRate
+            || a.Duration != b.Duration || a.Size != b.Size || a.HasCover != b.HasCover;
+    }
+
+    private TrackPane? PaneFor(FolderTab tab) =>
+        PaneA.Tab == tab ? PaneA : PaneB.Tab == tab && PaneB.Visibility == Visibility.Visible ? PaneB : null;
+
+    // ══ Auswahl ══════════════════════════════════════════════════
+
+    private void OnPaneActivated(object? sender, TrackPane pane)
+    {
+        if (_activePane == pane) return;
+        _activePane = pane;
+        if (pane.Tab is not null)
+        {
+            var idx = _tabs.IndexOf(pane.Tab);
+            if (idx >= 0) _active = idx;
+        }
+        PaneA.SetActive(_activePane == PaneA);
+        PaneB.SetActive(_activePane == PaneB);
+        RebuildChrome();
+        UpdateAnalysisPanel();
+        UpdateMetaPanel();
+    }
+
+    private void OnPaneSelectionChanged(object? sender, TrackPane pane)
+    {
+        if (pane != _activePane) { OnPaneActivated(sender, pane); return; }
+        UpdateMetaPanel();
+        UpdatePlayerBar();
+    }
+
+    private List<AudioTrack> Selected() => ActivePane.Selected();
+
+    /// <summary>Klick auf eine Spaltenüberschrift sortiert die Liste um.</summary>
+    private void OnPaneSortRequested(object? sender, TrackSort key)
+    {
+        if (sender is not TrackPane pane || pane.Tab is not { } tab) return;
+
+        tab.ToggleSort(key);
+
+        var sorted = TrackSorting.Apply(tab.Tracks, tab.Sort, tab.SortDescending);
+        tab.Tracks.Clear();
+        foreach (var t in sorted) tab.Tracks.Add(t);
+
+        pane.Refresh();
+        StatusText.Text = tab.Sort == TrackSort.Natural
+            ? "Wieder in Playlist-Reihenfolge"
+            : $"Sortiert nach {Label(tab.Sort)}{(tab.SortDescending ? ", absteigend" : "")}"
+              + ". Umsortieren von Hand ist dabei aus";
+
+        static string Label(TrackSort key) => key switch
+        {
+            TrackSort.Track => "Track-Nummer",
+            TrackSort.Title => "Titel",
+            TrackSort.Artist => "Interpret",
+            TrackSort.Album => "Album",
+            TrackSort.Format => "Format",
+            TrackSort.SampleRate => "Samplerate",
+            _ => "Dauer",
+        };
+    }
+
+    // ══ Metadatenspalte ══════════════════════════════════════════
+
+    private void UpdateMetaPanel()
+    {
+        var folderScope = FolderScope;
+        var sel = TargetTracks();
+        _suppressSelection = true;
+
+        var any = sel.Count > 0;
+        foreach (var box in TagBoxes()) box.IsEnabled = any;
+        FFormat.IsEnabled = FRate.IsEnabled = any;
+
+        // Titel und Track sind je Datei verschieden — für mehrere Dateien
+        // gleichzeitig gibt es da nichts Sinnvolles zu schreiben.
+        var single = any && !folderScope && sel.Count == 1;
+        FTitle.IsEnabled = FTrack.IsEnabled = single;
+
+        MetaHead.Text = folderScope
+            ? $"METADATEN: {ActiveTab.Name}, {sel.Count} TRACKS"
+            : sel.Count > 1 ? $"METADATEN: {sel.Count} TRACKS" : "METADATEN";
+
+        if (!any)
+        {
+            foreach (var box in TagBoxes()) { box.Text = ""; box.PlaceholderText = ""; }
+            Snapshot();
+            FFormat.SelectedIndex = -1;
+            FRate.SelectedIndex = -1;
+            CoverImage.Source = null;
+            CoverMime.Text = "";
+            CoverInfo.Text = "keine Auswahl";
+            TechPanel.Children.Clear();
+            _suppressSelection = false;
+            UpdatePlan();
+            return;
+        }
+
+        // Ein Feld zeigt nur dann einen Wert, wenn sich die Auswahl darin einig
+        // ist — sonst „<verschieden>", das beim Anwenden unangetastet bleibt.
+        Fill(FTitle, single ? sel[0].Title : Agree(sel, t => t.Title));
+        Fill(FArtist, Agree(sel, t => t.Artist));
+        Fill(FAlbum, Agree(sel, t => t.Album));
+        Fill(FYear, Agree(sel, t => t.Year == 0 ? "" : t.Year.ToString()));
+        Fill(FTrack, single ? sel[0].TrackLabel : null);
+        Fill(FGenre, Agree(sel, t => t.Genre));
+        Fill(FAlbumArtist, Agree(sel, t => t.AlbumArtist));
+        Fill(FComposer, Agree(sel, t => t.Composer));
+        Fill(FComment, Agree(sel, t => t.Comment));
+        Fill(FDisc, Agree(sel, t => t.DiscLabel));
+
+        var fmt = Agree(sel, t => AudioFormats.TargetExtension(t.Format).ToUpperInvariant());
+        FFormat.SelectedItem = fmt is null ? null
+            : AudioFormats.Targets.FirstOrDefault(x => x.Equals(fmt, StringComparison.OrdinalIgnoreCase));
+
+        var rate = Agree(sel, t => t.SampleRate.ToString());
+        FRate.SelectedIndex = rate is not null && int.TryParse(rate, out var hz)
+            ? Array.IndexOf(Rates, hz) : -1;
+
+        UpdateCover(sel[0]);
+        UpdateTech(sel);
+
+        Snapshot();
+        _suppressSelection = false;
+        UpdatePlan();
+
+        static void Fill(TextBox box, string? value)
+        {
+            box.Text = value ?? "";
+            box.PlaceholderText = value is null ? "<verschieden>" : "";
+        }
+    }
+
+    private void Snapshot()
+    {
+        _loaded.Clear();
+        foreach (var box in TagBoxes()) _loaded[box] = box.Text;
+    }
+
+    private bool TagsChanged() =>
+        TagBoxes().Any(b => !_loaded.TryGetValue(b, out var was) || b.Text != was);
+
+    private static string? Agree(List<AudioTrack> sel, Func<AudioTrack, string> pick)
+    {
+        var values = sel.Select(pick).Distinct(StringComparer.Ordinal).ToList();
+        return values.Count == 1 ? values[0] : null;
+    }
+
+    /// <summary>Das aktuell angezeigte Cover — Grundlage für Kopieren und Anpassen.</summary>
+    private AudioProbe.Cover? _cover;
+
+    private void UpdateCover(AudioTrack track)
+    {
+        _cover = AudioProbe.ReadCover(track.Path);
+
+        if (_cover is null)
+        {
+            CoverImage.Source = null;
+            CoverMime.Text = "";
+            CoverInfo.Text = "kein Cover";
+            return;
+        }
+
+        try
+        {
+            var bmp = new BitmapImage();
+            using var ms = new MemoryStream(_cover.Data);
+            using var ras = ms.AsRandomAccessStream();
+            bmp.SetSource(ras);
+            CoverImage.Source = bmp;
+
+            CoverMime.Text = ImageInfo.ShortName(_cover.MimeType).ToLowerInvariant();
+            CoverInfo.Text = $"{_cover.Data.Length / 1024.0:0.#} KB";
+
+            // Die Maße kommen aus dem Dekoder, nicht aus BitmapImage.ImageOpened:
+            // Bei einem Bild aus dem Speicher ist das Ereignis oft schon gelaufen,
+            // bevor man sich daran hängen kann — dann blieben die Maße leer.
+            ShowDimensions(_cover);
+        }
+        catch
+        {
+            CoverImage.Source = null;
+            CoverMime.Text = "";
+            CoverInfo.Text = "Cover nicht lesbar";
+        }
+    }
+
+    private async void ShowDimensions(AudioProbe.Cover cover)
+    {
+        var info = await CoverImaging.MeasureAsync(cover.Data);
+
+        // Zwischenzeitlich eine andere Datei gewählt — dann gehört das Ergebnis
+        // nicht mehr zu dem, was gerade zu sehen ist.
+        if (info is null || !ReferenceEquals(_cover, cover)) return;
+
+        CoverMime.Text = info.Format.ToLowerInvariant();
+        CoverInfo.Text = $"{info.Width} × {info.Height}{Environment.NewLine}" +
+                         $"{cover.Data.Length / 1024.0:0.#} KB";
+    }
+
+    private void UpdateTech(List<AudioTrack> sel)
+    {
+        TechPanel.Children.Clear();
+        void Row(string k, string v) => TechPanel.Children.Add(new TextBlock
+        {
+            Text = $"{k}: {v}",
+            FontSize = 11.5,
+            Foreground = Res("TextFillColorTertiaryBrush"),
+        });
+
+        if (sel.Count > 1)
+        {
+            Row(FolderScope ? "Ordner" : "Auswahl", $"{sel.Count} Dateien");
+
+            var total = TimeSpan.FromTicks(sel.Sum(t => t.Duration.Ticks));
+            if (total > TimeSpan.Zero)
+                Row("Gesamtdauer", total.TotalHours >= 1
+                    ? $"{(int)total.TotalHours}:{total.Minutes:00}:{total.Seconds:00} Stunden"
+                    : $"{(int)total.TotalMinutes}:{total.Seconds:00} Minuten");
+
+            var bytes = sel.Sum(t => t.Size);
+            if (bytes > 0) Row("Gesamtgröße", Bytes(bytes));
+
+            var formats = sel.Select(t => t.Format).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (formats.Count == 1) Row("Format", formats[0]);
+            return;
+        }
+
+        var t = sel[0];
+        Row("Kanäle", t.Channels.ToString());
+        Row("Dauer", t.DurationLabel);
+        Row("Größe", t.SizeLabel);
+        if (t.Bitrate > 0) Row("Bitrate", $"{t.Bitrate} kbps");
+        if (ActiveTab.Target is { } tg && !FolderAnalysis.Matches(t, tg))
+            Row("Ordner-Ziel", $"{tg.Format} · {FormatRate(tg.SampleRate)}");
+    }
+
+    private static string Bytes(long size) => size switch
+    {
+        < 1024 => $"{size} B",
+        < 1024 * 1024 => $"{size / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{size / 1024.0 / 1024.0:0.#} MB",
+        _ => $"{size / 1024.0 / 1024.0 / 1024.0:0.##} GB",
+    };
+
+    /// <summary>Sagt vorher an, was „Anwenden" tun würde.</summary>
+    private void UpdatePlan()
+    {
+        var folderScope = FolderScope;
+        var sel = TargetTracks();
+        if (sel.Count == 0)
+        {
+            PlanText.Text = "Keine Auswahl.";
+            ApplyBtn.IsEnabled = false;
+            return;
+        }
+
+        var jobs = new List<string>();
+        if (TagsChanged()) jobs.Add("Tags schreiben");
+
+        if (FFormat.SelectedItem is string f &&
+            !f.Equals(Agree(sel, t => AudioFormats.TargetExtension(t.Format).ToUpperInvariant()),
+                      StringComparison.OrdinalIgnoreCase))
+            jobs.Add($"nach {f} konvertieren");
+
+        if (FRate.SelectedIndex >= 0)
+        {
+            var hz = Rates[FRate.SelectedIndex];
+            if (Agree(sel, t => t.SampleRate.ToString()) is not { } r || r != hz.ToString())
+                jobs.Add($"auf {FormatRate(hz)} bringen");
+        }
+
+        var was = folderScope
+            ? $"Ordner ({sel.Count} Datei{(sel.Count == 1 ? "" : "en")})"
+            : $"{sel.Count} Datei{(sel.Count == 1 ? "" : "en")}";
+
+        ApplyBtn.IsEnabled = jobs.Count > 0;
+        PlanText.Text = jobs.Count > 0
+            ? $"{was}: {string.Join(" · ", jobs)}"
+            : was;
+    }
+
+    // ══ Cover ════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Führt eine Menüaktion aus und zeigt Fehler an, statt sie zu verlieren.
+    ///
+    /// Vorher standen hier <c>_ = MachWasAsync()</c>-Aufrufe. Eine Ausnahme
+    /// darin verschwand vollständig: Der Dialog erschien nicht, und es gab
+    /// keinen Hinweis warum.
+    /// </summary>
+    private async void Run(Func<Task> work)
+    {
+        try { await work(); }
+        catch (Exception ex) { await Inform("Fehlgeschlagen", ex.Message); }
+    }
+
+    private void OnCoverRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var targets = TargetTracks();
+        if (targets.Count == 0) return;
+
+        var scope = FolderScope ? $"Ordner ({targets.Count})" : $"{targets.Count}";
+        var many = targets.Count > 1;
+        var hasCover = _cover is not null;
+
+        var menu = new MenuFlyout();
+
+        menu.Items.Add(Item("\uEB9F", many ? $"Cover für {scope} setzen…" : "Cover setzen…",
+            true, () => Run(() => SetFromFileAsync(targets))));
+
+        menu.Items.Add(Item("\uE8C8", "Cover kopieren",
+            hasCover, () => Run(CopyCoverAsync)));
+
+        menu.Items.Add(Item("\uE77F", many ? $"Cover in {scope} einfügen" : "Cover einfügen",
+            true, () => Run(() => PasteCoverAsync(targets))));
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        menu.Items.Add(Item("\uE740", "Größe anpassen…",
+            hasCover, () => Run(() => ResizeCoverAsync(targets))));
+
+        menu.Items.Add(Item("\uE74D", many ? $"Cover aus {scope} entfernen" : "Cover entfernen",
+            targets.Any(t => t.HasCover), () => Run(() => ClearCoverAsync(targets))));
+
+        menu.ShowAt((FrameworkElement)sender, e.GetPosition((UIElement)sender));
+        e.Handled = true;
+
+        static MenuFlyoutItem Item(string glyph, string text, bool enabled, Action run)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = text,
+                Icon = new FontIcon { Glyph = glyph },
+                IsEnabled = enabled,
+            };
+            item.Click += (_, _) => run();
+            return item;
+        }
+    }
+
+    // ── Setzen ───────────────────────────────────────────────────
+
+    private async Task SetFromFileAsync(List<AudioTrack> targets)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        foreach (var ext in new[] { ".jpg", ".jpeg", ".png", ".webp", ".bmp" })
+            picker.FileTypeFilter.Add(ext);
+
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+
+        byte[] data;
+        try { data = await File.ReadAllBytesAsync(file.Path); }
+        catch (Exception ex) { await Inform("Bild nicht lesbar", ex.Message); return; }
+
+        // Eine gewählte Datei liegt im Original vor — sie soll so bleiben,
+        // solange sie quadratisch ist.
+        await ApplyImageAsync(targets, data, "Cover setzen", keepExact: true);
+    }
+
+    private async Task PasteCoverAsync(List<AudioTrack> targets)
+    {
+        var content = Clipboard.GetContent();
+
+        // Innerhalb der App: die Originalbytes, ohne sie anzufassen.
+        if (content.Contains(CoverToken) && _coverClip is { } clip)
+        {
+            var token = await content.GetDataAsync(CoverToken) as string;
+            if (token == clip.Token)
+            {
+                await WriteCoverAsync(targets,
+                    new TagEdit { Cover = clip.Data, CoverMimeType = clip.Mime },
+                    $"Cover einfügen ({clip.Data.Length / 1024.0:0.#} KB, unverändert)");
+                return;
+            }
+        }
+
+        byte[]? data = null;
+        var fromFile = false;
+        try
+        {
+            if (content.Contains(StandardDataFormats.StorageItems))
+            {
+                // Eine im Explorer kopierte Bilddatei — die liegt unverändert vor.
+                var items = await content.GetStorageItemsAsync();
+                if (items.OfType<Windows.Storage.StorageFile>().FirstOrDefault() is { } f)
+                {
+                    data = await File.ReadAllBytesAsync(f.Path);
+                    fromFile = true;
+                }
+            }
+
+            if (data is null && content.Contains(StandardDataFormats.Bitmap))
+            {
+                var reference = await content.GetBitmapAsync();
+                using var stream = await reference.OpenReadAsync();
+                data = await ReadAllAsync(stream);
+            }
+        }
+        catch (Exception ex)
+        {
+            await Inform("Zwischenablage nicht lesbar", ex.Message);
+            return;
+        }
+
+        if (data is null || data.Length == 0)
+        {
+            await Inform("Kein Bild in der Zwischenablage",
+                "Kopier ein Bild oder eine Bilddatei und versuch es noch einmal.");
+            return;
+        }
+
+        await ApplyImageAsync(targets, data, "Cover einfügen", keepExact: fromFile);
+    }
+
+    /// <summary>
+    /// Der gemeinsame Weg für Datei und Zwischenablage: messen, bei nicht
+    /// quadratischen Bildern zuschneiden lassen, dann schreiben.
+    ///
+    /// Ein Bild, das schon quadratisch und JPEG oder PNG ist, wird
+    /// unverändert übernommen. Neu zu kodieren, was bereits passt, kostet
+    /// nur Qualität und ändert die Datei ohne Grund.
+    /// </summary>
+    private async Task ApplyImageAsync(
+        List<AudioTrack> targets, byte[] data, string label, bool keepExact)
+    {
+        var info = await CoverImaging.MeasureAsync(data);
+        if (info is null)
+        {
+            await Inform("Bild nicht lesbar", "Das Format wird nicht unterstützt.");
+            return;
+        }
+
+        var asPng = info.Format == "PNG";
+        byte[]? final;
+        string note;
+
+        if (!info.IsSquare)
+        {
+            final = await CoverCropDialog.CropAsync(Root.XamlRoot, data, info, asPng);
+            if (final is null) return;   // abgebrochen
+            note = "zugeschnitten";
+        }
+        else if (keepExact && info.Format is "JPEG" or "PNG")
+        {
+            final = data;
+            note = "unverändert";
+        }
+        else
+        {
+            // Was aus der Zwischenablage kommt, ist oft ein unkomprimiertes
+            // Bitmap und wäre als Tag absurd groß.
+            final = await CoverImaging.NormalizeAsync(data, asPng);
+            note = "neu kodiert";
+        }
+
+        if (final is null)
+        {
+            await Inform("Bild nicht verarbeitbar", "Das Umwandeln ist fehlgeschlagen.");
+            return;
+        }
+
+        await WriteCoverAsync(targets,
+            new TagEdit { Cover = final, CoverMimeType = asPng ? "image/png" : "image/jpeg" },
+            $"{label} ({final.Length / 1024.0:0.#} KB, {note})");
+    }
+
+    // ── Kopieren ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Das zuletzt kopierte Cover, Byte für Byte.
+    ///
+    /// Der Umweg über die Windows-Zwischenablage ist verlustbehaftet:
+    /// <c>SetBitmap</c> legt ein Bild ab, kein JPEG, und beim Zurückholen
+    /// bekommt man ein neu kodiertes Bild statt der Originaldatei. Für
+    /// „kopieren und einfügen" innerhalb der App bleiben die Bytes deshalb
+    /// hier liegen; auf der Zwischenablage steht nur eine Marke, an der sich
+    /// erkennen lässt, ob dieser Puffer noch der ist, der dort steht.
+    /// </summary>
+    private static (string Token, byte[] Data, string Mime)? _coverClip;
+
+    private const string CoverToken = "TagTuner/CoverToken";
+
+    private async Task CopyCoverAsync()
+    {
+        if (_cover is null) return;
+
+        var token = Guid.NewGuid().ToString("n");
+        _coverClip = (token, _cover.Data, _cover.MimeType);
+
+        var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+        {
+            writer.WriteBytes(_cover.Data);
+            await writer.StoreAsync();
+            writer.DetachStream();
+        }
+        stream.Seek(0);
+
+        var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+
+        // Für andere Programme als Bild, für uns selbst über die Marke.
+        package.SetBitmap(
+            Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(stream));
+        package.SetData(CoverToken, token);
+
+        Clipboard.SetContent(package);
+        StatusText.Text = $"Cover kopiert ({_cover.Data.Length / 1024.0:0.#} KB, unverändert)";
+    }
+
+    // ── Größe anpassen ───────────────────────────────────────────
+
+    private async Task ResizeCoverAsync(List<AudioTrack> targets)
+    {
+        if (_cover is null) return;
+
+        var info = await CoverImaging.MeasureAsync(_cover.Data);
+        if (info is null) { await Inform("Cover nicht lesbar", "Das Format wird nicht unterstützt."); return; }
+
+        var sizes = new[] { 1500, 1000, 800, 600, 500, 400, 300 };
+
+        var size = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        foreach (var n in sizes) size.Items.Add($"{n} × {n} Pixel");
+        size.SelectedIndex = Array.FindIndex(sizes, n => n <= Math.Max(info.Width, info.Height));
+        if (size.SelectedIndex < 0) size.SelectedIndex = sizes.Length - 1;
+
+        var quality = new Slider
+        {
+            Minimum = 40, Maximum = 100, Value = 85,
+            IsThumbToolTipEnabled = false,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+
+        var preview = new TextBlock
+        {
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextFillColorTertiaryBrush"),
+        };
+
+        // Die Größe lässt sich nicht ausrechnen — sie wird gemessen, indem
+        // tatsächlich kodiert wird. Das kostet wenig und lügt nicht.
+        var pending = 0;
+        async void Estimate()
+        {
+            var mine = ++pending;
+            preview.Text = "wird berechnet…";
+
+            var target = (uint)sizes[Math.Max(0, size.SelectedIndex)];
+            var q = quality.Value / 100.0;
+            var result = await CoverImaging.ResizeAsync(_cover.Data, target, asPng: false, q);
+
+            if (mine != pending) return;
+            preview.Text = result is null
+                ? "Vorschau nicht möglich"
+                : $"Vorher {info.Bytes / 1024.0:0.#} KB ({info.Width} × {info.Height}, {info.Format})"
+                  + Environment.NewLine
+                  + $"Nachher {result.Length / 1024.0:0.#} KB als JPEG"
+                  + $", {(result.Length < info.Bytes ? $"{100 - result.Length * 100 / info.Bytes} % kleiner" : "größer als das Original")}";
+        }
+
+        size.SelectionChanged += (_, _) => Estimate();
+        quality.ValueChanged += (_, _) => Estimate();
+        Estimate();
+
+        var panel = new StackPanel { Spacing = 12, Width = 340 };
+        panel.Children.Add(Labelled("Kantenlänge (höchstens)", size));
+        panel.Children.Add(Labelled("JPEG-Qualität", quality));
+        panel.Children.Add(preview);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Covergröße anpassen",
+            Content = panel,
+            PrimaryButtonText = "Übernehmen",
+            CloseButtonText = "Abbrechen",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Root.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+        var final = await CoverImaging.ResizeAsync(
+            _cover.Data, (uint)sizes[Math.Max(0, size.SelectedIndex)],
+            asPng: false, quality.Value / 100.0);
+
+        if (final is null) { await Inform("Umwandeln fehlgeschlagen", "Das Bild ließ sich nicht neu kodieren."); return; }
+
+        await WriteCoverAsync(targets,
+            new TagEdit { Cover = final, CoverMimeType = "image/jpeg" },
+            $"Cover verkleinern ({final.Length / 1024.0:0.#} KB)");
+
+        static StackPanel Labelled(string caption, FrameworkElement control)
+        {
+            var sp = new StackPanel { Spacing = 4 };
+            sp.Children.Add(new TextBlock { Text = caption, FontSize = 11.5, Opacity = 0.8 });
+            sp.Children.Add(control);
+            return sp;
+        }
+    }
+
+    // ── Entfernen und Schreiben ──────────────────────────────────
+
+    private async Task ClearCoverAsync(List<AudioTrack> targets)
+    {
+        // Eine Datei ohne Cover anzufassen brächte nichts und legte trotzdem
+        // eine Sicherung an.
+        var hits = targets.Where(t => t.HasCover).ToList();
+        if (hits.Count == 0) return;
+
+        // Leeres Array heißt „entfernen"; null hieße „unverändert".
+        await WriteCoverAsync(hits, new TagEdit { Cover = [] }, "Cover entfernen");
+    }
+
+    private async Task WriteCoverAsync(List<AudioTrack> targets, TagEdit edit, string label)
+    {
+        // WAV, AIFF und OGG tragen kein Cover — dort wäre das Schreiben
+        // entweder wirkungslos oder es verlöre sich beim nächsten Anfassen.
+        var able = targets.Where(t => AudioFormats.CanCarryCover(t.Format)).ToList();
+        var unable = targets.Except(able).ToList();
+
+        if (able.Count == 0)
+        {
+            await Inform("Format trägt kein Cover", $"{Formats(unable)} kann kein Cover speichern.");
+            return;
+        }
+
+        var text = $"{able.Count} Datei(en) werden geändert. Vorher wird je Datei eine " +
+                   "Sicherung angelegt.";
+        if (unable.Count > 0)
+            text += $"{Environment.NewLine}{Environment.NewLine}⚠ {unable.Count} Datei(en) bleiben " +
+                    $"unangetastet: {Formats(unable)} trägt kein Cover.";
+
+        if (!await Confirm(label, text, "Übernehmen")) return;
+
+        await RunJobAsync(label, able, _ => (false, null, null, edit));
+
+        static string Formats(List<AudioTrack> tracks) =>
+            string.Join(", ", tracks.Select(t => t.Format).Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Windows.Storage.Streams.IRandomAccessStreamWithContentType stream)
+    {
+        var bytes = new byte[stream.Size];
+        using var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+        await reader.LoadAsync((uint)stream.Size);
+        reader.ReadBytes(bytes);
+        return bytes;
+    }
+
+    // ══ Ordner-Analyse ═══════════════════════════════════════════
+
+    private void UpdateAnalysisPanel()
+    {
+        AnalysisPanel.Children.Clear();
+        var analysis = ActiveTab.Analysis;
+        var target = ActiveTab.Target;
+
+        if (analysis is null || target is null)
+        {
+            VerdictBox.Background = Res("WarnDimBrush");
+            VerdictText.Text = "Wird eingelesen…";
+            VerdictText.Foreground = Res("WarnBrush");
+            AlignBtn.IsEnabled = false;
+            SideNote.Text = "";
+            return;
+        }
+
+        var ok = analysis.IsUniform;
+        VerdictBox.Background = Res(ok ? "OkDimBrush" : "WarnDimBrush");
+        VerdictText.Foreground = Res(ok ? "OkBrush" : "WarnBrush");
+        VerdictText.Text = analysis.IsEmpty
+            ? "Ordner ist leer. Neue Dateien folgen dem Standardprofil."
+            : ok
+                ? $"Einheitlich. Alle {analysis.Tracks.Count} Tracks entsprechen dem Ziel."
+                : "Uneinheitlich. Es gilt das Standardprofil aus den Einstellungen.";
+
+        void Row(string key, string value, string? note = null)
+        {
+            var sp = new StackPanel { Spacing = 1 };
+            sp.Children.Add(new TextBlock { Text = $"{key}: {value}", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            if (note is not null)
+                sp.Children.Add(new TextBlock { Text = note, FontSize = 10.5, Foreground = Res("TextFillColorTertiaryBrush") });
+            AnalysisPanel.Children.Add(sp);
+        }
+
+        var fromDefault = target.FromDefaultProfile ? "aus Standardprofil" : null;
+        Row("Ziel-Format", target.Format, fromDefault);
+        Row("Ziel-Samplerate", FormatRate(target.SampleRate), fromDefault);
+
+        if (!analysis.IsEmpty && !analysis.IsUniform)
+        {
+            Pills("Formate", analysis.FormatCounts
+                .OrderByDescending(p => p.Value)
+                .Select(p => ($"{p.Value} {p.Key}", p.Key.Equals(target.Format, StringComparison.OrdinalIgnoreCase))));
+
+            Pills("Sampleraten", analysis.SampleRateCounts
+                .OrderByDescending(p => p.Value)
+                .Select(p => ($"{p.Value} × {FormatRate(p.Key)}", p.Key == target.SampleRate)));
+        }
+
+        // Was schon dem Ziel entspricht, ist gruen; der Rest muss noch angefasst
+        // werden. So sieht man auf einen Blick, wie weit der Ordner ist.
+        void Pills(string caption, IEnumerable<(string Text, bool OnTarget)> items)
+        {
+            var group = new StackPanel { Spacing = 5 };
+            group.Children.Add(new TextBlock
+            {
+                Text = caption,
+                FontSize = 11,
+                Foreground = Res("TextFillColorTertiaryBrush"),
+            });
+
+            var wrap = new WrapPanel { HorizontalSpacing = 5, VerticalSpacing = 5 };
+            foreach (var (text, onTarget) in items)
+            {
+                wrap.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(9),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    Background = Res(onTarget ? "OkDimBrush" : "WarnDimBrush"),
+                    Child = new TextBlock
+                    {
+                        Text = text,
+                        FontSize = 11,
+                        FontFamily = new FontFamily("Consolas"),
+                        Foreground = Res(onTarget ? "OkBrush" : "WarnBrush"),
+                    },
+                });
+            }
+
+            group.Children.Add(wrap);
+            AnalysisPanel.Children.Add(group);
+        }
+
+        UpdateRuleSwitches();
+
+        RecurseBtn.Content = ActiveTab.Recursive
+            ? "Nur diesen Ordner zeigen" : "Unterordner einbeziehen";
+
+        var off = analysis.Outliers(target).Count();
+        AlignBtn.IsEnabled = off > 0;
+        AlignBtn.Content = off > 0 ? $"Ordner angleichen ({off})" : "Ordner angleichen";
+        SideNote.Text = off > 0
+            ? $"{off} Datei(en) weichen ab. Angleichen konvertiert sie im Ordner und legt vorher ein Backup an."
+            : ActiveTab.Recursive
+                ? "Angleichen erfasst alle Unterordner."
+                : "Neue Dateien werden beim Ablegen automatisch auf dieses Ziel gebracht.";
+    }
+
+    /// <summary>Die gemerkten Regeln dieses Ordners in die Schalter übertragen.</summary>
+    private void UpdateRuleSwitches()
+    {
+        var rule = _settings.RuleFor(ActiveTab.Path);
+
+        _suppressRules = true;
+        ConformSwitch.IsOn = rule.AutoConform;
+        InheritSwitch.IsOn = rule.InheritTags;
+        _suppressRules = false;
+
+        // Mit Unterordnern wird nichts abgelegt, also gibt es auch nichts zu regeln.
+        ConformSwitch.IsEnabled = InheritSwitch.IsEnabled = !ActiveTab.Recursive;
+
+        var own = _settings.HasOwnRule(ActiveTab.Path);
+        ResetRuleBtn.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
+
+        RuleNote.Text = ActiveTab.Recursive
+            ? "Mit Unterordnern ist das Ablegen abgeschaltet. Angleichen und das Bearbeiten von Hand gehen weiter."
+            : own
+                ? $"Eigene Einstellung für „{ActiveTab.Name}“. Sie gewinnt gegen die globale."
+                : "Folgt der globalen Einstellung aus den Einstellungen.";
+    }
+
+    private bool _suppressRules;
+
+    private void OnFolderRuleChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressRules) return;
+
+        _settings.SetRule(ActiveTab.Path, new FolderRule
+        {
+            AutoConform = ConformSwitch.IsOn,
+            InheritTags = InheritSwitch.IsOn,
+        });
+        UpdateRuleSwitches();
+    }
+
+    /// <summary>Nimmt die eigene Regel zurück, sodass wieder die globale gilt.</summary>
+    private void OnResetFolderRule(object sender, RoutedEventArgs e)
+    {
+        _settings.ClearRule(ActiveTab.Path);
+        UpdateRuleSwitches();
+        StatusText.Text = $"„{ActiveTab.Name}“ folgt wieder der globalen Einstellung";
+    }
+
+    /// <summary>
+    /// Zwischen „nur dieser Ordner" und „mit allem darunter" umschalten.
+    /// Bei vielen Dateien vorher fragen — ein rekursiver Scan über eine ganze
+    /// Bibliothek dauert, und niemand rechnet damit nach einem Klick.
+    /// </summary>
+    private async void OnToggleRecursive(object sender, RoutedEventArgs e)
+    {
+        var tab = ActiveTab;
+
+        if (!tab.Recursive)
+        {
+            RecurseBtn.IsEnabled = false;
+            StatusText.Text = "Unterordner werden gezählt…";
+            var n = await Task.Run(() => FolderScanner.CountRecursive(tab.Path));
+            RecurseBtn.IsEnabled = true;
+            StatusText.Text = "";
+
+            if (n == 0) { await Inform("Nichts gefunden", "Unterhalb dieses Ordners liegen keine Audiodateien."); return; }
+
+            if (n > 400 && !await Confirm("Unterordner einbeziehen",
+                    $"Es werden {n}{(n >= 5000 ? "+" : "")} Dateien eingelesen. Das dauert einen Moment.\n\n" +
+                    "In dieser Ansicht sind Ablegen und Umsortieren abgeschaltet. Sie ist zum Sichten, " +
+                    "zum Angleichen und zum Bearbeiten von Hand gedacht.",
+                    "Einlesen"))
+                return;
+        }
+
+        tab.Recursive = !tab.Recursive;
+        await LoadTabAsync(tab);
+    }
+
+    // ══ Schreiben ════════════════════════════════════════════════
+
+    private void OnReset(object sender, RoutedEventArgs e) => UpdateMetaPanel();
+
+    /// <summary>
+    /// Nur Felder, die tatsächlich verändert wurden. Unangetastete bleiben
+    /// null und damit auch in den Dateien unangetastet — bei Mehrfachauswahl
+    /// entscheidend, weil „&lt;verschieden&gt;" sonst alles gleichmachen würde.
+    /// </summary>
+    private TagEdit BuildTagEdit(bool single)
+    {
+        string? Changed(TextBox box) =>
+            _loaded.TryGetValue(box, out var was) && box.Text == was ? null : box.Text;
+
+        uint? Num(TextBox box)
+        {
+            var v = Changed(box);
+            if (v is null) return null;
+            return uint.TryParse(v.Trim(), out var n) ? n : 0u;
+        }
+
+        return new TagEdit
+        {
+            // Titel und Track sind je Datei verschieden — bei Mehrfachauswahl
+            // wären sie für alle gleich, und das ist nie gewollt.
+            Title = single ? Changed(FTitle) : null,
+            Track = single ? Num(FTrack) : null,
+            Artist = Changed(FArtist),
+            Album = Changed(FAlbum),
+            AlbumArtist = Changed(FAlbumArtist),
+            Genre = Changed(FGenre),
+            Composer = Changed(FComposer),
+            Comment = Changed(FComment),
+            Year = Num(FYear),
+            Disc = Num(FDisc),
+        };
+    }
+
+    private async void OnApply(object sender, RoutedEventArgs e)
+    {
+        var folderScope = FolderScope;
+        var sel = TargetTracks();
+        if (sel.Count == 0) return;
+
+        if (folderScope && !await Confirm("Auf den ganzen Ordner anwenden",
+                $"Es ist nichts ausgewählt. Die Änderung trifft alle {sel.Count} Dateien " +
+                $"in „{ActiveTab.Name}“.\n\nVorher wird je Datei eine Sicherung angelegt.",
+                "Auf alle anwenden"))
+            return;
+
+        var edit = BuildTagEdit(!folderScope && sel.Count == 1);
+        var wantFormat = FFormat.SelectedItem as string;
+        var wantRate = FRate.SelectedIndex >= 0 ? Rates[FRate.SelectedIndex] : (int?)null;
+
+        await RunJobAsync($"{sel.Count} Datei(en)", sel, track =>
+        {
+            var convert =
+                (wantFormat is not null &&
+                 !AudioFormats.TargetExtension(track.Format)
+                     .Equals(AudioFormats.TargetExtension(wantFormat), StringComparison.OrdinalIgnoreCase))
+                || (wantRate is int hz && track.SampleRate != hz);
+            return (convert, wantFormat, wantRate, edit);
+        });
+    }
+
+    private async void OnAlign(object sender, RoutedEventArgs e)
+    {
+        var analysis = ActiveTab.Analysis;
+        var target = ActiveTab.Target;
+        if (analysis is null || target is null) return;
+
+        var outliers = analysis.Outliers(target).ToList();
+        if (outliers.Count == 0) return;
+
+        var ok = await Confirm("Ordner angleichen",
+            $"{outliers.Count} Datei(en) werden nach {target.Format} · {FormatRate(target.SampleRate)} konvertiert.\n\n" +
+            "Die Originale werden ersetzt. Vorher wird je Datei eine Sicherung angelegt, " +
+            "die sich über den Verlauf zurückspielen lässt.",
+            "Angleichen");
+        if (!ok) return;
+
+        await RunJobAsync($"{outliers.Count} Datei(en) angleichen", outliers,
+            _ => (true, target.Format, target.SampleRate, null));
+    }
+
+    private async Task RunJobAsync(
+        string label,
+        IReadOnlyList<AudioTrack> tracks,
+        Func<AudioTrack, (bool Convert, string? Format, int? Rate, TagEdit? Tags)> plan)
+    {
+        // Nur loslassen, was gleich beschrieben wird. Der Player hält seine
+        // Datei offen, und ffmpeg wie TagLib kämen sonst nicht daran — aber
+        // ein Lied, das gar nicht betroffen ist, soll weiterlaufen.
+        ReleaseIfAffected(tracks);
+
+        var ffmpeg = FfmpegLocator.Find(_settings.FfmpegPath);
+        if (tracks.Any(t => plan(t).Convert) && ffmpeg is null)
+        {
+            await Inform("ffmpeg fehlt",
+                "Für Konvertierungen wird ffmpeg.exe gebraucht. Sie wird neben der " +
+                "Anwendung oder in tools\\ffmpeg erwartet. tools\\fetch-ffmpeg.ps1 holt sie.");
+            return;
+        }
+
+        SetBusy(true, label);
+
+        var backups = new BackupStore(_settings.ResolvedBackupFolder);
+        var svc = new ConversionService(new FfmpegRunner(ffmpeg ?? "ffmpeg"), backups);
+
+        var files = new List<HistoryFile>();
+        var notes = new List<string>();
+        var errors = new List<string>();
+        var done = 0;
+
+        foreach (var track in tracks)
+        {
+            var (convert, format, rate, tags) = plan(track);
+            ConversionOutcome outcome;
+
+            if (convert)
+            {
+                var slot = done;
+                var opts = new EncodeOptions
+                {
+                    Format = format ?? track.Format,
+                    SampleRate = rate,
+                    Kbps = _settings.DefaultKbps,
+                };
+                outcome = await Task.Run(() => svc.ConvertAsync(
+                    new ConversionRequest { Track = track, Options = opts, Tags = tags },
+                    pct => DispatcherQueue.TryEnqueue(() =>
+                        ShowProgress(true, (slot * 100 + pct) / (double)tracks.Count))));
+            }
+            else if (tags is not null && !tags.IsEmpty)
+            {
+                outcome = await Task.Run(() => svc.WriteTagsOnly(track, tags));
+            }
+            else { done++; continue; }
+
+            done++;
+            ShowProgress(true, done * 100.0 / tracks.Count);
+
+            if (outcome.Success)
+            {
+                if (outcome.History is not null) files.Add(outcome.History);
+                foreach (var n in outcome.Notes) notes.Add($"{track.FileName}: {n}");
+            }
+            else errors.Add($"{track.FileName}: {outcome.Error}");
+        }
+
+        if (files.Count > 0) _history.Add("batch", label, files);
+
+        // Nach einem Schreibvorgang kann jedes Cover ein anderes sein.
+        TrackArt.Forget();
+        InvalidateIndex();
+
+        SetBusy(false, null);
+        await MergeTabAsync(ActiveTab);
+        await ReportAsync(files.Count, errors, notes);
+    }
+
+    // ══ Ablegen und Verschieben ══════════════════════════════════
+
+    private async void OnPaneFilesDropped(object? sender, FilesDroppedArgs args)
+    {
+        if (args.Pane.Tab is { Analysis: not null, Target: not null } tab)
+            await ImportAsync(tab, args.Paths, args.Index, null);
+    }
+
+    /// <summary>Tracks aus der anderen Hälfte — verschieben, mit Strg kopieren.</summary>
+    private async void OnPaneTracksMoved(object? sender, TracksMovedArgs args)
+    {
+        var to = args.To.Tab;
+        var from = args.From.Tab;
+        if (to is not { Analysis: not null, Target: not null } || from is null) return;
+        if (string.Equals(to.Path, from.Path, StringComparison.OrdinalIgnoreCase)) return;
+
+        await ImportAsync(to, args.Tracks.Select(t => t.Path).ToList(), args.Index,
+                          args.Copy ? null : from);
+    }
+
+    /// <summary>
+    /// Bringt Dateien in einen Ordner: kopieren, an dessen Ziel angleichen,
+    /// die Tags übernehmen, auf die sich der Ordner einig ist, und an der
+    /// gewünschten Stelle einsortieren.
+    ///
+    /// <paramref name="removeFrom"/> gesetzt heißt verschieben: die Quellen
+    /// werden danach gesichert und entfernt, sodass der Verlauf sie
+    /// zurückholen kann.
+    /// </summary>
+    private async Task ImportAsync(
+        FolderTab tab, IReadOnlyList<string> paths, int index, FolderTab? removeFrom)
+    {
+        var analysis = tab.Analysis!;
+        var target = tab.Target!;
+        var inherited = analysis.Inherited();
+        var move = removeFrom is not null;
+
+        // Was dieser Ordner an Automatik erlaubt. Ist beides aus, werden die
+        // Dateien nur hereinkopiert und sonst nicht angefasst.
+        var rule = _settings.RuleFor(tab.Path);
+
+        var incoming = paths.Select(AudioProbe.Read).OfType<AudioTrack>().ToList();
+        if (incoming.Count == 0) return;
+
+        var needConvert = rule.AutoConform
+            ? incoming.Where(t => !FolderAnalysis.Matches(t, target)).ToList()
+            : [];
+
+        // Einsortieren geht nur dort, wo die Nummern lückenlos von 1 an laufen.
+        // Sonst wäre das Nachrücken der Folgetracks eine stille Fälschung —
+        // dieselbe Regel wie beim Umsortieren.
+        var existing = tab.Tracks.ToList();
+
+        // Die Track-Nummer ist ein Tag. Wer die Übernahme abgeschaltet hat,
+        // will auch nicht, dass die Folgetracks stillschweigend nachrücken.
+        var canInsert = rule.InheritTags && IsContiguous(existing) && index < existing.Count;
+        var at = Math.Clamp(index, 0, existing.Count);
+
+        if (!_settings.SkipConformDialog)
+        {
+            var text = new System.Text.StringBuilder();
+            text.AppendLine($"{incoming.Count} Datei(en) {(move ? "verschieben" : "übernehmen")} " +
+                            $"nach „{tab.Name}“.").AppendLine();
+            text.AppendLine(!rule.AutoConform
+                ? "Angleichen ist für diesen Ordner abgeschaltet. Format und Samplerate bleiben."
+                : needConvert.Count > 0
+                    ? $"Konvertierung: {needConvert.Count} Datei(en) → {target.Format} · {FormatRate(target.SampleRate)}"
+                    : "Keine Konvertierung nötig.");
+
+            if (!rule.InheritTags)
+            {
+                text.AppendLine("Tags werden nicht angefasst, für diesen Ordner abgeschaltet.");
+            }
+            else
+            {
+                var erben = new List<string>();
+                if (inherited.Album is not null) erben.Add("Album");
+                if (inherited.Artist is not null) erben.Add("Interpret");
+                if (inherited.AlbumArtist is not null) erben.Add("Album-Interpret");
+                if (inherited.Year is not null) erben.Add("Jahr");
+                if (inherited.Genre is not null) erben.Add("Genre");
+                text.AppendLine(erben.Count > 0
+                    ? "Übernommen vom Ordner: " + string.Join(", ", erben)
+                    : "Der Ordner ist sich in keinem Tag einig, es wird nichts übernommen.");
+            }
+
+            if (rule.InheritTags)
+            {
+                text.AppendLine(canInsert
+                    ? $"Einsortiert ab Track {at + 1}; die folgenden rücken nach."
+                    : existing.Count == 0
+                        ? "Der Ordner ist leer, die Nummerierung beginnt bei 1."
+                        : "Angehängt ans Ende, der Ordner ist nicht lückenlos von 1 an nummeriert.");
+            }
+
+            if (target.FromDefaultProfile)
+                text.AppendLine().AppendLine("⚠ Zielordner ist uneinheitlich, das Ziel stammt aus dem Standardprofil.");
+
+            var down = needConvert.Count(t => t.SampleRate > target.SampleRate);
+            if (down > 0)
+                text.AppendLine().AppendLine(
+                    $"⚠ {down} Datei(en) werden heruntergerechnet, nicht verlustfrei umkehrbar.");
+
+            text.AppendLine().AppendLine(move
+                ? $"Die Originale in „{removeFrom!.Name}“ werden entfernt; der Verlauf kann sie zurückholen."
+                : "Die Quelldateien bleiben erhalten (Kopie).");
+
+            if (!await Confirm(move ? "Dateien verschieben" : "Dateien angleichen",
+                               text.ToString().TrimEnd(),
+                               move ? "Verschieben" : "Übernehmen")) return;
+        }
+
+        // Beim Verschieben verschwinden die Quelldateien — die darf der
+        // Player dann nicht mehr offen halten.
+        if (move) ReleaseIfAffected(incoming);
+
+        SetBusy(true, $"{incoming.Count} Datei(en) {(move ? "verschieben" : "übernehmen")}");
+
+        var ffmpeg = FfmpegLocator.Find(_settings.FfmpegPath);
+        var backups = new BackupStore(_settings.ResolvedBackupFolder);
+        var svc = new ConversionService(new FfmpegRunner(ffmpeg ?? "ffmpeg"), backups);
+
+        var files = new List<HistoryFile>();
+        var errors = new List<string>();
+        var notes = new List<string>();
+
+        var number = canInsert ? (uint)(at + 1) : analysis.NextTrackNumber();
+        var done = 0;
+
+        for (var i = 0; i < incoming.Count; i++)
+        {
+            var src = incoming[i];
+            var tags = rule.InheritTags
+                ? new TagEdit
+                {
+                    Title = string.IsNullOrWhiteSpace(src.Title)
+                        ? Path.GetFileNameWithoutExtension(src.Path) : src.Title,
+                    Album = inherited.Album,
+                    Artist = inherited.Artist ?? src.Artist,
+                    AlbumArtist = inherited.AlbumArtist,
+                    Genre = inherited.Genre,
+                    Year = uint.TryParse(inherited.Year, out var y) ? y : null,
+                    Disc = uint.TryParse(inherited.Disc, out var d) ? d : null,
+                    Track = number,
+                }
+                : null;
+
+            // Erst in den Zielordner holen, dann dort angleichen — die Quelle
+            // bleibt bis zum Schluss unangetastet.
+            var dest = UniquePath(Path.Combine(tab.Path, Path.GetFileName(src.Path)));
+            try { File.Copy(src.Path, dest); }
+            catch (Exception ex) { errors.Add($"{src.FileName}: {ex.Message}"); continue; }
+
+            var copied = AudioProbe.Read(dest);
+            if (copied is null) { errors.Add($"{src.FileName}: nicht lesbar"); continue; }
+
+            ConversionOutcome outcome;
+            if (!rule.AutoConform || FolderAnalysis.Matches(copied, target))
+            {
+                // Nichts zu konvertieren, und womöglich auch nichts zu
+                // schreiben — dann ist das Hereinkopieren schon alles.
+                outcome = tags is null
+                    ? new ConversionOutcome(true, copied, null, null, [])
+                    : await Task.Run(() => svc.WriteTagsOnly(copied, tags));
+            }
+            else
+            {
+                var slot = i;
+                outcome = await Task.Run(() => svc.ConvertAsync(new ConversionRequest
+                {
+                    Track = copied,
+                    Options = new EncodeOptions
+                    {
+                        Format = target.Format,
+                        SampleRate = target.SampleRate,
+                        Kbps = _settings.DefaultKbps,
+                    },
+                    Tags = tags,
+                }, pct => DispatcherQueue.TryEnqueue(() =>
+                    ShowProgress(true, (slot * 100 + pct) / (double)incoming.Count))));
+            }
+
+            if (outcome.Success)
+            {
+                if (outcome.History is not null) files.Add(outcome.History);
+                foreach (var n in outcome.Notes) notes.Add($"{src.FileName}: {n}");
+                number++;
+                done++;
+
+                if (move) RemoveSource(src, backups, files, errors);
+            }
+            else
+            {
+                errors.Add($"{src.FileName}: {outcome.Error}");
+                try { if (File.Exists(dest)) File.Delete(dest); } catch { }
+            }
+
+            ShowProgress(true, (i + 1) * 100.0 / incoming.Count);
+        }
+
+        // Erst jetzt nachrücken — um genau so viele, wie tatsächlich ankamen.
+        if (canInsert && done > 0)
+        {
+            // Die Folgetracks werden umnummeriert, also auch beschrieben.
+            var tail = existing.Skip(at).ToList();
+            ReleaseIfAffected(tail);
+            await ShiftNumbersAsync(tail, (uint)done, svc, files, errors);
+        }
+
+        if (files.Count > 0)
+            _history.Add(move ? "move" : "import",
+                         $"{done} Datei(en) {(move ? "verschoben" : "übernommen")} nach „{tab.Name}“",
+                         files);
+
+        TrackArt.Forget();
+        InvalidateIndex();
+
+        SetBusy(false, null);
+        await MergeTabAsync(tab);
+        if (removeFrom is not null) await MergeTabAsync(removeFrom);
+        await ReportAsync(done, errors, notes);
+    }
+
+    /// <summary>
+    /// Entfernt eine verschobene Quelldatei — vorher gesichert, damit der
+    /// Verlauf sie an ihren alten Platz zurücklegen kann.
+    /// </summary>
+    private static void RemoveSource(
+        AudioTrack src, BackupStore backups, List<HistoryFile> files, List<string> errors)
+    {
+        try
+        {
+            var backup = backups.Create(src.Path);
+            File.Delete(src.Path);
+            files.Add(new HistoryFile { Original = src.Path, BackupPath = backup });
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"{src.FileName}: Original blieb liegen ({ex.Message})");
+        }
+    }
+
+    /// <summary>Schiebt die Tracks ab der Einfügestelle um <paramref name="by"/> nach hinten.</summary>
+    private static async Task ShiftNumbersAsync(
+        List<AudioTrack> tail, uint by, ConversionService svc,
+        List<HistoryFile> files, List<string> errors)
+    {
+        // Von hinten, damit unterwegs nie zwei Dateien dieselbe Nummer tragen.
+        foreach (var track in Enumerable.Reverse(tail))
+        {
+            var outcome = await Task.Run(() =>
+                svc.WriteTagsOnly(track, new TagEdit { Track = track.Track + by }));
+            if (outcome.Success)
+            {
+                if (outcome.History is not null) files.Add(outcome.History);
+            }
+            else errors.Add($"{track.FileName}: Nummer nicht verschoben ({outcome.Error})");
+        }
+    }
+
+    private static bool IsContiguous(IReadOnlyList<AudioTrack> tracks) =>
+        tracks.Count > 0 && tracks.All(t => t.Track > 0)
+        && tracks.Select(t => t.Track).OrderBy(n => n)
+                 .SequenceEqual(Enumerable.Range(1, tracks.Count).Select(i => (uint)i));
+
+    private static string UniquePath(string path)
+    {
+        if (!File.Exists(path)) return path;
+        var dir = Path.GetDirectoryName(path)!;
+        var name = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        for (var i = 2; i < 1000; i++)
+        {
+            var candidate = Path.Combine(dir, $"{name} ({i}){ext}");
+            if (!File.Exists(candidate)) return candidate;
+        }
+        return path;
+    }
+
+    // ══ Umsortieren ══════════════════════════════════════════════
+
+    /// <summary>
+    /// Track-Nummern nach dem Ziehen neu vergeben — aber nur, wenn der Ordner
+    /// lückenlos von 1 an nummeriert war. Enthält er eine Teilauswahl eines
+    /// Albums (Tracks 1, 2, 5, 11 …), wäre Durchnummerieren eine stille
+    /// Fälschung der Original-Nummern.
+    /// </summary>
+    private async void OnPaneReordered(object? sender, TrackPane pane)
+    {
+        var tab = pane.Tab;
+        if (tab is null) return;
+
+        var order = tab.Tracks.ToList();
+
+        if (!IsContiguous(order))
+        {
+            StatusText.Text = "Reihenfolge geändert. Track-Nummern unverändert " +
+                              "(der Ordner ist nicht lückenlos von 1 an nummeriert)";
+            return;
+        }
+
+        if (!await Confirm("Track-Nummern neu vergeben",
+                $"Sollen die {order.Count} Tracks entsprechend der neuen Reihenfolge " +
+                "von 1 an durchnummeriert werden?\n\nVorher wird je Datei eine Sicherung angelegt.",
+                "Neu nummerieren"))
+        {
+            await LoadTabAsync(tab);
+            return;
+        }
+
+        ReleaseIfAffected(order);
+        SetBusy(true, "Track-Nummern schreiben");
+        var svc = new ConversionService(
+            new FfmpegRunner("ffmpeg"), new BackupStore(_settings.ResolvedBackupFolder));
+        var files = new List<HistoryFile>();
+
+        for (var i = 0; i < order.Count; i++)
+        {
+            var wanted = (uint)(i + 1);
+            if (order[i].Track == wanted) continue;
+            var outcome = await Task.Run(() => svc.WriteTagsOnly(order[i], new TagEdit { Track = wanted }));
+            if (outcome.Success && outcome.History is not null) files.Add(outcome.History);
+            ShowProgress(true, (i + 1) * 100.0 / order.Count);
+        }
+
+        if (files.Count > 0) _history.Add("tracknumbers", "Reihenfolge geändert", files);
+        SetBusy(false, null);
+        await MergeTabAsync(tab);
+        StatusText.Text = $"{files.Count} Track-Nummer(n) geschrieben";
+    }
+
+    // ══ Rückmeldung ══════════════════════════════════════════════
+
+    private async Task ReportAsync(int ok, List<string> errors, List<string> notes)
+    {
+        if (errors.Count == 0 && notes.Count == 0)
+        {
+            StatusText.Text = $"{ok} Datei(en) verarbeitet, Sicherung angelegt";
+            return;
+        }
+
+        var text = new System.Text.StringBuilder();
+        text.AppendLine($"{ok} Datei(en) verarbeitet.");
+        if (errors.Count > 0)
+        {
+            text.AppendLine().AppendLine("Fehlgeschlagen:");
+            foreach (var e in errors.Take(8)) text.AppendLine("• " + e);
+        }
+        if (notes.Count > 0)
+        {
+            text.AppendLine().AppendLine("Hinweise:");
+            foreach (var n in notes.Take(8)) text.AppendLine("• " + n);
+        }
+
+        await Inform(errors.Count > 0 ? "Mit Fehlern abgeschlossen" : "Abgeschlossen",
+                     text.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// Gibt die laufende Datei frei, falls sie zu den gleich beschriebenen
+    /// gehört. Alles andere spielt ungestört weiter.
+    /// </summary>
+    /// <summary>
+    /// Der Fortschritt oben in der Leiste. Die Prozentzahl daneben nur, wenn
+    /// eine bekannt ist — beim Einlesen läuft der Balken unbestimmt.
+    /// </summary>
+    private void ShowProgress(bool busy, double percent)
+    {
+        ProgressHost.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        Progress.Value = Math.Clamp(percent, 0, 100);
+        ProgressLabel.Text = busy && !Progress.IsIndeterminate
+            ? $"{Math.Round(percent)} %"
+            : "";
+    }
+
+    private void ReleaseIfAffected(IEnumerable<AudioTrack> tracks) =>
+        _player.ReleaseIfPlaying(tracks.Select(t => t.Path));
+
+    private void SetBusy(bool busy, string? label)
+    {
+        ShowProgress(busy, 0);
+        PaneA.IsEnabled = PaneB.IsEnabled = !busy;
+        FolderTree.IsEnabled = !busy;
+        if (busy) { ApplyBtn.IsEnabled = false; AlignBtn.IsEnabled = false; }
+        if (label is not null) StatusText.Text = label + " …";
+    }
+
+    private async Task<bool> Confirm(string title, string message, string primary)
+    {
+        var dlg = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = primary,
+            CloseButtonText = "Abbrechen",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Root.XamlRoot,
+        };
+        return await dlg.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private async Task Inform(string title, string message)
+    {
+        var dlg = new ContentDialog
+        {
+            Title = title,
+            Content = new ScrollViewer
+            {
+                MaxHeight = 320,
+                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            },
+            CloseButtonText = "OK",
+            XamlRoot = Root.XamlRoot,
+        };
+        await dlg.ShowAsync();
+    }
+
+    // ══ Aktualisierung ═══════════════════════════════════════════
+
+    /// <summary>
+    /// Sucht beim Start nach einer neueren Fassung.
+    ///
+    /// Die Regeln stecken in <see cref="UpdateService.CheckOnStartAsync"/>:
+    /// „Nie" fragt gar nicht erst nach, im Hintergrund höchstens einmal am
+    /// Tag, und eine abgelehnte Version bleibt still.
+    /// </summary>
+    private async Task CheckForUpdatesAsync()
+    {
+        // Nicht ins Startbild hineinplatzen.
+        await Task.Delay(TimeSpan.FromSeconds(4));
+
+        var found = await UpdateService.CheckOnStartAsync(_settings, AppInfo.Version);
+        if (found is not { HasUpdate: true, SetupUrl: not null }) return;
+
+        if (_settings.UpdateBehavior == "auto")
+        {
+            await InstallUpdateAsync(found);
+            return;
+        }
+
+        var text = new System.Text.StringBuilder();
+        text.AppendLine(Strings.T("Version {0} ist verfügbar, installiert ist {1}.",
+                                  found.Version ?? "?", AppInfo.Version));
+
+        if (!string.IsNullOrWhiteSpace(found.Notes))
+        {
+            var notes = found.Notes.Trim();
+            if (notes.Length > 600) notes = notes[..600] + "…";
+            text.AppendLine().AppendLine(notes);
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.T("Aktualisierung verfügbar"),
+            Content = new ScrollViewer
+            {
+                MaxHeight = 320,
+                Content = new TextBlock { Text = text.ToString().TrimEnd(), TextWrapping = TextWrapping.Wrap },
+            },
+            PrimaryButtonText = Strings.T("Installieren"),
+            SecondaryButtonText = Strings.T("Diese Version überspringen"),
+            CloseButtonText = Strings.T("Später"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Root.XamlRoot,
+        };
+
+        var answer = await dialog.ShowAsync();
+
+        if (answer == ContentDialogResult.Secondary)
+        {
+            _settings.SkippedVersion = found.Version;
+            _settings.Save();
+            return;
+        }
+
+        if (answer == ContentDialogResult.Primary) await InstallUpdateAsync(found);
+    }
+
+    /// <summary>
+    /// Lädt das Setup und startet es. Die App beendet sich danach, weil der
+    /// Installer die laufende Datei sonst nicht ersetzen kann.
+    /// </summary>
+    private async Task InstallUpdateAsync(UpdateCheck found)
+    {
+        if (found.SetupUrl is null) return;
+
+        StatusText.Text = Strings.T("Aktualisierung wird geladen…");
+        ShowProgress(true, 0);
+
+        try
+        {
+            var setup = await UpdateService.DownloadAsync(
+                found.SetupUrl,
+                new Progress<int>(p => ShowProgress(true, p)));
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = setup,
+                UseShellExecute = true,
+            });
+
+            Application.Current.Exit();
+        }
+        catch (Exception ex)
+        {
+            ShowProgress(false, 0);
+            StatusText.Text = Strings.T("Aktualisierung fehlgeschlagen: {0}", ex.Message);
+        }
+    }
+
+    // ══ Dialoge ══════════════════════════════════════════════════
+
+    private async void OnOpenHistory(object sender, RoutedEventArgs e)
+    {
+        if (await HistoryDialog.ShowAsync(Root.XamlRoot, _history))
+        {
+            TrackArt.Forget();
+            InvalidateIndex();
+            await MergeTabAsync(ActiveTab);
+        }   // nach einem Undo liegt anderes im Ordner
+    }
+
+    private async void OnOpenSettings(object sender, RoutedEventArgs e)
+    {
+        var beforeFilter = _settings.OnlyAudioFolders;
+        await SettingsDialog.ShowAsync(Root.XamlRoot, _settings, _history);
+
+        if (beforeFilter != _settings.OnlyAudioFolders)
+        {
+            FolderScanner.ForgetAudioScan();
+            InvalidateIndex();
+            BuildTreeRoots();
+        }
+
+        // Das Ziel eines uneinheitlichen Ordners hängt am Standardprofil.
+        foreach (var tab in _tabs.Where(t => t.Analysis is not null))
+            tab.Target = tab.Analysis!.ResolveTarget(_settings.DefaultFormat, _settings.DefaultSampleRate);
+
+        UpdateAnalysisPanel();
+        UpdateMetaPanel();
+        UpdateFfmpegHint();
+    }
+
+
+
+    /// <summary>
+    /// Der Hinweis erscheint nur, wenn ffmpeg fehlt. Eine Zeile, die dauerhaft
+    /// „alles in Ordnung" meldet, liest nach dem ersten Mal niemand.
+    /// </summary>
+    private void UpdateFfmpegHint()
+    {
+        var missing = FfmpegLocator.Find(_settings.FfmpegPath) is null;
+        FfmpegText.Text = missing ? "ffmpeg fehlt" : "";
+        FfmpegText.Visibility = missing ? Visibility.Visible : Visibility.Collapsed;
+    }
+}

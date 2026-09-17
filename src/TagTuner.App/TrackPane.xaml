@@ -1,0 +1,215 @@
+<UserControl
+    x:Class="TagTuner.App.TrackPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TagTuner.App"
+    xmlns:model="using:TagTuner.Core.Model">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Kopfzeile der Hälfte: welcher Ordner, wie viele Tracks -->
+        <Grid Grid.Row="0" x:Name="PaneBar" ColumnDefinitions="Auto,Auto,*,Auto" Padding="18,9"
+              ColumnSpacing="8"
+              BorderThickness="0,0,0,1"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <TextBlock Grid.Column="0" x:Name="FolderName" FontWeight="Bold" FontSize="17"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Border Grid.Column="1" x:Name="ScopeBadge" CornerRadius="9" Padding="7,1"
+                    VerticalAlignment="Center" Visibility="Collapsed"
+                    Background="{StaticResource WarnDimBrush}">
+                <TextBlock Text="mit Unterordnern" FontSize="10"
+                           Foreground="{StaticResource WarnBrush}" />
+            </Border>
+            <TextBlock Grid.Column="2" x:Name="CountLabel" FontSize="11.5"
+                       VerticalAlignment="Bottom" Margin="0,0,0,2"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <HyperlinkButton Grid.Column="3" Content="Alle wählen" FontSize="11.5"
+                             Padding="6,2" Click="OnSelectAll" />
+        </Grid>
+
+        <!-- Spaltenbreiten kommen aus TrackColumns, genau wie in der Zeilenvorlage.
+             Die schmalen Borders rechts in jeder Spalte sind die Greifer. -->
+        <Grid Grid.Row="1" Padding="12,4,20,6" ColumnSpacing="10"
+              BorderThickness="0,0,0,1"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30" />
+                <ColumnDefinition Width="{Binding Title, Source={StaticResource TrackColumns}}" />
+                <ColumnDefinition Width="{Binding Album, Source={StaticResource TrackColumns}}" />
+                <ColumnDefinition Width="{Binding Format, Source={StaticResource TrackColumns}}" />
+                <ColumnDefinition Width="{Binding Rate, Source={StaticResource TrackColumns}}" />
+                <ColumnDefinition Width="{Binding Duration, Source={StaticResource TrackColumns}}" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Tag="Track" Orientation="Horizontal"
+                        Spacing="3" Background="Transparent" HorizontalAlignment="Right"
+                        Tapped="OnHeaderTapped">
+                <TextBlock Text="#" Style="{StaticResource ColHeader}" />
+                <TextBlock x:Name="SortTrack" Style="{StaticResource ColHeader}"
+                           Foreground="{StaticResource AccentBrush}" />
+            </StackPanel>
+
+            <!-- Interpret steht in der Zeile unter dem Titel; damit sich
+                 trotzdem danach sortieren lässt, sind beide Wörter hier
+                 einzeln anklickbar. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                        VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="3" Tag="Title"
+                            Background="Transparent" Tapped="OnHeaderTapped">
+                    <TextBlock Text="TITEL" Style="{StaticResource ColHeader}" />
+                    <TextBlock x:Name="SortTitle" Style="{StaticResource ColHeader}"
+                               Foreground="{StaticResource AccentBrush}" />
+                </StackPanel>
+                <TextBlock Text="·" Style="{StaticResource ColHeader}" />
+                <StackPanel Orientation="Horizontal" Spacing="3" Tag="Artist"
+                            Background="Transparent" Tapped="OnHeaderTapped">
+                    <TextBlock Text="INTERPRET" Style="{StaticResource ColHeader}" />
+                    <TextBlock x:Name="SortArtist" Style="{StaticResource ColHeader}"
+                               Foreground="{StaticResource AccentBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Tag="Album" Orientation="Horizontal"
+                        Spacing="3" Background="Transparent"
+                        Tapped="OnHeaderTapped">
+                <TextBlock Text="ALBUM" Style="{StaticResource ColHeader}" />
+                <TextBlock x:Name="SortAlbum" Style="{StaticResource ColHeader}"
+                           Foreground="{StaticResource AccentBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="3" Tag="Format" Orientation="Horizontal"
+                        Spacing="3" Background="Transparent"
+                        Tapped="OnHeaderTapped">
+                <TextBlock Text="FORMAT" Style="{StaticResource ColHeader}" />
+                <TextBlock x:Name="SortFormat" Style="{StaticResource ColHeader}"
+                           Foreground="{StaticResource AccentBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="4" Tag="SampleRate" Orientation="Horizontal"
+                        Spacing="3" Background="Transparent"
+                        Tapped="OnHeaderTapped">
+                <TextBlock Text="SAMPLERATE" Style="{StaticResource ColHeader}" />
+                <TextBlock x:Name="SortSampleRate" Style="{StaticResource ColHeader}"
+                           Foreground="{StaticResource AccentBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="5" Tag="Duration" Orientation="Horizontal"
+                        Spacing="3" Background="Transparent"
+                        HorizontalAlignment="Right" Margin="0,0,12,0"
+                        Tapped="OnHeaderTapped">
+                <FontIcon Glyph="&#xE121;" FontSize="11"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock x:Name="SortDuration" Style="{StaticResource ColHeader}"
+                           Foreground="{StaticResource AccentBrush}" />
+            </StackPanel>
+
+            <Border Grid.Column="1" Tag="0" Style="{StaticResource ColumnGrip}"
+                    PointerPressed="OnGripPressed" PointerMoved="OnGripMoved"
+                    PointerReleased="OnGripReleased" PointerExited="OnGripExited" />
+            <Border Grid.Column="2" Tag="1" Style="{StaticResource ColumnGrip}"
+                    PointerPressed="OnGripPressed" PointerMoved="OnGripMoved"
+                    PointerReleased="OnGripReleased" PointerExited="OnGripExited" />
+            <Border Grid.Column="3" Tag="2" Style="{StaticResource ColumnGrip}"
+                    PointerPressed="OnGripPressed" PointerMoved="OnGripMoved"
+                    PointerReleased="OnGripReleased" PointerExited="OnGripExited" />
+            <Border Grid.Column="4" Tag="3" Style="{StaticResource ColumnGrip}"
+                    PointerPressed="OnGripPressed" PointerMoved="OnGripMoved"
+                    PointerReleased="OnGripReleased" PointerExited="OnGripExited" />
+            <Border Grid.Column="5" Tag="4" Style="{StaticResource ColumnGrip}"
+                    PointerPressed="OnGripPressed" PointerMoved="OnGripMoved"
+                    PointerReleased="OnGripReleased" PointerExited="OnGripExited" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <ListView x:Name="List"
+                      SelectionMode="Extended"
+                      SelectionChanged="OnSelectionChanged"
+                      CanReorderItems="True"
+                      CanDragItems="True"
+                      AllowDrop="True"
+                      DragOver="OnDragOver"
+                      Drop="OnDrop"
+                      DragItemsStarting="OnDragStarting"
+                      DragItemsCompleted="OnReorderCompleted"
+                      DragLeave="OnDragLeave"
+                      RightTapped="OnRightTapped"
+                      KeyDown="OnListKeyDown"
+                      DoubleTapped="OnListDoubleTapped"
+                      GotFocus="OnGotFocus"
+                      Padding="0,4,6,14">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="12,0" />
+                        <Setter Property="MinHeight" Value="56" />
+                        <Setter Property="CornerRadius" Value="5" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="model:AudioTrack">
+                        <Grid ColumnSpacing="10" Height="56">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30" />
+                                <ColumnDefinition Width="{Binding Title, Source={StaticResource TrackColumns}}" />
+                                <ColumnDefinition Width="{Binding Album, Source={StaticResource TrackColumns}}" />
+                                <ColumnDefinition Width="{Binding Format, Source={StaticResource TrackColumns}}" />
+                                <ColumnDefinition Width="{Binding Rate, Source={StaticResource TrackColumns}}" />
+                                <ColumnDefinition Width="{Binding Duration, Source={StaticResource TrackColumns}}" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="{x:Bind TrackLabel}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                       FontFamily="Consolas" FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+                            <!-- Cover, Titel, darunter der Interpret -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="11"
+                                        VerticalAlignment="Center">
+                                <Border Width="40" Height="40" CornerRadius="4"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource ControlFillColorDefaultBrush}">
+                                    <Grid>
+                                        <FontIcon Glyph="&#xEC4F;" FontSize="14"
+                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <Image local:TrackArt.Path="{x:Bind Path}"
+                                               Stretch="UniformToFill" />
+                                    </Grid>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center" Spacing="1">
+                                    <TextBlock Text="{x:Bind Title}" FontSize="13.5"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Artist}" FontSize="11.5"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="2" Text="{x:Bind Album}"
+                                       VerticalAlignment="Center" FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="3" Text="{x:Bind Format}"
+                                       VerticalAlignment="Center" FontFamily="Consolas" FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock Grid.Column="4" Text="{x:Bind SampleRateLabel}"
+                                       VerticalAlignment="Center" FontFamily="Consolas" FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock Grid.Column="5" Text="{x:Bind DurationLabel}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right" Margin="0,0,12,0"
+                                       FontFamily="Consolas" FontSize="11.5"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Einfügemarke: zeigt beim Ziehen aus einem anderen Ordner,
+                 an welcher Track-Position die Dateien landen. -->
+            <Rectangle x:Name="DropLine" Height="2" Margin="16,0,16,0"
+                       VerticalAlignment="Top" HorizontalAlignment="Stretch"
+                       RadiusX="1" RadiusY="1" IsHitTestVisible="False"
+                       Visibility="Collapsed"
+                       Fill="{StaticResource AccentBrush}" />
+        </Grid>
+    </Grid>
+</UserControl>

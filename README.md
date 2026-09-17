@@ -1,108 +1,105 @@
-# LocalPrep — native Windows-Fassung
+# TagTuner
 
-Nachfolger der Electron-App. Ein Fenster, Ordner werden wie Playlisten behandelt.
+Ein Fenster, in dem Musikordner wie Playlisten behandelt werden. Tags
+bearbeiten, Format und Samplerate angleichen, Cover setzen, Reihenfolge per
+Ziehen ändern. Für Windows.
 
-## Stack
+![Version](https://img.shields.io/badge/version-0.4.0-C8F542)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
-| | |
-|---|---|
-| Runtime | .NET 10 |
-| UI | WinUI 3, Windows App SDK 2.4, **unpackaged** |
-| Tags/Cover | TagLib# |
-| Konvertierung | ffmpeg als Prozess |
+## Installation
 
-Unpackaged, weil die App HKCU für das Kontextmenü schreibt, als einzelne Exe
-laufen soll und sich selbst aktualisieren können muss — alles Dinge, die mit
-MSIX ein Zertifikat bräuchten.
+Lade `TagTuner-x.y.z-Setup.exe` aus den
+[Releases](https://github.com/yyusvf/TagTuner/releases) und führe sie aus. Es
+werden keine Administratorrechte gebraucht, und ffmpeg ist bereits enthalten.
 
-## Bauen und starten
+Wer nichts installieren möchte, nimmt das ZIP, entpackt es und startet
+`TagTuner.exe` daraus.
+
+## Was die App macht
+
+**Ordner sind Playlisten.** Beim Öffnen eines Ordners liest TagTuner nach, ob
+alle Dateien dasselbe Format und dieselbe Samplerate haben. Ist er
+einheitlich, gilt das als Ziel des Ordners. Ist er gemischt oder leer, greift
+das Standardprofil aus den Einstellungen.
+
+**Dateien hineinziehen.** Wer eine Datei in einen Ordner zieht, bekommt sie
+auf dessen Format und Samplerate gebracht, mit Album, Interpret, Jahr und
+Genre aus dem Ordner und der nächsten freien Track-Nummer. Ob das geschieht,
+lässt sich global und je Ordner einstellen.
+
+**Metadaten links, immer sichtbar.** Titel, Interpret, Album, Jahr, Track,
+Disc, Genre, Album-Interpret, Komponist und Kommentar. Bei mehreren
+ausgewählten Dateien zeigt jedes Feld nur, worin sie sich einig sind; alles
+andere bleibt beim Schreiben unangetastet. Ist nichts ausgewählt, gilt der
+ganze Ordner.
+
+**Cover.** Setzen, kopieren, einfügen, entfernen, verkleinern. Ein nicht
+quadratisches Bild lässt sich vorher zuschneiden. Was schon quadratisch und
+JPEG oder PNG ist, wird unverändert übernommen.
+
+**Konvertieren.** MP3, FLAC, WAV, AIFF, M4A und OGG. Die Bitrate wird nie
+angefasst, sie fällt nur an, wenn ohnehin verlustbehaftet kodiert wird.
+
+**Vorschau-Player.** Abspielen per Doppelklick oder Leertaste, Lautstärke
+unten links. Läuft weiter, solange nicht genau die abgespielte Datei
+beschrieben wird.
+
+**Bibliothek.** Eigene Ordner hinzufügen, nach Ordnern und Liedern suchen,
+Ordner mit Cover und Interpret in einer Baumansicht. Auf Wunsch werden nur
+Ordner gezeigt, unter denen Musik liegt.
+
+**Tabs und geteilte Ansicht.** Mehrere Ordner offen halten und Dateien
+zwischen zwei Hälften ziehen. Strg kopiert statt zu verschieben.
+
+## Sicherheit der Daten
+
+Vor jedem Schreibvorgang legt TagTuner eine Kopie der Datei an, außerhalb der
+Musikbibliothek unter `%APPDATA%\TagTuner\Backups`. Der Verlauf zeigt, was
+wann geschehen ist, und macht es rückgängig. Wie lange Sicherungen liegen
+bleiben, steht in den Einstellungen.
+
+Nach jeder Konvertierung wird das Ergebnis zurückgelesen und geprüft: Stimmt
+die Samplerate, ist das Cover noch da. Fehlt es, wird es erneut eingesetzt.
+
+## Sprache
+
+Deutsch und Englisch. Beim ersten Start entscheidet die Sprache des Systems,
+danach die Einstellung.
+
+## Aktualisierung
+
+TagTuner sucht beim Start höchstens einmal am Tag nach einer neuen Fassung.
+In den Einstellungen lässt sich das auf „Nie", „Fragen" oder „Automatisch"
+stellen. „Nie" heißt nie, es geht dann keine Anfrage hinaus.
+
+## Selbst bauen
+
+Gebraucht werden das .NET 10 SDK und Inno Setup 6.
 
 ```powershell
 dotnet build
-dotnet run --project src\LocalPrep.App
+dotnet run --project src\TagTuner.App
 
-# Auslieferung: eigenständig, ohne Runtime-Installation beim Nutzer
-dotnet publish src\LocalPrep.App -c Release -r win-x64 `
-  --self-contained true -p:WindowsAppSDKSelfContained=true -o publish
+# Setup und portables ZIP nach dist\
+.\tools\build-release.ps1 -Version 0.4.0
 ```
 
-ffmpeg liegt nicht im Repository (rund 80 MB). Einmalig holen:
-
-```powershell
-pwsh tools\fetch-ffmpeg.ps1
-```
-
-Solange sie fehlt, greift `FfmpegLocator` im Entwicklungsbetrieb auf die Kopie
-der Electron-Fassung nebenan zurück.
+ffmpeg liegt nicht im Repository. `tools\fetch-ffmpeg.ps1` holt es nach
+`tools\ffmpeg\`, von wo der Build es einpackt.
 
 ## Aufbau
 
 ```
-src/LocalPrep.Core/     reine Domäne, ohne UI — vollständig ohne Fenster testbar
-  Audio/                Formate, ffmpeg-Argumente und -Lauf, Tag-Leser, Konvertierung
-  Folders/              Verzeichnis-Scan und Ordner-Analyse
-  Metadata/             Tags schreiben
-  Safety/               Sicherungen und Undo-Verlauf
-  Settings/             JSON unter %APPDATA%\LocalPrep\settings.json
-  Shell/                Kontextmenü und Kommandozeile
-src/LocalPrep.App/      WinUI-3-Oberfläche
-tools/fetch-ffmpeg.ps1  holt ffmpeg.exe nach tools\ffmpeg\
+src/TagTuner.Core/   Formate, Konvertierung, Tags, Sicherungen, Einstellungen
+src/TagTuner.App/    Oberfläche (WinUI 3)
+installer/           Inno-Setup-Skript
+tools/               Build- und Hilfsskripte
 ```
 
-## Entscheidungen, die nicht offensichtlich sind
+Der Kern kennt keine Oberfläche und lässt sich ohne Fenster testen. Getagged
+wird mit TagLib#, konvertiert mit ffmpeg als eigenem Prozess.
 
-**Kein gespeichertes Ordner-Profil.** `FolderAnalysis` liest den Ordner bei
-jedem Öffnen neu. Ist er einheitlich, bestimmt er sein Ziel selbst; ist er leer
-oder gemischt, greift das Standardprofil aus den Einstellungen. Dadurch liegt
-nichts in der Musikbibliothek und nichts kann veralten.
+## Lizenz
 
-**Bitrate wird nie angeglichen.** Nur Format und Samplerate. Eine Bitrate fällt
-ausschließlich an, wenn eine Konvertierung ohnehin verlustbehaftet kodiert.
-
-**`FfmpegArgs.cs` ist wörtlich aus der Electron-Fassung übernommen.** Jede Regel
-dort hat einen real aufgetretenen Fehler als Ursache:
-
-- Cover überlebt nur mit `-map 0:v? -c:v copy -disposition:v attached_pic`
-- MP3 braucht `-id3v2_version 3`, sonst zeigt der Explorer keine Thumbnails
-- AIFF braucht Big-Endian-PCM (`pcm_s24be`); mit `le` bricht ffmpeg mit EINVAL ab
-- ffmpegs AAC-Kodierer deckelt bei ~256 kbps, höhere Angaben verpuffen
-- OGG, WAV und AIFF können kein Cover tragen — dort ist der Verlust kein Fehler
-
-**„Geändert" wird verglichen, nicht gemerkt.** WinUI löst `TextChanged`
-verzögert aus, sodass das Befüllen der Felder als Nutzereingabe ankommt. Ein
-Flag im Event-Handler meldete deshalb „Tags schreiben", ohne dass jemand etwas
-angefasst hatte. `MainWindow` hält stattdessen den geladenen Feldstand fest und
-leitet Änderungen daraus ab.
-
-**Track-Nummern werden nach dem Umsortieren nur neu vergeben, wenn der Ordner
-lückenlos von 1 an nummeriert war.** Enthält er eine Teilauswahl eines Albums
-(Tracks 1, 2, 5, 11 …), wäre Durchnummerieren eine stille Fälschung.
-
-**`dotnet publish` braucht einen Extra-Schritt.** Es lässt das kompilierte XAML
-(`*.xbf`) und `LocalPrep.pri` im Build-Ordner liegen; die Anwendung stirbt dann
-beim Start mit `0xC000027B` in `Microsoft.UI.Xaml.dll`, ohne verwertbare
-Meldung. Das Target `IncludeXamlArtifactsInPublish` in der csproj reicht sie
-nach.
-
-## Stand
-
-Geprüft an echten Dateien (36 Prüfungen in zwei Testläufen):
-
-- Ordnerbaum mit Lazy Loading, Trackliste, Metadatenspalte, Ordner-Analyse
-- Tags schreiben und zurücklesen, Cover überlebt
-- Konvertierung FLAC → MP3 inkl. Cover, ID3v2.3 am Byte verifiziert
-- AIFF-Konvertierung (in der Electron-Fassung komplett kaputt)
-- Herunterrechnen 96 → 44,1 kHz
-- Sicherungen, Aufräumen nach Frist und nach Referenz
-- Rückgängig stellt her und entfernt erzeugte Dateien
-- Kommandozeile inkl. der Altform, die Chromium zerlegte
-- Kontextmenü: Ein Eintrag ohne Untermenü, `--file=` / `--folder=`
-- Eigenständiger Release-Build startet
-
-Noch offen:
-
-- Tabs und geteilte Ansicht
-- Umbenennen nach Muster (Knopf ist da, ohne Funktion)
-- Cover setzen und entfernen über die Oberfläche
-- Vorschau-Player
-- Selbstaktualisierung (Velopack)
+MIT

@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/LocalPrep.App/LocalPrep.App.csproj" />
-    <Project Path="src/LocalPrep.Core/LocalPrep.Core.csproj" />
-  </Folder>
-</Solution>

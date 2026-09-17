@@ -1,4 +1,12 @@
+# Build
 bin/
 obj/
+publish/
+dist/
 *.user
+
+# ffmpeg wird nicht mitversioniert (rund 80 MB)
 tools/ffmpeg/
+
+# Visual Studio
+.vs/

@@ -6,7 +6,7 @@
     Repository: sie ist rund 80 MB groß und ändert sich unabhängig vom Code.
 
     Der Build kopiert sie neben die Anwendung, sobald sie da ist
-    (siehe LocalPrep.App.csproj). Solange sie fehlt, greift FfmpegLocator im
+    (siehe TagTuner.App.csproj). Solange sie fehlt, greift FfmpegLocator im
     Entwicklungsbetrieb auf die Kopie der Electron-Fassung zurück.
 
     Aufruf:
@@ -17,7 +17,7 @@
 [CmdletBinding()]
 param(
     [switch]$Force,
-    # "essentials" reicht für LocalPrep: enthält libmp3lame, flac, vorbis und aac.
+    # "essentials" reicht für TagTuner: enthält libmp3lame, flac, vorbis und aac.
     [string]$Url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
 )
 
