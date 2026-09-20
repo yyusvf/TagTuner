@@ -3,7 +3,7 @@
 One window where music folders are treated like playlists. Edit tags, align
 format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
-![Version](https://img.shields.io/badge/version-0.5.0-C8F542)
+![Version](https://img.shields.io/badge/version-0.5.1-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 ## Install
@@ -86,7 +86,7 @@ dotnet build
 dotnet run --project src\TagTuner.App
 
 # Setup and portable ZIP into dist\
-.\tools\build-release.ps1 -Version 0.5.0
+.\tools\build-release.ps1 -Version 0.5.1
 ```
 
 ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
