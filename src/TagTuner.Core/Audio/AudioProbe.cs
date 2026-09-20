@@ -1,5 +1,7 @@
 using TagTuner.Core.Model;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.Core.Audio;
 
 /// <summary>
@@ -98,10 +100,10 @@ public static class AudioProbe
             {
                 TagLib.PictureType.FrontCover => "Front Cover",
                 TagLib.PictureType.BackCover => "Back Cover",
-                TagLib.PictureType.Other => "Bild",
+                TagLib.PictureType.Other => Strings.T("Image"),
                 _ => pic.Type.ToString(),
             };
-            return new Cover(bytes, string.IsNullOrWhiteSpace(pic.MimeType) ? "unbekannt" : pic.MimeType, kind);
+            return new Cover(bytes, string.IsNullOrWhiteSpace(pic.MimeType) ? Strings.T("unknown") : pic.MimeType, kind);
         }
         catch { return null; }
     }

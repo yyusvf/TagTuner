@@ -3,7 +3,7 @@
 One window where music folders are treated like playlists. Edit tags, align
 format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
-![Version](https://img.shields.io/badge/version-0.4.0-C8F542)
+![Version](https://img.shields.io/badge/version-0.5.0-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 ## Install
@@ -61,8 +61,15 @@ right, is the cover still there. If the cover was dropped, it is put back.
 
 ## Language
 
-English and German. The system language decides on first run, the setting
-after that.
+Thirteen languages: English, German, French, Spanish, Italian, Portuguese,
+Dutch, Polish, Russian, Ukrainian, Turkish, Czech and Swedish. The system
+language decides on first run, the setting after that.
+
+English is the source language and lives in the code. Every other language is
+one JSON file under `translations/`. `tools\build-strings.ps1` turns those
+into C# and refuses to run if a language is missing a text or if a placeholder
+like `{0}` was dropped in translation. Anything not in a table falls back to
+English rather than showing an empty label.
 
 ## Updates
 
@@ -79,7 +86,7 @@ dotnet build
 dotnet run --project src\TagTuner.App
 
 # Setup and portable ZIP into dist\
-.\tools\build-release.ps1 -Version 0.4.0
+.\tools\build-release.ps1 -Version 0.5.0
 ```
 
 ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
@@ -90,6 +97,7 @@ ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
 ```
 src/TagTuner.Core/   formats, conversion, tags, backups, settings
 src/TagTuner.App/    user interface (WinUI 3)
+translations/        one JSON file per language
 installer/           Inno Setup script
 tools/               build and helper scripts
 ```

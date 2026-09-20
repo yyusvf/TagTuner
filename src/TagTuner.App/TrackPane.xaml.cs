@@ -8,6 +8,8 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.DataTransfer.DragDrop;
 using Windows.Foundation;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.App;
 
 /// <summary>Dateien aus dem Explorer, auf einer Hälfte abgelegt.</summary>
@@ -171,7 +173,7 @@ public sealed partial class TrackPane : UserControl
         {
             ShowLine(index);
             e.AcceptedOperation = copy ? DataPackageOperation.Copy : DataPackageOperation.Move;
-            e.DragUIOverride.Caption = Caption(copy ? "Kopieren nach" : "Verschieben nach");
+            e.DragUIOverride.Caption = Caption(Strings.T(copy ? "Copy to" : "Move to"));
             e.DragUIOverride.IsCaptionVisible = true;
             e.DragUIOverride.IsGlyphVisible = false;
             e.Handled = true;
@@ -182,17 +184,18 @@ public sealed partial class TrackPane : UserControl
 
         ShowLine(index);
         e.AcceptedOperation = DataPackageOperation.Copy;
-        e.DragUIOverride.Caption = Caption("Übernehmen nach");
+        e.DragUIOverride.Caption = Caption(Strings.T("Take into"));
         e.DragUIOverride.IsCaptionVisible = true;
         e.Handled = true;
     }
 
     private string Caption(string verb)
     {
-        var where = Tab?.Name ?? "Ordner";
+        var where = Tab?.Name ?? Strings.T("Folder");
         return Tab?.Target is { } t
-            ? $"{verb} „{where}“: {t.Format} · {FormatRate(t.SampleRate)}"
-            : $"{verb} „{where}“";
+            ? Strings.T("{0} \"{1}\": {2} · {3}",
+                        verb, where, t.Format, FormatRate(t.SampleRate))
+            : Strings.T("{0} \"{1}\"", verb, where);
     }
 
     private void OnDragLeave(object sender, DragEventArgs e) => HideLine();
@@ -329,23 +332,26 @@ public sealed partial class TrackPane : UserControl
         var one = picked.Count == 1;
         var menu = new MenuFlyout();
 
-        menu.Items.Add(Item("", "Abspielen",
+        menu.Items.Add(Item("", Strings.T("Play"),
             () => PlayRequested?.Invoke(this, picked[0]), true));
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        menu.Items.Add(Item("", "Im Explorer anzeigen", () => Reveal(picked[0].Path), one));
-        menu.Items.Add(Item("", "Zum Ordner springen",
+        menu.Items.Add(Item("", Strings.T("Show in Explorer"), () => Reveal(picked[0].Path), one));
+        menu.Items.Add(Item("", Strings.T("Go to folder"),
             () => NavigateRequested?.Invoke(this, System.IO.Path.GetDirectoryName(picked[0].Path)!),
             one && Tab?.Recursive == true));
-        menu.Items.Add(Item("", one ? "Pfad kopieren" : $"{picked.Count} Pfade kopieren",
+        menu.Items.Add(Item("", one ? Strings.T("Copy path")
+                                    : Strings.T("Copy {0} paths", picked.Count),
             () => CopyPaths(picked), true));
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        var del = Item("", one ? "Löschen" : $"{picked.Count} Dateien löschen",
+        var del = Item("", one ? Strings.T("Delete")
+                                : Strings.T("Delete {0} files", picked.Count),
                        () => DeleteRequested?.Invoke(this, picked), true);
-        ToolTipService.SetToolTip(del, "Wird gesichert und lässt sich über den Verlauf zurückholen");
+        ToolTipService.SetToolTip(del,
+            Strings.T("Backed up first, can be undone from the history"));
         menu.Items.Add(del);
 
         menu.ShowAt(this, e.GetPosition(this));

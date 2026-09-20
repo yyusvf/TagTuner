@@ -2,6 +2,8 @@ using TagTuner.Core.Metadata;
 using TagTuner.Core.Model;
 using TagTuner.Core.Safety;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.Core.Audio;
 
 public sealed record ConversionRequest
@@ -53,7 +55,7 @@ public sealed class ConversionService(
             var size = new FileInfo(req.Track.Path).Length;
             if (size < 1024)
                 return new ConversionOutcome(false, null, null,
-                    $"Die Datei ist nur {size} Byte groß — vermutlich ein abgebrochener Download.",
+                    Strings.T("The file is only {0} bytes, probably an aborted download.", size),
                     notes);
         }
         catch { }
@@ -131,13 +133,14 @@ public sealed class ConversionService(
             if (after is null)
             {
                 return new ConversionOutcome(false, null, null,
-                    "Ergebnis ist nicht lesbar.", notes);
+                    Strings.T("The result is not readable."), notes);
             }
 
             if (req.Options.SampleRate is int want && after.SampleRate != want)
             {
-                notes.Add($"Samplerate ist {after.SampleRateLabel}, erwartet waren " +
-                          $"{(want % 1000 == 0 ? $"{want / 1000} kHz" : $"{want / 1000.0:0.0} kHz")}.");
+                notes.Add(Strings.T("The sample rate is {0}, {1} was expected.",
+                    after.SampleRateLabel,
+                    want % 1000 == 0 ? $"{want / 1000} kHz" : $"{want / 1000.0:0.0} kHz"));
             }
 
             if (hadCover && !after.HasCover)
@@ -146,7 +149,8 @@ public sealed class ConversionService(
                 {
                     // Bei OGG, WAV und AIFF ist das kein Fehler, sondern die
                     // Eigenschaft des Containers.
-                    notes.Add($"{targetExt.ToUpperInvariant()} kann kein Cover speichern, es wurde verworfen.");
+                    notes.Add(Strings.T("{0} cannot store a cover, it was dropped.",
+                                        targetExt.ToUpperInvariant()));
                 }
                 else if (originalCover is { Data.Length: > 0 })
                 {
@@ -164,17 +168,17 @@ public sealed class ConversionService(
                         after = AudioProbe.Read(outPath) ?? after;
 
                         notes.Add(after.HasCover
-                            ? "Cover ging bei der Konvertierung verloren und wurde wieder eingesetzt."
-                            : "Cover ist bei der Konvertierung verloren gegangen.");
+                            ? Strings.T("The cover was lost during conversion and has been put back.")
+                            : Strings.T("The cover was lost during conversion."));
                     }
                     catch
                     {
-                        notes.Add("Cover ist bei der Konvertierung verloren gegangen.");
+                        notes.Add(Strings.T("The cover was lost during conversion."));
                     }
                 }
                 else
                 {
-                    notes.Add("Cover ist bei der Konvertierung verloren gegangen.");
+                    notes.Add(Strings.T("The cover was lost during conversion."));
                 }
             }
 

@@ -1,5 +1,7 @@
 using Microsoft.Win32;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.Core.Shell;
 
 /// <summary>
@@ -60,14 +62,16 @@ public static class ContextMenuRegistration
     private static void WriteEntry(string path, string command, string icon)
     {
         using var key = Registry.CurrentUser.CreateSubKey(path, writable: true)
-            ?? throw new InvalidOperationException($"Registry-Schlüssel {path} nicht anlegbar.");
+            ?? throw new InvalidOperationException(
+                Strings.T("The registry key {0} cannot be created.", path));
 
         // Der Standardwert ist die Beschriftung im Menü.
         key.SetValue(null, Label, RegistryValueKind.String);
         key.SetValue("Icon", icon, RegistryValueKind.String);
 
         using var cmd = key.CreateSubKey("command", writable: true)
-            ?? throw new InvalidOperationException($"Registry-Schlüssel {path}\\command nicht anlegbar.");
+            ?? throw new InvalidOperationException(
+                Strings.T("The registry key {0} cannot be created.", path + "\\command"));
         cmd.SetValue(null, command, RegistryValueKind.String);
     }
 

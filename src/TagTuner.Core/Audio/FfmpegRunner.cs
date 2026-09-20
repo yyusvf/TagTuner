@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.Core.Audio;
 
 public sealed record FfmpegResult(bool Success, string CommandLine, string Output, int ExitCode)
@@ -19,19 +21,19 @@ public sealed record FfmpegResult(bool Success, string CommandLine, string Outpu
 
         if (log.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase)
             || ExitCode == -1094995529)
-            return "Die Datei ist beschädigt oder unvollständig und lässt sich nicht lesen.";
+            return Strings.T("The file is damaged or incomplete and cannot be read.");
 
         if (log.Contains("No such file or directory", StringComparison.OrdinalIgnoreCase))
-            return "Die Datei war beim Verarbeiten nicht mehr da.";
+            return Strings.T("The file was gone by the time it was processed.");
 
         if (log.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
-            return "Kein Zugriff auf die Datei.";
+            return Strings.T("No access to the file.");
 
         if (log.Contains("No space left", StringComparison.OrdinalIgnoreCase))
-            return "Kein Platz mehr auf dem Laufwerk.";
+            return Strings.T("No space left on the drive.");
 
         if (log.Contains("Unknown encoder", StringComparison.OrdinalIgnoreCase))
-            return "Dieses ffmpeg kann das Zielformat nicht erzeugen.";
+            return Strings.T("This ffmpeg cannot produce the target format.");
 
         var lines = log.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var last = lines.LastOrDefault(l => l.Length > 0) ?? "";

@@ -1,3 +1,5 @@
+using TagTuner.Core.Settings;
+
 namespace TagTuner.Core.Safety;
 
 /// <summary>
@@ -25,7 +27,7 @@ public sealed class BackupStore(string folder)
         catch (Exception ex)
         {
             throw new IOException(
-                $"Backup-Ordner „{Folder}“ lässt sich nicht anlegen: {ex.Message}", ex);
+                Strings.T("The backup folder \"{0}\" cannot be created: {1}", Folder, ex.Message), ex);
         }
 
         var target = Path.Combine(Folder,
@@ -45,7 +47,8 @@ public sealed class BackupStore(string folder)
         catch (Exception ex)
         {
             throw new IOException(
-                $"Backup von „{Path.GetFileName(sourcePath)}“ fehlgeschlagen: {ex.Message}", ex);
+                Strings.T("Backing up \"{0}\" failed: {1}",
+                          Path.GetFileName(sourcePath), ex.Message), ex);
         }
     }
 

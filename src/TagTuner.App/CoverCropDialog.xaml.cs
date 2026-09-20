@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.App;
 
 /// <summary>
@@ -165,8 +167,9 @@ public sealed partial class CoverCropDialog : ContentDialog
         Shade(ShadeRight, _cropX + _cropSide, _cropY, StageSize - _cropX - _cropSide, _cropSide);
 
         var pixels = (int)Math.Round(Selection.Size);
-        SizeLabel.Text = $"Ausschnitt: {pixels} × {pixels} Pixel";
-        ResultLabel.Text = $"Original {_info.Width} × {_info.Height} · {_info.Format}";
+        SizeLabel.Text = Strings.T("Selection: {0} × {0} pixels", pixels);
+        ResultLabel.Text = Strings.T("Original {0} × {1} · {2}",
+                             _info.Width, _info.Height, _info.Format);
 
         static void Shade(Microsoft.UI.Xaml.Shapes.Rectangle r,
                           double x, double y, double w, double h)

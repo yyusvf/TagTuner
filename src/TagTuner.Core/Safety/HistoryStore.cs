@@ -119,11 +119,11 @@ public sealed class HistoryStore
     public UndoResult Undo(string id)
     {
         var entry = _entries.FirstOrDefault(e => e.Id == id)
-            ?? throw new InvalidOperationException("Eintrag nicht gefunden.");
+            ?? throw new InvalidOperationException(Strings.T("Entry not found."));
 
         if (!entry.CanUndo)
             throw new InvalidOperationException(
-                "Keine Sicherung mehr vorhanden, sie wurde gelöscht oder ist abgelaufen.");
+                Strings.T("No backup left, it was deleted or has expired."));
 
         int restored = 0, failed = 0;
         foreach (var f in entry.Files)

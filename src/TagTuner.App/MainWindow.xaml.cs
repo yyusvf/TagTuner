@@ -332,7 +332,7 @@ public sealed partial class MainWindow : Window
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0),
             };
-            ToolTipService.SetToolTip(open, tab.Path + (tab.IsMixed ? "\nOrdner ist uneinheitlich" : ""));
+            ToolTipService.SetToolTip(open, tab.Path + (tab.IsMixed ? "\n" + Strings.T("Folder is not uniform") : ""));
             open.Click += (_, _) => ActivateTab(idx);
 
             var row = new StackPanel
@@ -359,7 +359,7 @@ public sealed partial class MainWindow : Window
                     BorderThickness = new Thickness(0),
                     Foreground = Res("TextFillColorTertiaryBrush"),
                 };
-                ToolTipService.SetToolTip(close, "Tab schließen");
+                ToolTipService.SetToolTip(close, Strings.T("Close tab"));
                 close.Click += (_, _) => CloseTab(idx);
                 row.Children.Add(close);
             }
@@ -696,13 +696,13 @@ public sealed partial class MainWindow : Window
         if (FolderOf(sender) is not { } folder) return;
 
         var menu = new MenuFlyout();
-        menu.Items.Add(Item("\uE8A7", "In neuem Tab öffnen", () => OpenTab(folder.Path)));
-        menu.Items.Add(Item("\uE721", "Unterordner durchsuchen", () => OpenRecursive(folder.Path)));
+        menu.Items.Add(Item("\uE8A7", Strings.T("Open in a new tab"), () => OpenTab(folder.Path)));
+        menu.Items.Add(Item("\uE721", Strings.T("Search subfolders"), () => OpenRecursive(folder.Path)));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Item("\uE8DA", "Im Explorer öffnen", () => Reveal(folder.Path)));
+        menu.Items.Add(Item("\uE8DA", Strings.T("Open in Explorer"), () => Reveal(folder.Path)));
 
         if (folder.IsRoot)
-            menu.Items.Add(Item("\uE738", "Aus Bibliothek entfernen",
+            menu.Items.Add(Item("\uE738", Strings.T("Remove from library"),
                 () => RemoveRoot(folder)));
 
         menu.ShowAt((UIElement)sender, e.GetPosition((UIElement)sender));
@@ -763,7 +763,7 @@ public sealed partial class MainWindow : Window
 
         var add = new MenuFlyoutItem
         {
-            Text = "Ordner hinzufügen…",
+            Text = Strings.T("Add folder…"),
             Icon = new FontIcon { Glyph = "\uE8F4" },
         };
         add.Click += OnAddLibraryPath;
@@ -773,7 +773,7 @@ public sealed partial class MainWindow : Window
         {
             var back = new MenuFlyoutItem
             {
-                Text = $"Ausgeblendete zurückholen ({_settings.HiddenRoots.Count})",
+                Text = Strings.T("Show hidden again ({0})", _settings.HiddenRoots.Count),
                 Icon = new FontIcon { Glyph = "\uE7A7" },
             };
             back.Click += (_, _) =>
@@ -781,7 +781,7 @@ public sealed partial class MainWindow : Window
                 _settings.HiddenRoots.Clear();
                 _settings.Save();
                 BuildTreeRoots();
-                StatusText.Text = "Ausgeblendete Ordner sind wieder da";
+                StatusText.Text = Strings.T("The hidden folders are back");
             };
             menu.Items.Add(back);
         }
@@ -805,7 +805,7 @@ public sealed partial class MainWindow : Window
         var path = folder.Path;
         if (_settings.LibraryPaths.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)))
         {
-            StatusText.Text = $"„{folder.Name}“ ist schon in der Bibliothek";
+            StatusText.Text = Strings.T("\"{0}\" is already in the library", folder.Name);
             return;
         }
 
@@ -813,7 +813,7 @@ public sealed partial class MainWindow : Window
         _settings.Save();
         InvalidateIndex();
         BuildTreeRoots();
-        StatusText.Text = $"„{folder.Name}“ zur Bibliothek hinzugefügt";
+        StatusText.Text = Strings.T("\"{0}\" added to the library", folder.Name);
     }
 
     /// <summary>
@@ -832,7 +832,8 @@ public sealed partial class MainWindow : Window
         _settings.Save();
         InvalidateIndex();
         BuildTreeRoots();
-        StatusText.Text = $"„{folder.Name}“ aus der Bibliothek entfernt. Der Ordner selbst bleibt.";
+        StatusText.Text = Strings.T(
+            "\"{0}\" removed from the library. The folder itself stays.", folder.Name);
     }
 
     /// <summary>Alles, worin gesucht wird: eigene Pfade plus die Systemwurzeln ohne Laufwerke.</summary>
@@ -884,7 +885,7 @@ public sealed partial class MainWindow : Window
             await Task.Delay(120, cts.Token);
 
             var building = _index is null;
-            if (building) SearchInfo.Text = "Bibliothek wird einmalig eingelesen…";
+            if (building) SearchInfo.Text = Strings.T("Reading the library once…");
 
             var index = await IndexAsync();
             if (cts.IsCancellationRequested) return;
@@ -895,9 +896,9 @@ public sealed partial class MainWindow : Window
             var folders = hits.Count(h => h.Kind == HitKind.Folder);
             var tracks = hits.Count - folders;
             SearchInfo.Text = hits.Count == 0
-                ? $"Nichts gefunden für „{query}“."
-                : $"{folders} Ordner, {tracks} Lieder"
-                  + (hits.Count >= LibrarySearch.DefaultLimit ? " (mehr vorhanden)" : "");
+                ? Strings.T("Nothing found for \"{0}\".", query)
+                : Strings.T("{0} folders, {1} songs", folders, tracks)
+                  + (hits.Count >= LibrarySearch.DefaultLimit ? Strings.T(" (more available)") : "");
         }
         catch (OperationCanceledException) { }
         finally { if (_search == cts) _search = null; }
@@ -1088,15 +1089,19 @@ public sealed partial class MainWindow : Window
         if (tracks.Count == 0) return;
 
         var names = string.Join("\n", tracks.Take(6).Select(t => "• " + t.FileName));
-        if (tracks.Count > 6) names += $"\n• … und {tracks.Count - 6} weitere";
+        if (tracks.Count > 6)
+            names += "\n• " + Strings.T("… and {0} more", tracks.Count - 6);
 
-        if (!await Confirm(tracks.Count == 1 ? "Datei löschen" : $"{tracks.Count} Dateien löschen",
-                $"{names}\n\nJede Datei wird vorher gesichert und lässt sich über den Verlauf " +
-                "zurückholen.", "Löschen"))
+        if (!await Confirm(
+                tracks.Count == 1 ? Strings.T("Delete file")
+                                  : Strings.T("Delete {0} files", tracks.Count),
+                names + "\n\n" + Strings.T(
+                    "Every file is backed up first and can be brought back from the history."),
+                Strings.T("Delete")))
             return;
 
         ReleaseIfAffected(tracks);
-        SetBusy(true, $"{tracks.Count} Datei(en) löschen");
+        SetBusy(true, Strings.T("Delete {0} file(s)", tracks.Count));
 
         var backups = new BackupStore(_settings.ResolvedBackupFolder);
         var files = new List<HistoryFile>();
@@ -1115,7 +1120,7 @@ public sealed partial class MainWindow : Window
             ShowProgress(true, (i + 1) * 100.0 / tracks.Count);
         }
 
-        if (files.Count > 0) _history.Add("delete", $"{files.Count} Datei(en) gelöscht", files);
+        if (files.Count > 0) _history.Add("delete", Strings.T("{0} file(s) deleted", files.Count), files);
 
         InvalidateIndex();
         SetBusy(false, null);
@@ -1128,7 +1133,7 @@ public sealed partial class MainWindow : Window
     private async Task LoadTabAsync(FolderTab tab, string? selectFile = null)
     {
         var path = tab.Path;
-        StatusText.Text = "Wird eingelesen…";
+        StatusText.Text = Strings.T("Reading…");
 
         var recursive = tab.Recursive;
 
@@ -1281,20 +1286,21 @@ public sealed partial class MainWindow : Window
 
         pane.Refresh();
         StatusText.Text = tab.Sort == TrackSort.Natural
-            ? "Wieder in Playlist-Reihenfolge"
-            : $"Sortiert nach {Label(tab.Sort)}{(tab.SortDescending ? ", absteigend" : "")}"
-              + ". Umsortieren von Hand ist dabei aus";
+            ? Strings.T("Back in playlist order")
+            : Strings.T(tab.SortDescending
+                ? "Sorted by {0}, descending. Reordering by hand is off"
+                : "Sorted by {0}. Reordering by hand is off", Label(tab.Sort));
 
-        static string Label(TrackSort key) => key switch
+        static string Label(TrackSort key) => Strings.T(key switch
         {
-            TrackSort.Track => "Track-Nummer",
-            TrackSort.Title => "Titel",
-            TrackSort.Artist => "Interpret",
+            TrackSort.Track => "Track number",
+            TrackSort.Title => "Title",
+            TrackSort.Artist => "Artist",
             TrackSort.Album => "Album",
             TrackSort.Format => "Format",
-            TrackSort.SampleRate => "Samplerate",
-            _ => "Dauer",
-        };
+            TrackSort.SampleRate => "Sample rate",
+            _ => "Duration",
+        });
     }
 
     // ══ Metadatenspalte ══════════════════════════════════════════
@@ -1315,8 +1321,9 @@ public sealed partial class MainWindow : Window
         FTitle.IsEnabled = FTrack.IsEnabled = single;
 
         MetaHead.Text = folderScope
-            ? $"METADATEN: {ActiveTab.Name}, {sel.Count} TRACKS"
-            : sel.Count > 1 ? $"METADATEN: {sel.Count} TRACKS" : "METADATEN";
+            ? Strings.T("METADATA: {0}, {1} TRACKS", ActiveTab.Name, sel.Count)
+            : sel.Count > 1 ? Strings.T("METADATA: {0} TRACKS", sel.Count)
+                            : Strings.T("METADATA");
 
         if (!any)
         {
@@ -1326,7 +1333,7 @@ public sealed partial class MainWindow : Window
             FRate.SelectedIndex = -1;
             CoverImage.Source = null;
             CoverMime.Text = "";
-            CoverInfo.Text = "keine Auswahl";
+            CoverInfo.Text = Strings.T("nothing selected");
             TechPanel.Children.Clear();
             _suppressSelection = false;
             UpdatePlan();
@@ -1394,7 +1401,7 @@ public sealed partial class MainWindow : Window
         {
             CoverImage.Source = null;
             CoverMime.Text = "";
-            CoverInfo.Text = "kein Cover";
+            CoverInfo.Text = Strings.T("no cover");
             return;
         }
 
@@ -1418,7 +1425,7 @@ public sealed partial class MainWindow : Window
         {
             CoverImage.Source = null;
             CoverMime.Text = "";
-            CoverInfo.Text = "Cover nicht lesbar";
+            CoverInfo.Text = Strings.T("cover not readable");
         }
     }
 
@@ -1447,29 +1454,32 @@ public sealed partial class MainWindow : Window
 
         if (sel.Count > 1)
         {
-            Row(FolderScope ? "Ordner" : "Auswahl", $"{sel.Count} Dateien");
+            Row(Strings.T(FolderScope ? "Folder" : "Selection"),
+                Strings.T("{0} files", sel.Count));
 
             var total = TimeSpan.FromTicks(sel.Sum(t => t.Duration.Ticks));
             if (total > TimeSpan.Zero)
-                Row("Gesamtdauer", total.TotalHours >= 1
-                    ? $"{(int)total.TotalHours}:{total.Minutes:00}:{total.Seconds:00} Stunden"
-                    : $"{(int)total.TotalMinutes}:{total.Seconds:00} Minuten");
+                Row(Strings.T("Total duration"), total.TotalHours >= 1
+                    ? Strings.T("{0}:{1:00}:{2:00} hours",
+                                (int)total.TotalHours, total.Minutes, total.Seconds)
+                    : Strings.T("{0}:{1:00} minutes",
+                                (int)total.TotalMinutes, total.Seconds));
 
             var bytes = sel.Sum(t => t.Size);
-            if (bytes > 0) Row("Gesamtgröße", Bytes(bytes));
+            if (bytes > 0) Row(Strings.T("Total size"), Bytes(bytes));
 
             var formats = sel.Select(t => t.Format).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (formats.Count == 1) Row("Format", formats[0]);
+            if (formats.Count == 1) Row(Strings.T("Format"), formats[0]);
             return;
         }
 
         var t = sel[0];
-        Row("Kanäle", t.Channels.ToString());
-        Row("Dauer", t.DurationLabel);
-        Row("Größe", t.SizeLabel);
-        if (t.Bitrate > 0) Row("Bitrate", $"{t.Bitrate} kbps");
+        Row(Strings.T("Channels"), t.Channels.ToString());
+        Row(Strings.T("Duration"), t.DurationLabel);
+        Row(Strings.T("Size"), t.SizeLabel);
+        if (t.Bitrate > 0) Row(Strings.T("Bitrate"), $"{t.Bitrate} kbps");
         if (ActiveTab.Target is { } tg && !FolderAnalysis.Matches(t, tg))
-            Row("Ordner-Ziel", $"{tg.Format} · {FormatRate(tg.SampleRate)}");
+            Row(Strings.T("Folder target"), $"{tg.Format} · {FormatRate(tg.SampleRate)}");
     }
 
     private static string Bytes(long size) => size switch
@@ -1487,29 +1497,29 @@ public sealed partial class MainWindow : Window
         var sel = TargetTracks();
         if (sel.Count == 0)
         {
-            PlanText.Text = "Keine Auswahl.";
+            PlanText.Text = Strings.T("Nothing selected.");
             ApplyBtn.IsEnabled = false;
             return;
         }
 
         var jobs = new List<string>();
-        if (TagsChanged()) jobs.Add("Tags schreiben");
+        if (TagsChanged()) jobs.Add(Strings.T("write tags"));
 
         if (FFormat.SelectedItem is string f &&
             !f.Equals(Agree(sel, t => AudioFormats.TargetExtension(t.Format).ToUpperInvariant()),
                       StringComparison.OrdinalIgnoreCase))
-            jobs.Add($"nach {f} konvertieren");
+            jobs.Add(Strings.T("convert to {0}", f));
 
         if (FRate.SelectedIndex >= 0)
         {
             var hz = Rates[FRate.SelectedIndex];
             if (Agree(sel, t => t.SampleRate.ToString()) is not { } r || r != hz.ToString())
-                jobs.Add($"auf {FormatRate(hz)} bringen");
+                jobs.Add(Strings.T("bring to {0}", FormatRate(hz)));
         }
 
         var was = folderScope
-            ? $"Ordner ({sel.Count} Datei{(sel.Count == 1 ? "" : "en")})"
-            : $"{sel.Count} Datei{(sel.Count == 1 ? "" : "en")}";
+            ? Strings.T("Folder ({0} file(s))", sel.Count)
+            : Strings.T("{0} file(s)", sel.Count);
 
         ApplyBtn.IsEnabled = jobs.Count > 0;
         PlanText.Text = jobs.Count > 0
@@ -1529,7 +1539,7 @@ public sealed partial class MainWindow : Window
     private async void Run(Func<Task> work)
     {
         try { await work(); }
-        catch (Exception ex) { await Inform("Fehlgeschlagen", ex.Message); }
+        catch (Exception ex) { await Inform(Strings.T("Failed"), ex.Message); }
     }
 
     private void OnCoverRightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -1537,27 +1547,28 @@ public sealed partial class MainWindow : Window
         var targets = TargetTracks();
         if (targets.Count == 0) return;
 
-        var scope = FolderScope ? $"Ordner ({targets.Count})" : $"{targets.Count}";
+        var scope = FolderScope ? Strings.T("Folder ({0})", targets.Count)
+                                : targets.Count.ToString();
         var many = targets.Count > 1;
         var hasCover = _cover is not null;
 
         var menu = new MenuFlyout();
 
-        menu.Items.Add(Item("\uEB9F", many ? $"Cover für {scope} setzen…" : "Cover setzen…",
+        menu.Items.Add(Item("\uEB9F", many ? Strings.T("Set cover for {0}…", scope) : Strings.T("Set cover…"),
             true, () => Run(() => SetFromFileAsync(targets))));
 
-        menu.Items.Add(Item("\uE8C8", "Cover kopieren",
+        menu.Items.Add(Item("\uE8C8", Strings.T("Copy cover"),
             hasCover, () => Run(CopyCoverAsync)));
 
-        menu.Items.Add(Item("\uE77F", many ? $"Cover in {scope} einfügen" : "Cover einfügen",
+        menu.Items.Add(Item("\uE77F", many ? Strings.T("Paste cover into {0}", scope) : Strings.T("Paste cover"),
             true, () => Run(() => PasteCoverAsync(targets))));
 
         menu.Items.Add(new MenuFlyoutSeparator());
 
-        menu.Items.Add(Item("\uE740", "Größe anpassen…",
+        menu.Items.Add(Item("\uE740", Strings.T("Resize…"),
             hasCover, () => Run(() => ResizeCoverAsync(targets))));
 
-        menu.Items.Add(Item("\uE74D", many ? $"Cover aus {scope} entfernen" : "Cover entfernen",
+        menu.Items.Add(Item("\uE74D", many ? Strings.T("Remove cover from {0}", scope) : Strings.T("Remove cover"),
             targets.Any(t => t.HasCover), () => Run(() => ClearCoverAsync(targets))));
 
         menu.ShowAt((FrameworkElement)sender, e.GetPosition((UIElement)sender));
@@ -1592,11 +1603,11 @@ public sealed partial class MainWindow : Window
 
         byte[] data;
         try { data = await File.ReadAllBytesAsync(file.Path); }
-        catch (Exception ex) { await Inform("Bild nicht lesbar", ex.Message); return; }
+        catch (Exception ex) { await Inform(Strings.T("Image not readable"), ex.Message); return; }
 
         // Eine gewählte Datei liegt im Original vor — sie soll so bleiben,
         // solange sie quadratisch ist.
-        await ApplyImageAsync(targets, data, "Cover setzen", keepExact: true);
+        await ApplyImageAsync(targets, data, Strings.T("Set cover"), keepExact: true);
     }
 
     private async Task PasteCoverAsync(List<AudioTrack> targets)
@@ -1611,7 +1622,8 @@ public sealed partial class MainWindow : Window
             {
                 await WriteCoverAsync(targets,
                     new TagEdit { Cover = clip.Data, CoverMimeType = clip.Mime },
-                    $"Cover einfügen ({clip.Data.Length / 1024.0:0.#} KB, unverändert)");
+                    Strings.T("Paste cover ({0} KB, unchanged)",
+                              $"{clip.Data.Length / 1024.0:0.#}"));
                 return;
             }
         }
@@ -1640,18 +1652,18 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            await Inform("Zwischenablage nicht lesbar", ex.Message);
+            await Inform(Strings.T("Clipboard not readable"), ex.Message);
             return;
         }
 
         if (data is null || data.Length == 0)
         {
-            await Inform("Kein Bild in der Zwischenablage",
-                "Kopier ein Bild oder eine Bilddatei und versuch es noch einmal.");
+            await Inform(Strings.T("No image in the clipboard"),
+                Strings.T("Copy an image or an image file and try again."));
             return;
         }
 
-        await ApplyImageAsync(targets, data, "Cover einfügen", keepExact: fromFile);
+        await ApplyImageAsync(targets, data, Strings.T("Paste cover"), keepExact: fromFile);
     }
 
     /// <summary>
@@ -1668,7 +1680,8 @@ public sealed partial class MainWindow : Window
         var info = await CoverImaging.MeasureAsync(data);
         if (info is null)
         {
-            await Inform("Bild nicht lesbar", "Das Format wird nicht unterstützt.");
+            await Inform(Strings.T("Image not readable"),
+                         Strings.T("That format is not supported."));
             return;
         }
 
@@ -1680,30 +1693,31 @@ public sealed partial class MainWindow : Window
         {
             final = await CoverCropDialog.CropAsync(Root.XamlRoot, data, info, asPng);
             if (final is null) return;   // abgebrochen
-            note = "zugeschnitten";
+            note = Strings.T("cropped");
         }
         else if (keepExact && info.Format is "JPEG" or "PNG")
         {
             final = data;
-            note = "unverändert";
+            note = Strings.T("unchanged");
         }
         else
         {
             // Was aus der Zwischenablage kommt, ist oft ein unkomprimiertes
             // Bitmap und wäre als Tag absurd groß.
             final = await CoverImaging.NormalizeAsync(data, asPng);
-            note = "neu kodiert";
+            note = Strings.T("re-encoded");
         }
 
         if (final is null)
         {
-            await Inform("Bild nicht verarbeitbar", "Das Umwandeln ist fehlgeschlagen.");
+            await Inform(Strings.T("Image cannot be processed"),
+                         Strings.T("Converting the image failed."));
             return;
         }
 
         await WriteCoverAsync(targets,
             new TagEdit { Cover = final, CoverMimeType = asPng ? "image/png" : "image/jpeg" },
-            $"{label} ({final.Length / 1024.0:0.#} KB, {note})");
+            Strings.T("{0} ({1} KB, {2})", label, $"{final.Length / 1024.0:0.#}", note));
     }
 
     // ── Kopieren ─────────────────────────────────────────────────
@@ -1746,7 +1760,8 @@ public sealed partial class MainWindow : Window
         package.SetData(CoverToken, token);
 
         Clipboard.SetContent(package);
-        StatusText.Text = $"Cover kopiert ({_cover.Data.Length / 1024.0:0.#} KB, unverändert)";
+        StatusText.Text = Strings.T("Cover copied ({0} KB, unchanged)",
+                                    $"{_cover.Data.Length / 1024.0:0.#}");
     }
 
     // ── Größe anpassen ───────────────────────────────────────────
@@ -1756,7 +1771,12 @@ public sealed partial class MainWindow : Window
         if (_cover is null) return;
 
         var info = await CoverImaging.MeasureAsync(_cover.Data);
-        if (info is null) { await Inform("Cover nicht lesbar", "Das Format wird nicht unterstützt."); return; }
+        if (info is null)
+        {
+            await Inform(Strings.T("Cover not readable"),
+                         Strings.T("That format is not supported."));
+            return;
+        }
 
         var sizes = new[] { 1500, 1000, 800, 600, 500, 400, 300 };
 
@@ -1785,7 +1805,7 @@ public sealed partial class MainWindow : Window
         async void Estimate()
         {
             var mine = ++pending;
-            preview.Text = "wird berechnet…";
+            preview.Text = Strings.T("calculating…");
 
             var target = (uint)sizes[Math.Max(0, size.SelectedIndex)];
             var q = quality.Value / 100.0;
@@ -1793,11 +1813,15 @@ public sealed partial class MainWindow : Window
 
             if (mine != pending) return;
             preview.Text = result is null
-                ? "Vorschau nicht möglich"
-                : $"Vorher {info.Bytes / 1024.0:0.#} KB ({info.Width} × {info.Height}, {info.Format})"
+                ? Strings.T("Preview not possible")
+                : Strings.T("Before {0} KB ({1} × {2}, {3})",
+                            $"{info.Bytes / 1024.0:0.#}", info.Width, info.Height, info.Format)
                   + Environment.NewLine
-                  + $"Nachher {result.Length / 1024.0:0.#} KB als JPEG"
-                  + $", {(result.Length < info.Bytes ? $"{100 - result.Length * 100 / info.Bytes} % kleiner" : "größer als das Original")}";
+                  + Strings.T("After {0} KB as JPEG", $"{result.Length / 1024.0:0.#}")
+                  + ", "
+                  + (result.Length < info.Bytes
+                      ? Strings.T("{0} % smaller", 100 - result.Length * 100 / info.Bytes)
+                      : Strings.T("larger than the original"));
         }
 
         size.SelectionChanged += (_, _) => Estimate();
@@ -1805,16 +1829,16 @@ public sealed partial class MainWindow : Window
         Estimate();
 
         var panel = new StackPanel { Spacing = 12, Width = 340 };
-        panel.Children.Add(Labelled("Kantenlänge (höchstens)", size));
-        panel.Children.Add(Labelled("JPEG-Qualität", quality));
+        panel.Children.Add(Labelled(Strings.T("Maximum edge length"), size));
+        panel.Children.Add(Labelled(Strings.T("JPEG quality"), quality));
         panel.Children.Add(preview);
 
         var dialog = new ContentDialog
         {
-            Title = "Covergröße anpassen",
+            Title = Strings.T("Resize cover"),
             Content = panel,
-            PrimaryButtonText = "Übernehmen",
-            CloseButtonText = "Abbrechen",
+            PrimaryButtonText = Strings.T("Apply"),
+            CloseButtonText = Strings.T("Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Root.XamlRoot,
         };
@@ -1825,7 +1849,12 @@ public sealed partial class MainWindow : Window
             _cover.Data, (uint)sizes[Math.Max(0, size.SelectedIndex)],
             asPng: false, quality.Value / 100.0);
 
-        if (final is null) { await Inform("Umwandeln fehlgeschlagen", "Das Bild ließ sich nicht neu kodieren."); return; }
+        if (final is null)
+        {
+            await Inform(Strings.T("Resizing failed"),
+                         Strings.T("The image could not be re-encoded."));
+            return;
+        }
 
         await WriteCoverAsync(targets,
             new TagEdit { Cover = final, CoverMimeType = "image/jpeg" },
@@ -1850,7 +1879,7 @@ public sealed partial class MainWindow : Window
         if (hits.Count == 0) return;
 
         // Leeres Array heißt „entfernen"; null hieße „unverändert".
-        await WriteCoverAsync(hits, new TagEdit { Cover = [] }, "Cover entfernen");
+        await WriteCoverAsync(hits, new TagEdit { Cover = [] }, Strings.T("Remove cover"));
     }
 
     private async Task WriteCoverAsync(List<AudioTrack> targets, TagEdit edit, string label)
@@ -1862,17 +1891,19 @@ public sealed partial class MainWindow : Window
 
         if (able.Count == 0)
         {
-            await Inform("Format trägt kein Cover", $"{Formats(unable)} kann kein Cover speichern.");
+            await Inform(Strings.T("Format carries no cover"),
+                         Strings.T("{0} cannot store a cover.", Formats(unable)));
             return;
         }
 
-        var text = $"{able.Count} Datei(en) werden geändert. Vorher wird je Datei eine " +
-                   "Sicherung angelegt.";
+        var text = Strings.T("{0} file(s) will be changed. Each one is backed up first.",
+                             able.Count);
         if (unable.Count > 0)
-            text += $"{Environment.NewLine}{Environment.NewLine}⚠ {unable.Count} Datei(en) bleiben " +
-                    $"unangetastet: {Formats(unable)} trägt kein Cover.";
+            text += Environment.NewLine + Environment.NewLine
+                  + Strings.T("⚠ {0} file(s) stay untouched: {1} carries no cover.",
+                              unable.Count, Formats(unable));
 
-        if (!await Confirm(label, text, "Übernehmen")) return;
+        if (!await Confirm(label, text, Strings.T("Apply"))) return;
 
         await RunJobAsync(label, able, _ => (false, null, null, edit));
 
@@ -1900,7 +1931,7 @@ public sealed partial class MainWindow : Window
         if (analysis is null || target is null)
         {
             VerdictBox.Background = Res("WarnDimBrush");
-            VerdictText.Text = "Wird eingelesen…";
+            VerdictText.Text = Strings.T("Reading…");
             VerdictText.Foreground = Res("WarnBrush");
             AlignBtn.IsEnabled = false;
             SideNote.Text = "";
@@ -1911,10 +1942,10 @@ public sealed partial class MainWindow : Window
         VerdictBox.Background = Res(ok ? "OkDimBrush" : "WarnDimBrush");
         VerdictText.Foreground = Res(ok ? "OkBrush" : "WarnBrush");
         VerdictText.Text = analysis.IsEmpty
-            ? "Ordner ist leer. Neue Dateien folgen dem Standardprofil."
+            ? Strings.T("The folder is empty. New files follow the default profile.")
             : ok
-                ? $"Einheitlich. Alle {analysis.Tracks.Count} Tracks entsprechen dem Ziel."
-                : "Uneinheitlich. Es gilt das Standardprofil aus den Einstellungen.";
+                ? Strings.T("Uniform. All {0} tracks match the target.", analysis.Tracks.Count)
+                : Strings.T("Mixed. The default profile from the settings applies.");
 
         void Row(string key, string value, string? note = null)
         {
@@ -1925,17 +1956,18 @@ public sealed partial class MainWindow : Window
             AnalysisPanel.Children.Add(sp);
         }
 
-        var fromDefault = target.FromDefaultProfile ? "aus Standardprofil" : null;
-        Row("Ziel-Format", target.Format, fromDefault);
-        Row("Ziel-Samplerate", FormatRate(target.SampleRate), fromDefault);
+        var fromDefault = target.FromDefaultProfile
+            ? Strings.T("from the default profile") : null;
+        Row(Strings.T("Target format"), target.Format, fromDefault);
+        Row(Strings.T("Target sample rate"), FormatRate(target.SampleRate), fromDefault);
 
         if (!analysis.IsEmpty && !analysis.IsUniform)
         {
-            Pills("Formate", analysis.FormatCounts
+            Pills(Strings.T("Formats"), analysis.FormatCounts
                 .OrderByDescending(p => p.Value)
                 .Select(p => ($"{p.Value} {p.Key}", p.Key.Equals(target.Format, StringComparison.OrdinalIgnoreCase))));
 
-            Pills("Sampleraten", analysis.SampleRateCounts
+            Pills(Strings.T("Sample rates"), analysis.SampleRateCounts
                 .OrderByDescending(p => p.Value)
                 .Select(p => ($"{p.Value} × {FormatRate(p.Key)}", p.Key == target.SampleRate)));
         }
@@ -1976,17 +2008,19 @@ public sealed partial class MainWindow : Window
 
         UpdateRuleSwitches();
 
-        RecurseBtn.Content = ActiveTab.Recursive
-            ? "Nur diesen Ordner zeigen" : "Unterordner einbeziehen";
+        RecurseBtn.Content = Strings.T(ActiveTab.Recursive
+            ? "Show this folder only" : "Include subfolders");
 
         var off = analysis.Outliers(target).Count();
         AlignBtn.IsEnabled = off > 0;
-        AlignBtn.Content = off > 0 ? $"Ordner angleichen ({off})" : "Ordner angleichen";
+        AlignBtn.Content = off > 0 ? Strings.T("Align folder ({0})", off)
+                                   : Strings.T("Align folder");
         SideNote.Text = off > 0
-            ? $"{off} Datei(en) weichen ab. Angleichen konvertiert sie im Ordner und legt vorher ein Backup an."
+            ? Strings.T("{0} file(s) deviate. Aligning converts them in place and backs "
+                        + "them up first.", off)
             : ActiveTab.Recursive
-                ? "Angleichen erfasst alle Unterordner."
-                : "Neue Dateien werden beim Ablegen automatisch auf dieses Ziel gebracht.";
+                ? Strings.T("Aligning covers every subfolder.")
+                : Strings.T("Files dropped in are brought to this target automatically.");
     }
 
     /// <summary>Die gemerkten Regeln dieses Ordners in die Schalter übertragen.</summary>
@@ -2006,10 +2040,12 @@ public sealed partial class MainWindow : Window
         ResetRuleBtn.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
 
         RuleNote.Text = ActiveTab.Recursive
-            ? "Mit Unterordnern ist das Ablegen abgeschaltet. Angleichen und das Bearbeiten von Hand gehen weiter."
+            ? Strings.T("With subfolders, dropping is off. Aligning and editing by hand "
+                        + "still work.")
             : own
-                ? $"Eigene Einstellung für „{ActiveTab.Name}“. Sie gewinnt gegen die globale."
-                : "Folgt der globalen Einstellung aus den Einstellungen.";
+                ? Strings.T("Own setting for \"{0}\". It wins over the global one.",
+                            ActiveTab.Name)
+                : Strings.T("Follows the global setting from the settings.");
     }
 
     private bool _suppressRules;
@@ -2031,7 +2067,7 @@ public sealed partial class MainWindow : Window
     {
         _settings.ClearRule(ActiveTab.Path);
         UpdateRuleSwitches();
-        StatusText.Text = $"„{ActiveTab.Name}“ folgt wieder der globalen Einstellung";
+        StatusText.Text = Strings.T("\"{0}\" follows the global setting again", ActiveTab.Name);
     }
 
     /// <summary>
@@ -2046,18 +2082,25 @@ public sealed partial class MainWindow : Window
         if (!tab.Recursive)
         {
             RecurseBtn.IsEnabled = false;
-            StatusText.Text = "Unterordner werden gezählt…";
+            StatusText.Text = Strings.T("Counting subfolders…");
             var n = await Task.Run(() => FolderScanner.CountRecursive(tab.Path));
             RecurseBtn.IsEnabled = true;
             StatusText.Text = "";
 
-            if (n == 0) { await Inform("Nichts gefunden", "Unterhalb dieses Ordners liegen keine Audiodateien."); return; }
+            if (n == 0)
+            {
+                await Inform(Strings.T("Nothing found"),
+                             Strings.T("There are no audio files below this folder."));
+                return;
+            }
 
-            if (n > 400 && !await Confirm("Unterordner einbeziehen",
-                    $"Es werden {n}{(n >= 5000 ? "+" : "")} Dateien eingelesen. Das dauert einen Moment.\n\n" +
-                    "In dieser Ansicht sind Ablegen und Umsortieren abgeschaltet. Sie ist zum Sichten, " +
-                    "zum Angleichen und zum Bearbeiten von Hand gedacht.",
-                    "Einlesen"))
+            if (n > 400 && !await Confirm(Strings.T("Include subfolders"),
+                    Strings.T("{0} files will be read. That takes a moment.",
+                              n >= 5000 ? n + "+" : n.ToString())
+                    + "\n\n"
+                    + Strings.T("In this view, dropping and reordering are off. It is meant "
+                                + "for looking, for aligning and for editing by hand."),
+                    Strings.T("Read")))
                 return;
         }
 
@@ -2109,17 +2152,18 @@ public sealed partial class MainWindow : Window
         var sel = TargetTracks();
         if (sel.Count == 0) return;
 
-        if (folderScope && !await Confirm("Auf den ganzen Ordner anwenden",
-                $"Es ist nichts ausgewählt. Die Änderung trifft alle {sel.Count} Dateien " +
-                $"in „{ActiveTab.Name}“.\n\nVorher wird je Datei eine Sicherung angelegt.",
-                "Auf alle anwenden"))
+        if (folderScope && !await Confirm(Strings.T("Apply to the whole folder"),
+                Strings.T("Nothing is selected. The change affects all {0} files in \"{1}\".",
+                          sel.Count, ActiveTab.Name)
+                + "\n\n" + Strings.T("Each file is backed up first."),
+                Strings.T("Apply to all")))
             return;
 
         var edit = BuildTagEdit(!folderScope && sel.Count == 1);
         var wantFormat = FFormat.SelectedItem as string;
         var wantRate = FRate.SelectedIndex >= 0 ? Rates[FRate.SelectedIndex] : (int?)null;
 
-        await RunJobAsync($"{sel.Count} Datei(en)", sel, track =>
+        await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel, track =>
         {
             var convert =
                 (wantFormat is not null &&
@@ -2139,14 +2183,16 @@ public sealed partial class MainWindow : Window
         var outliers = analysis.Outliers(target).ToList();
         if (outliers.Count == 0) return;
 
-        var ok = await Confirm("Ordner angleichen",
-            $"{outliers.Count} Datei(en) werden nach {target.Format} · {FormatRate(target.SampleRate)} konvertiert.\n\n" +
-            "Die Originale werden ersetzt. Vorher wird je Datei eine Sicherung angelegt, " +
-            "die sich über den Verlauf zurückspielen lässt.",
-            "Angleichen");
+        var ok = await Confirm(Strings.T("Align folder"),
+            Strings.T("{0} file(s) will be converted to {1} · {2}.",
+                      outliers.Count, target.Format, FormatRate(target.SampleRate))
+            + "\n\n"
+            + Strings.T("The originals are replaced. Each file is backed up first, and "
+                        + "the backup can be played back from the history."),
+            Strings.T("Align"));
         if (!ok) return;
 
-        await RunJobAsync($"{outliers.Count} Datei(en) angleichen", outliers,
+        await RunJobAsync(Strings.T("Align {0} file(s)", outliers.Count), outliers,
             _ => (true, target.Format, target.SampleRate, null));
     }
 
@@ -2163,9 +2209,9 @@ public sealed partial class MainWindow : Window
         var ffmpeg = FfmpegLocator.Find(_settings.FfmpegPath);
         if (tracks.Any(t => plan(t).Convert) && ffmpeg is null)
         {
-            await Inform("ffmpeg fehlt",
-                "Für Konvertierungen wird ffmpeg.exe gebraucht. Sie wird neben der " +
-                "Anwendung oder in tools\\ffmpeg erwartet. tools\\fetch-ffmpeg.ps1 holt sie.");
+            await Inform(Strings.T("ffmpeg is missing"),
+                Strings.T("Converting needs ffmpeg.exe. It is expected next to the "
+                          + "application or in tools\\ffmpeg. tools\\fetch-ffmpeg.ps1 fetches it."));
             return;
         }
 
@@ -2287,62 +2333,70 @@ public sealed partial class MainWindow : Window
         if (!_settings.SkipConformDialog)
         {
             var text = new System.Text.StringBuilder();
-            text.AppendLine($"{incoming.Count} Datei(en) {(move ? "verschieben" : "übernehmen")} " +
-                            $"nach „{tab.Name}“.").AppendLine();
+            text.AppendLine(Strings.T(move ? "Move {0} file(s) to \"{1}\"."
+                                           : "Take {0} file(s) into \"{1}\".",
+                                      incoming.Count, tab.Name)).AppendLine();
             text.AppendLine(!rule.AutoConform
-                ? "Angleichen ist für diesen Ordner abgeschaltet. Format und Samplerate bleiben."
+                ? Strings.T("Aligning is off for this folder. Format and sample rate stay.")
                 : needConvert.Count > 0
-                    ? $"Konvertierung: {needConvert.Count} Datei(en) → {target.Format} · {FormatRate(target.SampleRate)}"
-                    : "Keine Konvertierung nötig.");
+                    ? Strings.T("Conversion: {0} file(s) → {1} · {2}",
+                                needConvert.Count, target.Format, FormatRate(target.SampleRate))
+                    : Strings.T("No conversion needed."));
 
             if (!rule.InheritTags)
             {
-                text.AppendLine("Tags werden nicht angefasst, für diesen Ordner abgeschaltet.");
+                text.AppendLine(Strings.T(
+                    "Tags are left alone, switched off for this folder."));
             }
             else
             {
                 var erben = new List<string>();
-                if (inherited.Album is not null) erben.Add("Album");
-                if (inherited.Artist is not null) erben.Add("Interpret");
-                if (inherited.AlbumArtist is not null) erben.Add("Album-Interpret");
-                if (inherited.Year is not null) erben.Add("Jahr");
-                if (inherited.Genre is not null) erben.Add("Genre");
+                if (inherited.Album is not null) erben.Add(Strings.T("Album"));
+                if (inherited.Artist is not null) erben.Add(Strings.T("Artist"));
+                if (inherited.AlbumArtist is not null) erben.Add(Strings.T("Album artist"));
+                if (inherited.Year is not null) erben.Add(Strings.T("Year"));
+                if (inherited.Genre is not null) erben.Add(Strings.T("Genre"));
                 text.AppendLine(erben.Count > 0
-                    ? "Übernommen vom Ordner: " + string.Join(", ", erben)
-                    : "Der Ordner ist sich in keinem Tag einig, es wird nichts übernommen.");
+                    ? Strings.T("Inherited from the folder: {0}", string.Join(", ", erben))
+                    : Strings.T("The folder agrees on no tag, so nothing is inherited."));
             }
 
             if (rule.InheritTags)
             {
                 text.AppendLine(canInsert
-                    ? $"Einsortiert ab Track {at + 1}; die folgenden rücken nach."
+                    ? Strings.T("Inserted from track {0} on; the ones after it move up.", at + 1)
                     : existing.Count == 0
-                        ? "Der Ordner ist leer, die Nummerierung beginnt bei 1."
-                        : "Angehängt ans Ende, der Ordner ist nicht lückenlos von 1 an nummeriert.");
+                        ? Strings.T("The folder is empty, numbering starts at 1.")
+                        : Strings.T("Appended at the end, the folder is not numbered "
+                                    + "from 1 without gaps."));
             }
 
             if (target.FromDefaultProfile)
-                text.AppendLine().AppendLine("⚠ Zielordner ist uneinheitlich, das Ziel stammt aus dem Standardprofil.");
+                text.AppendLine().AppendLine(Strings.T(
+                    "⚠ The target folder is mixed, the target comes from the default profile."));
 
             var down = needConvert.Count(t => t.SampleRate > target.SampleRate);
             if (down > 0)
                 text.AppendLine().AppendLine(
-                    $"⚠ {down} Datei(en) werden heruntergerechnet, nicht verlustfrei umkehrbar.");
+                    Strings.T("⚠ {0} file(s) are downsampled, which cannot be undone "
+                              + "without loss.", down));
 
             text.AppendLine().AppendLine(move
-                ? $"Die Originale in „{removeFrom!.Name}“ werden entfernt; der Verlauf kann sie zurückholen."
-                : "Die Quelldateien bleiben erhalten (Kopie).");
+                ? Strings.T("The originals in \"{0}\" are removed; the history can bring "
+                            + "them back.", removeFrom!.Name)
+                : Strings.T("The source files are kept (copy)."));
 
-            if (!await Confirm(move ? "Dateien verschieben" : "Dateien angleichen",
+            if (!await Confirm(Strings.T(move ? "Move files" : "Align files"),
                                text.ToString().TrimEnd(),
-                               move ? "Verschieben" : "Übernehmen")) return;
+                               Strings.T(move ? "Move" : "Apply"))) return;
         }
 
         // Beim Verschieben verschwinden die Quelldateien — die darf der
         // Player dann nicht mehr offen halten.
         if (move) ReleaseIfAffected(incoming);
 
-        SetBusy(true, $"{incoming.Count} Datei(en) {(move ? "verschieben" : "übernehmen")}");
+        SetBusy(true, Strings.T(move ? "Move {0} file(s)" : "Take in {0} file(s)",
+                                incoming.Count));
 
         var ffmpeg = FfmpegLocator.Find(_settings.FfmpegPath);
         var backups = new BackupStore(_settings.ResolvedBackupFolder);
@@ -2380,7 +2434,11 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { errors.Add($"{src.FileName}: {ex.Message}"); continue; }
 
             var copied = AudioProbe.Read(dest);
-            if (copied is null) { errors.Add($"{src.FileName}: nicht lesbar"); continue; }
+            if (copied is null)
+            {
+                errors.Add($"{src.FileName}: " + Strings.T("not readable"));
+                continue;
+            }
 
             ConversionOutcome outcome;
             if (!rule.AutoConform || FolderAnalysis.Matches(copied, target))
@@ -2437,7 +2495,9 @@ public sealed partial class MainWindow : Window
 
         if (files.Count > 0)
             _history.Add(move ? "move" : "import",
-                         $"{done} Datei(en) {(move ? "verschoben" : "übernommen")} nach „{tab.Name}“",
+                         Strings.T(move ? "{0} file(s) moved to \"{1}\""
+                                        : "{0} file(s) taken into \"{1}\"",
+                                   done, tab.Name),
                          files);
 
         TrackArt.Forget();
@@ -2482,7 +2542,8 @@ public sealed partial class MainWindow : Window
             {
                 if (outcome.History is not null) files.Add(outcome.History);
             }
-            else errors.Add($"{track.FileName}: Nummer nicht verschoben ({outcome.Error})");
+            else errors.Add($"{track.FileName}: "
+                            + Strings.T("number not moved ({0})", outcome.Error));
         }
     }
 
@@ -2522,22 +2583,23 @@ public sealed partial class MainWindow : Window
 
         if (!IsContiguous(order))
         {
-            StatusText.Text = "Reihenfolge geändert. Track-Nummern unverändert " +
-                              "(der Ordner ist nicht lückenlos von 1 an nummeriert)";
+            StatusText.Text = Strings.T("Order changed. Track numbers unchanged "
+                + "(the folder is not numbered from 1 without gaps)");
             return;
         }
 
-        if (!await Confirm("Track-Nummern neu vergeben",
-                $"Sollen die {order.Count} Tracks entsprechend der neuen Reihenfolge " +
-                "von 1 an durchnummeriert werden?\n\nVorher wird je Datei eine Sicherung angelegt.",
-                "Neu nummerieren"))
+        if (!await Confirm(Strings.T("Renumber tracks"),
+                Strings.T("Should the {0} tracks be numbered from 1 in the new order?",
+                          order.Count)
+                + "\n\n" + Strings.T("Each file is backed up first."),
+                Strings.T("Renumber")))
         {
             await LoadTabAsync(tab);
             return;
         }
 
         ReleaseIfAffected(order);
-        SetBusy(true, "Track-Nummern schreiben");
+        SetBusy(true, Strings.T("Writing track numbers"));
         var svc = new ConversionService(
             new FfmpegRunner("ffmpeg"), new BackupStore(_settings.ResolvedBackupFolder));
         var files = new List<HistoryFile>();
@@ -2551,10 +2613,10 @@ public sealed partial class MainWindow : Window
             ShowProgress(true, (i + 1) * 100.0 / order.Count);
         }
 
-        if (files.Count > 0) _history.Add("tracknumbers", "Reihenfolge geändert", files);
+        if (files.Count > 0) _history.Add("tracknumbers", Strings.T("Order changed"), files);
         SetBusy(false, null);
         await MergeTabAsync(tab);
-        StatusText.Text = $"{files.Count} Track-Nummer(n) geschrieben";
+        StatusText.Text = Strings.T("{0} track number(s) written", files.Count);
     }
 
     // ══ Rückmeldung ══════════════════════════════════════════════
@@ -2563,24 +2625,24 @@ public sealed partial class MainWindow : Window
     {
         if (errors.Count == 0 && notes.Count == 0)
         {
-            StatusText.Text = $"{ok} Datei(en) verarbeitet, Sicherung angelegt";
+            StatusText.Text = Strings.T("{0} file(s) processed, backup created", ok);
             return;
         }
 
         var text = new System.Text.StringBuilder();
-        text.AppendLine($"{ok} Datei(en) verarbeitet.");
+        text.AppendLine(Strings.T("{0} file(s) processed.", ok));
         if (errors.Count > 0)
         {
-            text.AppendLine().AppendLine("Fehlgeschlagen:");
+            text.AppendLine().AppendLine(Strings.T("Failed:"));
             foreach (var e in errors.Take(8)) text.AppendLine("• " + e);
         }
         if (notes.Count > 0)
         {
-            text.AppendLine().AppendLine("Hinweise:");
+            text.AppendLine().AppendLine(Strings.T("Notes:"));
             foreach (var n in notes.Take(8)) text.AppendLine("• " + n);
         }
 
-        await Inform(errors.Count > 0 ? "Mit Fehlern abgeschlossen" : "Abgeschlossen",
+        await Inform(Strings.T(errors.Count > 0 ? "Finished with errors" : "Finished"),
                      text.ToString().TrimEnd());
     }
 
@@ -2620,7 +2682,7 @@ public sealed partial class MainWindow : Window
             Title = title,
             Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
             PrimaryButtonText = primary,
-            CloseButtonText = "Abbrechen",
+            CloseButtonText = Strings.T("Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Root.XamlRoot,
         };

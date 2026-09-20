@@ -18,9 +18,9 @@ public static class SettingsDialog
 
     private static readonly (string Label, string Value)[] Retentions =
     [
-        ("Nie", "never"),
-        ("Nach 7 Tagen", "7"),
-        ("Nach 30 Tagen", "30"),
+        ("Never", "never"),
+        ("After 7 days", "7"),
+        ("After 30 days", "30"),
     ];
 
     public static async Task ShowAsync(XamlRoot root, AppSettings settings, HistoryStore history)
@@ -28,12 +28,14 @@ public static class SettingsDialog
         var backups = new BackupStore(settings.ResolvedBackupFolder);
 
         // ── Sprache ──────────────────────────────────────────────
-        var languages = new[] { ("English", "en"), ("German", "de") };
+        // Die Namen bleiben unübersetzt: Jede Sprache nennt sich selbst, so
+        // wie ihre Sprecher sie schreiben. Wer Türkisch sucht, sucht nach
+        // „Türkçe", nicht nach dem türkischen Wort in seiner eigenen Sprache.
         var language = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = languages.Select(l => Strings.T(l.Item1)).ToList(),
-            SelectedIndex = Strings.Current == "de" ? 1 : 0,
+            ItemsSource = Strings.SupportedNames.ToList(),
+            SelectedIndex = Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
         };
 
         // ── Standardprofil ───────────────────────────────────────
@@ -56,7 +58,7 @@ public static class SettingsDialog
         var rename = new TextBox { Text = settings.RenamePattern };
         var renameExample = Hint("");
         void UpdateExample() =>
-            renameExample.Text = "Ergebnis: " + rename.Text
+            renameExample.Text = Strings.T("Result: ") + rename.Text
                 .Replace("{track}", "04").Replace("{title}", "Nebelfeld")
                 .Replace("{artist}", "Kollektiv Halle").Replace("{album}", "Nachtfahrt")
                 .Replace("{disc}", "1").Replace("{year}", "2025") + ".flac";
@@ -70,18 +72,18 @@ public static class SettingsDialog
         var retention = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ItemsSource = Retentions.Select(r => r.Label).ToList(),
+            ItemsSource = Retentions.Select(r => Strings.T(r.Label)).ToList(),
             SelectedIndex = Math.Max(0, Array.FindIndex(Retentions, r => r.Value == settings.BackupRetention)),
         };
 
         var info = Hint("");
-        var deleteBtn = new Button { Content = "Alle Sicherungen löschen" };
+        var deleteBtn = new Button { Content = Strings.T("Delete all backups") };
         void RefreshInfo()
         {
             var (count, bytes) = backups.Info();
             info.Text = count == 0
-                ? "Keine Sicherungen gespeichert."
-                : $"{count} Datei(en), {bytes / 1024.0 / 1024.0:0.#} MB";
+                ? Strings.T("No backups stored.")
+                : Strings.T("{0} file(s), {1} MB", count, $"{bytes / 1024.0 / 1024.0:0.#}");
             deleteBtn.IsEnabled = count > 0;
         }
         RefreshInfo();
@@ -93,7 +95,7 @@ public static class SettingsDialog
             // das ins Leere läuft.
             history.ForgetBackups(gone);
             RefreshInfo();
-            info.Text += ". Betroffene Verlaufseinträge sind nicht mehr rückgängig machbar.";
+            info.Text += Strings.T(". Affected history entries can no longer be undone.");
         };
 
         // ── Aufbau ───────────────────────────────────────────────
@@ -103,28 +105,27 @@ public static class SettingsDialog
             language,
             Hint(Strings.T("Takes effect after a restart."))));
 
-        panel.Children.Add(Group("Standardprofil",
-            Row(Field("Dateiformat", fmt), Field("Samplerate", rate)),
-            Hint("Gilt nur, wenn ein Ordner leer oder uneinheitlich ist. " +
-                 "Einheitliche Ordner bestimmen ihr Ziel selbst.")));
+        panel.Children.Add(Group("Default profile",
+            Row(Field("File format", fmt), Field("Sample rate", rate)),
+            Hint("Only applies when a folder is empty or mixed. " +
+                 "Uniform folders decide their own target.")));
 
         var onlyAudio = new CheckBox
         {
-            Content = "Nur Ordner mit Audiodateien zeigen",
+            Content = "Only show folders containing audio",
             IsChecked = settings.OnlyAudioFolders,
         };
         onlyAudio.Checked += (_, _) => settings.OnlyAudioFolders = true;
         onlyAudio.Unchecked += (_, _) => settings.OnlyAudioFolders = false;
 
-        panel.Children.Add(Group("Bibliothek",
+        panel.Children.Add(Group("Library",
             onlyAudio,
-            Hint("Blendet Ordner aus, unter denen nirgends Musik liegt. Das Aufklappen " +
-                 "dauert dadurch etwas länger, weil dafür in jeden Unterordner geschaut " +
-                 "werden muss.")));
+            Hint("Hides folders with no music anywhere below them. Expanding takes a " +
+                 "little longer because every subfolder has to be checked.")));
 
         var conform = new CheckBox
         {
-            Content = "Format und Samplerate angleichen",
+            Content = "Align format and sample rate",
             IsChecked = settings.DefaultAutoConform,
         };
         conform.Checked += (_, _) => settings.DefaultAutoConform = true;
@@ -132,7 +133,7 @@ public static class SettingsDialog
 
         var inherit = new CheckBox
         {
-            Content = "Tags vom Ordner übernehmen",
+            Content = "Inherit tags from the folder",
             IsChecked = settings.DefaultInheritTags,
         };
         inherit.Checked += (_, _) => settings.DefaultInheritTags = true;
@@ -143,13 +144,14 @@ public static class SettingsDialog
         {
             var n = settings.FolderRules.Count;
             ownRules.Text = n == 0
-                ? "Kein Ordner weicht davon ab."
-                : $"{n} Ordner {(n == 1 ? "hat" : "haben")} eine eigene Einstellung und " +
-                  "bleibt davon unberührt.";
+                ? Strings.T("No folder deviates from this.")
+                : Strings.T(n == 1
+                    ? "{0} folder has its own setting and is not affected."
+                    : "{0} folders have their own setting and are not affected.", n);
         }
         RefreshRules();
 
-        var clearRules = new Button { Content = "Eigene Ordnereinstellungen zurücksetzen" };
+        var clearRules = new Button { Content = Strings.T("Reset per-folder settings") };
         clearRules.Click += (_, _) =>
         {
             settings.FolderRules.Clear();
@@ -157,42 +159,42 @@ public static class SettingsDialog
             RefreshRules();
         };
 
-        panel.Children.Add(Group("Beim Ablegen",
+        panel.Children.Add(Group("On drop",
             conform,
             inherit,
-            Hint("Gilt für alle Ordner. In der Ordner-Analyse rechts lässt sich das " +
-                 "für einzelne Ordner abweichend einstellen; eine solche Einstellung " +
-                 "gewinnt und bleibt auch bestehen, wenn du hier etwas änderst."),
+            Hint("Applies to every folder. The folder analysis on the right can set " +
+                 "this differently for a single folder; that setting wins and stays " +
+                 "even when you change something here."),
             ownRules,
             clearRules));
 
-        panel.Children.Add(Group("Namensschema",
-            Field("Dateiname → Titel", parse),
-            Field("Titel → Dateiname", rename),
+        panel.Children.Add(Group("Naming scheme",
+            Field("File name → title", parse),
+            Field("Title → file name", rename),
             renameExample));
 
-        panel.Children.Add(Group("Kodierung",
-            Field("Standard-Bitrate", kbps),
-            Hint("Wird nur herangezogen, wenn eine Konvertierung ohnehin verlustbehaftet " +
-                 "kodiert. Vorhandene Dateien werden nie wegen ihrer Bitrate angefasst.")));
+        panel.Children.Add(Group("Encoding",
+            Field("Default bitrate", kbps),
+            Hint("Only used when a conversion encodes lossily anyway. Existing files " +
+                 "are never touched because of their bitrate.")));
 
-        panel.Children.Add(Group("Sicherungen",
-            Field("Automatisch löschen", retention),
-            Hint("Läuft beim Start. Ältere Sicherungen werden entfernt, die zugehörigen " +
-                 "Verlaufseinträge lassen sich danach nicht mehr rückgängig machen."),
+        panel.Children.Add(Group("Backups",
+            Field("Delete automatically", retention),
+            Hint("Runs on start. Older backups are removed, and the history entries " +
+                 "that belong to them can no longer be undone afterwards."),
             info,
             deleteBtn,
             Hint(settings.ResolvedBackupFolder)));
 
         // ── Explorer-Kontextmenü ─────────────────────────────────
         var shellState = Hint("");
-        var regBtn = new Button { Content = "Registrieren" };
-        var unregBtn = new Button { Content = "Entfernen" };
+        var regBtn = new Button { Content = Strings.T("Register") };
+        var unregBtn = new Button { Content = Strings.T("Remove") };
 
         void RefreshShell()
         {
             var on = ContextMenuRegistration.IsRegistered();
-            shellState.Text = on ? "Eingetragen ✓" : "Nicht eingetragen";
+            shellState.Text = Strings.T(on ? "Registered ✓" : "Not registered");
             regBtn.IsEnabled = !on;
             unregBtn.IsEnabled = on;
         }
@@ -205,7 +207,7 @@ public static class SettingsDialog
                 ContextMenuRegistration.Register(Environment.ProcessPath!);
                 RefreshShell();
             }
-            catch (Exception ex) { shellState.Text = "Fehlgeschlagen: " + ex.Message; }
+            catch (Exception ex) { shellState.Text = Strings.T("Failed: ") + ex.Message; }
         };
         unregBtn.Click += (_, _) =>
         {
@@ -220,7 +222,7 @@ public static class SettingsDialog
             Children = { regBtn, unregBtn },
         };
 
-        panel.Children.Add(Group("Explorer-Kontextmenü",
+        panel.Children.Add(Group("Explorer context menu",
             shellState,
             Hint(Strings.T(
                 "Adds a TagTuner entry to the right click menu for audio files and folders. " +
@@ -266,14 +268,14 @@ public static class SettingsDialog
             checkBtn));
 
         panel.Children.Add(Group("ffmpeg",
-            Hint(FfmpegLocator.Find(settings.FfmpegPath) ?? "nicht gefunden")));
+            Hint(FfmpegLocator.Find(settings.FfmpegPath) ?? Strings.T("not found"))));
 
         var dlg = new ContentDialog
         {
-            Title = "Einstellungen",
+            Title = "Settings",
             Content = new ScrollViewer { Content = panel, MaxHeight = 560 },
-            PrimaryButtonText = "Speichern",
-            CloseButtonText = "Abbrechen",
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = root,
         };
@@ -287,7 +289,8 @@ public static class SettingsDialog
         settings.ParsePattern = parse.SelectedItem as string ?? settings.ParsePattern;
         settings.RenamePattern = rename.Text;
         if (retention.SelectedIndex >= 0) settings.BackupRetention = Retentions[retention.SelectedIndex].Value;
-        if (language.SelectedIndex >= 0) settings.Language = languages[language.SelectedIndex].Item2;
+        if (language.SelectedIndex >= 0)
+            settings.Language = Strings.Supported[language.SelectedIndex];
         if (updateMode.SelectedIndex >= 0) settings.UpdateBehavior = behaviours[updateMode.SelectedIndex].Item2;
         settings.Save();
     }

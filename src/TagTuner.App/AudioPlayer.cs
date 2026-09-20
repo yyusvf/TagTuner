@@ -2,6 +2,8 @@ using TagTuner.Core.Model;
 using Microsoft.UI.Dispatching;
 using Windows.Media.Playback;
 
+using TagTuner.Core.Settings;
+
 namespace TagTuner.App;
 
 /// <summary>
@@ -48,14 +50,14 @@ public sealed class AudioPlayer : IDisposable
 
         _player.MediaFailed += (_, args) => Post(() =>
         {
-            var what = Current?.FileName ?? "Die Datei";
+            var what = Current?.FileName ?? Strings.T("The file");
             Current = null;
             IsPlaying = false;
             Changed?.Invoke();
 
             // OGG und AIFF kann Windows von Haus aus oft nicht — das ist kein
             // Fehler der App, aber der Nutzer soll wissen, woran es liegt.
-            Failed?.Invoke($"{what} lässt sich nicht abspielen ({args.Error}).");
+            Failed?.Invoke(Strings.T("{0} cannot be played ({1}).", what, args.Error));
         });
     }
 

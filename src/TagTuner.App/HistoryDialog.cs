@@ -2,6 +2,9 @@ using TagTuner.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
+using System.Globalization;
+using TagTuner.Core.Settings;
+
 namespace TagTuner.App;
 
 /// <summary>
@@ -28,7 +31,7 @@ public static class HistoryDialog
             {
                 list.Children.Add(new TextBlock
                 {
-                    Text = "Noch keine Vorgänge.",
+                    Text = Strings.T("Nothing has happened yet."),
                     Opacity = 0.6,
                     Margin = new Thickness(0, 8, 0, 8),
                 });
@@ -50,8 +53,10 @@ public static class HistoryDialog
                 });
                 info.Children.Add(new TextBlock
                 {
-                    Text = $"{entry.Timestamp:dd.MM.yyyy HH:mm} · {entry.Files.Count} Datei(en)" +
-                           (entry.CanUndo ? "" : " · keine Sicherung mehr"),
+                    Text = Strings.T("{0} · {1} file(s)",
+                               entry.Timestamp.ToString("g", CultureInfo.CurrentCulture),
+                               entry.Files.Count)
+                           + (entry.CanUndo ? "" : Strings.T(" · no backup left")),
                     FontSize = 11,
                     Opacity = 0.6,
                 });
@@ -60,13 +65,13 @@ public static class HistoryDialog
 
                 var btn = new Button
                 {
-                    Content = "Rückgängig",
+                    Content = Strings.T("Undo"),
                     IsEnabled = entry.CanUndo,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
                 if (!entry.CanUndo)
                     ToolTipService.SetToolTip(btn,
-                        "Die Sicherung wurde gelöscht oder ist abgelaufen.");
+                        Strings.T("The backup was deleted or has expired."));
 
                 btn.Click += (_, _) =>
                 {
@@ -78,8 +83,8 @@ public static class HistoryDialog
                         list.Children.Insert(0, new TextBlock
                         {
                             Text = r.Failed == 0
-                                ? $"{r.Restored} Datei(en) wiederhergestellt."
-                                : $"{r.Restored} wiederhergestellt, {r.Failed} fehlgeschlagen.",
+                                ? Strings.T("{0} file(s) restored.", r.Restored)
+                                : Strings.T("{0} restored, {1} failed.", r.Restored, r.Failed),
                             FontSize = 12,
                             Margin = new Thickness(0, 0, 0, 4),
                         });
@@ -114,10 +119,10 @@ public static class HistoryDialog
 
         var dlg = new ContentDialog
         {
-            Title = "Verlauf",
+            Title = Strings.T("History"),
             Content = new ScrollViewer { Content = list, MaxHeight = 480 },
-            CloseButtonText = "Schließen",
-            SecondaryButtonText = "Verlauf leeren",
+            CloseButtonText = Strings.T("Close"),
+            SecondaryButtonText = Strings.T("Clear the history"),
             XamlRoot = root,
         };
 
