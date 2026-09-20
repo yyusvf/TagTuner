@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Ta bort filen",
         ["Description"] = "Beskrivning",
         ["Disc"] = "Skiva",
+        ["Download and install"] = "Ladda ner och installera",
         ["Downloading the update…"] = "Laddar ner uppdateringen…",
         ["Duration"] = "Längd",
         ["Each file is backed up first."] = "Varje fil säkerhetskopieras först.",

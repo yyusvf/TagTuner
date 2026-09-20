@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Bestand verwijderen",
         ["Description"] = "Beschrijving",
         ["Disc"] = "Schijf",
+        ["Download and install"] = "Downloaden en installeren",
         ["Downloading the update…"] = "Update wordt gedownload…",
         ["Duration"] = "Duur",
         ["Each file is backed up first."] = "Van elk bestand wordt eerst een back-up gemaakt.",

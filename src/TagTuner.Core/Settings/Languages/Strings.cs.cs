@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Smazat soubor",
         ["Description"] = "Popis",
         ["Disc"] = "Disk",
+        ["Download and install"] = "Stáhnout a nainstalovat",
         ["Downloading the update…"] = "Stahování aktualizace…",
         ["Duration"] = "Délka",
         ["Each file is backed up first."] = "U každého souboru se nejprve vytvoří záloha.",

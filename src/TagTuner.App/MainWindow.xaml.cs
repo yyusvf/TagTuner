@@ -2813,7 +2813,7 @@ public sealed partial class MainWindow : Window
     private async void OnOpenSettings(object sender, RoutedEventArgs e)
     {
         var beforeFilter = _settings.OnlyAudioFolders;
-        await SettingsDialog.ShowAsync(Root.XamlRoot, _settings, _history);
+        var wanted = await SettingsDialog.ShowAsync(Root.XamlRoot, _settings, _history);
 
         if (beforeFilter != _settings.OnlyAudioFolders)
         {
@@ -2829,6 +2829,9 @@ public sealed partial class MainWindow : Window
         UpdateAnalysisPanel();
         UpdateMetaPanel();
         UpdateFfmpegHint();
+
+        // Zuletzt, weil die App sich dafür beendet.
+        if (wanted is not null) await InstallUpdateAsync(wanted);
     }
 
 

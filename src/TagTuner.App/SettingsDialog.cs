@@ -23,7 +23,14 @@ public static class SettingsDialog
         ("After 30 days", "30"),
     ];
 
-    public static async Task ShowAsync(XamlRoot root, AppSettings settings, HistoryStore history)
+    /// <summary>
+    /// Zeigt die Einstellungen. Zurück kommt die Aktualisierung, die der
+    /// Nutzer installieren möchte, sonst null. Der Dialog kann das nicht
+    /// selbst tun: Die App muss sich dafür beenden, und dazu müsste sie sich
+    /// erst schließen.
+    /// </summary>
+    public static async Task<UpdateCheck?> ShowAsync(
+        XamlRoot root, AppSettings settings, HistoryStore history)
     {
         var backups = new BackupStore(settings.ResolvedBackupFolder);
 
@@ -243,10 +250,25 @@ public static class SettingsDialog
             ? Strings.T("Version {0} was skipped.", skipped)
             : "");
 
+        // Der Dialog schliesst sich zum Installieren, deshalb muss der Klick
+        // beides erreichen: das Gefundene und das Fenster.
+        UpdateCheck? offered = null;
+        UpdateCheck? wanted = null;
+        ContentDialog? host = null;
+
+        var installBtn = new Button
+        {
+            Content = Strings.T("Download and install"),
+            Visibility = Visibility.Collapsed,
+        };
+        installBtn.Click += (_, _) => { wanted = offered; host?.Hide(); };
+
         var checkBtn = new Button { Content = Strings.T("Check for updates now") };
         checkBtn.Click += async (_, _) =>
         {
             checkBtn.IsEnabled = false;
+            installBtn.Visibility = Visibility.Collapsed;
+            offered = null;
             updateState.Text = Strings.T("Searching…");
 
             var found = await UpdateService.CheckAsync(AppInfo.Version);
@@ -258,6 +280,21 @@ public static class SettingsDialog
                 { HasUpdate: true } => Strings.T("Version {0} is available.", found.Version ?? ""),
                 _ => Strings.T("TagTuner is up to date ({0}).", AppInfo.Version),
             };
+
+            // Ohne Setup in der Veröffentlichung gäbe es nichts zu starten;
+            // dann bleibt es bei der Meldung.
+            if (found is { HasUpdate: true, SetupUrl: not null })
+            {
+                offered = found;
+                installBtn.Visibility = Visibility.Visible;
+            }
+        };
+
+        var updateRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 7,
+            Children = { checkBtn, installBtn },
         };
 
         panel.Children.Add(Group("Updates",
@@ -265,7 +302,7 @@ public static class SettingsDialog
             Hint(Strings.T("\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
                            "\"Automatically\" downloads and installs without asking.")),
             updateState,
-            checkBtn));
+            updateRow));
 
         panel.Children.Add(Group("ffmpeg",
             Hint(FfmpegLocator.Find(settings.FfmpegPath) ?? Strings.T("not found"))));
@@ -281,7 +318,13 @@ public static class SettingsDialog
         };
 
         Localizer.Apply(dlg);
-        if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+        host = dlg;
+
+        var answer = await dlg.ShowAsync();
+
+        // Hide() beim Installieren liefert None. Die übrigen Änderungen sollen
+        // trotzdem erhalten bleiben, denn gleich startet die App neu.
+        if (wanted is null && answer != ContentDialogResult.Primary) return null;
 
         settings.DefaultFormat = fmt.SelectedItem as string ?? settings.DefaultFormat;
         if (rate.SelectedIndex >= 0) settings.DefaultSampleRate = Rates[rate.SelectedIndex];
@@ -292,7 +335,13 @@ public static class SettingsDialog
         if (language.SelectedIndex >= 0)
             settings.Language = Strings.Supported[language.SelectedIndex];
         if (updateMode.SelectedIndex >= 0) settings.UpdateBehavior = behaviours[updateMode.SelectedIndex].Item2;
+
+        // Wer jetzt installiert, hat die Version offensichtlich nicht mehr
+        // übersprungen.
+        if (wanted is not null) settings.SkippedVersion = null;
+
         settings.Save();
+        return wanted;
     }
 
     // ── Bausteine ────────────────────────────────────────────────

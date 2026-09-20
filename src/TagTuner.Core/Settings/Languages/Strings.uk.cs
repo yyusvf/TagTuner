@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Видалити файл",
         ["Description"] = "Опис",
         ["Disc"] = "Диск",
+        ["Download and install"] = "Завантажити та встановити",
         ["Downloading the update…"] = "Завантаження оновлення…",
         ["Duration"] = "Тривалість",
         ["Each file is backed up first."] = "Для кожного файлу спершу створюється резервна копія.",

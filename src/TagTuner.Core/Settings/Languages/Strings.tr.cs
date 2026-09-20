@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Dosyayı sil",
         ["Description"] = "Açıklama",
         ["Disc"] = "Disk",
+        ["Download and install"] = "İndir ve kur",
         ["Downloading the update…"] = "Güncelleme indiriliyor…",
         ["Duration"] = "Süre",
         ["Each file is backed up first."] = "Her dosya önce yedeklenir.",

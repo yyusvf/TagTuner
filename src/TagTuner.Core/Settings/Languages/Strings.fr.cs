@@ -125,6 +125,7 @@ public static partial class Strings
         ["Delete file"] = "Supprimer le fichier",
         ["Description"] = "Description",
         ["Disc"] = "Disque",
+        ["Download and install"] = "Télécharger et installer",
         ["Downloading the update…"] = "Téléchargement de la mise à jour…",
         ["Duration"] = "Durée",
         ["Each file is backed up first."] = "Chaque fichier est sauvegardé au préalable.",
