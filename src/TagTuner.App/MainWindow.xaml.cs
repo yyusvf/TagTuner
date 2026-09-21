@@ -2296,7 +2296,9 @@ public sealed partial class MainWindow : Window
     {
         var analysis = tab.Analysis!;
         var target = tab.Target!;
-        var inherited = analysis.Inherited();
+        // Album-Modus: Wer die Übernahme anhat, will einen Ordner, der sich
+        // wie ein Album verhält — auch wenn er gerade noch uneinheitlich ist.
+        var inherited = analysis.Inherited(byMajority: _settings.RuleFor(tab.Path).InheritTags);
         var move = removeFrom is not null;
 
         // Was dieser Ordner an Automatik erlaubt. Ist beides aus, werden die
@@ -2310,15 +2312,19 @@ public sealed partial class MainWindow : Window
             ? incoming.Where(t => !FolderAnalysis.Matches(t, target)).ToList()
             : [];
 
-        // Einsortieren geht nur dort, wo die Nummern lückenlos von 1 an laufen.
-        // Sonst wäre das Nachrücken der Folgetracks eine stille Fälschung —
-        // dieselbe Regel wie beim Umsortieren.
         var existing = tab.Tracks.ToList();
+        var at = Math.Clamp(index, 0, existing.Count);
 
         // Die Track-Nummer ist ein Tag. Wer die Übernahme abgeschaltet hat,
-        // will auch nicht, dass die Folgetracks stillschweigend nachrücken.
-        var canInsert = rule.InheritTags && IsContiguous(existing) && index < existing.Count;
-        var at = Math.Clamp(index, 0, existing.Count);
+        // will auch nicht, dass Nummern vergeben oder verschoben werden.
+        //
+        // Ist sie an, landet die Datei dort, wo sie abgelegt wurde, und der
+        // Ordner wird anschließend von 1 an durchnummeriert. Vorher hing das
+        // Einsortieren daran, dass der Ordner schon lückenlos nummeriert war;
+        // andernfalls bekam die Datei die nächste freie Nummer und sprang beim
+        // nächsten Einlesen ans Ende — sichtbar woanders hin, als man sie
+        // abgelegt hatte.
+        var renumber = rule.InheritTags;
 
         if (!_settings.SkipConformDialog)
         {
@@ -2355,12 +2361,12 @@ public sealed partial class MainWindow : Window
 
             if (rule.InheritTags)
             {
-                text.AppendLine(canInsert
-                    ? Strings.T("Inserted from track {0} on; the ones after it move up.", at + 1)
-                    : existing.Count == 0
-                        ? Strings.T("The folder is empty, numbering starts at 1.")
-                        : Strings.T("Appended at the end, the folder is not numbered "
-                                    + "from 1 without gaps."));
+                text.AppendLine(existing.Count == 0
+                    ? Strings.T("The folder is empty, numbering starts at 1.")
+                    : at >= existing.Count
+                        ? Strings.T("Appended at the end as track {0}.", existing.Count + 1)
+                        : Strings.T("Inserted from track {0} on; the ones after it move up.",
+                                    at + 1));
             }
 
             if (target.FromDefaultProfile)
@@ -2398,7 +2404,9 @@ public sealed partial class MainWindow : Window
         var errors = new List<string>();
         var notes = new List<string>();
 
-        var number = canInsert ? (uint)(at + 1) : analysis.NextTrackNumber();
+        // Die Nummer der ersten hereinkommenden Datei ist ihre Stelle in der
+        // Liste. Ohne Übernahme wird gar keine geschrieben.
+        var number = (uint)(at + 1);
         var done = 0;
 
         for (var i = 0; i < incoming.Count; i++)
@@ -2476,13 +2484,24 @@ public sealed partial class MainWindow : Window
             ShowProgress(true, (i + 1) * 100.0 / incoming.Count);
         }
 
-        // Erst jetzt nachrücken — um genau so viele, wie tatsächlich ankamen.
-        if (canInsert && done > 0)
+        // Erst jetzt die schon vorhandenen Dateien auf ihre neue Nummer
+        // bringen — um genau so viele, wie tatsächlich ankamen. Geschrieben
+        // wird nur, was sich wirklich ändert: Hängt man hinten an, ist das
+        // nichts, und es entsteht keine einzige überflüssige Sicherung.
+        if (renumber && done > 0)
         {
-            // Die Folgetracks werden umnummeriert, also auch beschrieben.
-            var tail = existing.Skip(at).ToList();
-            ReleaseIfAffected(tail);
-            await ShiftNumbersAsync(tail, (uint)done, svc, files, errors);
+            var fixes = new List<(AudioTrack Track, uint Number)>();
+            for (var i = 0; i < existing.Count; i++)
+            {
+                var wanted = (uint)(i < at ? i + 1 : i + 1 + done);
+                if (existing[i].Track != wanted) fixes.Add((existing[i], wanted));
+            }
+
+            if (fixes.Count > 0)
+            {
+                ReleaseIfAffected(fixes.Select(f => f.Track));
+                await WriteNumbersAsync(fixes, svc, files, errors);
+            }
         }
 
         if (files.Count > 0)
@@ -2521,15 +2540,22 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Schiebt die Tracks ab der Einfügestelle um <paramref name="by"/> nach hinten.</summary>
-    private static async Task ShiftNumbersAsync(
-        List<AudioTrack> tail, uint by, ConversionService svc,
+    /// <summary>
+    /// Schreibt Track-Nummern. Von hinten nach vorn, wenn es aufwärts geht,
+    /// damit unterwegs nie zwei Dateien dieselbe Nummer tragen.
+    /// </summary>
+    private static async Task WriteNumbersAsync(
+        List<(AudioTrack Track, uint Number)> plan, ConversionService svc,
         List<HistoryFile> files, List<string> errors)
     {
-        // Von hinten, damit unterwegs nie zwei Dateien dieselbe Nummer tragen.
-        foreach (var track in Enumerable.Reverse(tail))
+        var rising = plan.Any(p => p.Number > p.Track.Track);
+        var order = rising ? Enumerable.Reverse(plan) : plan;
+
+        foreach (var (track, number) in order)
         {
-            var outcome = await Task.Run(() =>
-                svc.WriteTagsOnly(track, new TagEdit { Track = track.Track + by }));
+            var outcome = await Task.Run(
+                () => svc.WriteTagsOnly(track, new TagEdit { Track = number }));
+
             if (outcome.Success)
             {
                 if (outcome.History is not null) files.Add(outcome.History);
@@ -2538,11 +2564,6 @@ public sealed partial class MainWindow : Window
                             + Strings.T("number not moved ({0})", outcome.Error));
         }
     }
-
-    private static bool IsContiguous(IReadOnlyList<AudioTrack> tracks) =>
-        tracks.Count > 0 && tracks.All(t => t.Track > 0)
-        && tracks.Select(t => t.Track).OrderBy(n => n)
-                 .SequenceEqual(Enumerable.Range(1, tracks.Count).Select(i => (uint)i));
 
     private static string UniquePath(string path)
     {
@@ -2561,10 +2582,14 @@ public sealed partial class MainWindow : Window
     // ══ Umsortieren ══════════════════════════════════════════════
 
     /// <summary>
-    /// Track-Nummern nach dem Ziehen neu vergeben — aber nur, wenn der Ordner
-    /// lückenlos von 1 an nummeriert war. Enthält er eine Teilauswahl eines
-    /// Albums (Tracks 1, 2, 5, 11 …), wäre Durchnummerieren eine stille
-    /// Fälschung der Original-Nummern.
+    /// Track-Nummern nach dem Ziehen neu vergeben.
+    ///
+    /// Maßgeblich ist allein der Schalter „Tags vom Ordner übernehmen": Er
+    /// sagt, dass dieser Ordner ein Album ist und seine Nummern der
+    /// Reihenfolge folgen sollen. Früher hing es zusätzlich daran, ob der
+    /// Ordner schon lückenlos von 1 an nummeriert war — bei einer
+    /// Teilauswahl (Tracks 1, 2, 5, 11 …) geschah dann gar nichts, und das
+    /// Ziehen blieb folgenlos.
     /// </summary>
     private async void OnPaneReordered(object? sender, TrackPane pane)
     {
@@ -2573,10 +2598,10 @@ public sealed partial class MainWindow : Window
 
         var order = tab.Tracks.ToList();
 
-        if (!IsContiguous(order))
+        if (!_settings.RuleFor(tab.Path).InheritTags)
         {
             StatusText.Text = Strings.T("Order changed. Track numbers unchanged "
-                + "(the folder is not numbered from 1 without gaps)");
+                + "(tag inheritance is off for this folder)");
             return;
         }
 

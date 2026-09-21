@@ -77,7 +77,15 @@ public sealed class FolderAnalysis
     /// Werte, die ein neu hinzukommender Track vom Ordner erben kann —
     /// also alles, worin sich die vorhandenen Tracks einig sind.
     /// </summary>
-    public InheritedTags Inherited()
+    /// <summary>
+    /// Was ein hineingelegtes Lied vom Ordner übernimmt.
+    ///
+    /// <paramref name="byMajority"/> ist der Album-Modus: Dann entscheidet der
+    /// häufigste Wert, nicht die Einstimmigkeit. Ein Album, bei dem ein
+    /// einziges Lied einen abweichenden Interpreten trägt, würde sonst gar
+    /// nichts vererben, und genau dort erwartet man es am ehesten.
+    /// </summary>
+    public InheritedTags Inherited(bool byMajority = false)
     {
         return new InheritedTags
         {
@@ -93,11 +101,24 @@ public sealed class FolderAnalysis
         string? Agreed(Func<AudioTrack, string> pick)
         {
             if (Tracks.Count == 0) return null;
+
             var values = Tracks.Select(pick)
                                .Where(v => !string.IsNullOrWhiteSpace(v))
-                               .Distinct(StringComparer.Ordinal)
                                .ToList();
-            return values.Count == 1 ? values[0] : null;
+            if (values.Count == 0) return null;
+
+            var groups = values.GroupBy(v => v, StringComparer.Ordinal)
+                               .Select(g => (Value: g.Key, Count: g.Count()))
+                               .ToList();
+
+            if (groups.Count == 1) return groups[0].Value;
+            if (!byMajority) return null;
+
+            // Bei Gleichstand gewinnt der Wert, der zuerst vorkommt. Das ist
+            // willkürlich, aber wiederholbar — und ein Ordner, in dem zwei
+            // Alben je zur Hälfte liegen, ist ohnehin keiner.
+            var most = groups.Max(g => g.Count);
+            return groups.First(g => g.Count == most).Value;
         }
     }
 
