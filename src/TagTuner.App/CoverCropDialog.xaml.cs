@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
@@ -22,6 +23,7 @@ public sealed partial class CoverCropDialog : ContentDialog
 
     private readonly byte[] _source;
     private readonly ImageInfo _info;
+    private bool _asPng;
 
     // Das Bild innerhalb der Bühne: gleichmäßig skaliert, zentriert.
     private readonly double _imageX, _imageY, _imageW, _imageH;
@@ -42,11 +44,29 @@ public sealed partial class CoverCropDialog : ContentDialog
     /// </summary>
     private bool _ready;
 
-    public CoverCropDialog(byte[] source, ImageInfo info)
+    /// <summary>
+    /// Im Verkleinern-Modus kommen Kantenlänge und Qualität dazu, und die
+    /// Vorschau sagt, wie groß das Ergebnis wirklich wird. Beim Zuschneiden
+    /// eines frisch eingefügten Bildes wäre beides eine Frage zu viel.
+    /// </summary>
+    private readonly bool _resizing;
+
+    private readonly int[] _edges = [1500, 1000, 800, 600, 500, 400, 300];
+
+    /// <summary>
+    /// Zählt die angestoßenen Schätzungen. Die Größe lässt sich nicht
+    /// ausrechnen, sie wird gemessen, indem tatsächlich kodiert wird. Zieht
+    /// man am Schieber, überholen sich die Läufe; nur der jüngste darf
+    /// schreiben.
+    /// </summary>
+    private int _pending;
+
+    public CoverCropDialog(byte[] source, ImageInfo info, bool resizing = false)
     {
         InitializeComponent();
         _source = source;
         _info = info;
+        _resizing = resizing;
 
         var scale = Math.Min(StageSize / info.Width, StageSize / info.Height);
         _imageW = info.Width * scale;
@@ -67,8 +87,84 @@ public sealed partial class CoverCropDialog : ContentDialog
         _cropX = _imageX + (_imageW - _cropSide) / 2;
         _cropY = _imageY + (_imageH - _cropSide) / 2;
 
+        if (_resizing)
+        {
+            Title = Strings.T("Resize cover");
+            Hint.Text = Strings.T(
+                "Drag the frame to choose a section, or leave it as it is. "
+                + "The result is always square.");
+
+            ResizeOptions.Visibility = Visibility.Visible;
+
+            foreach (var n in _edges)
+                EdgeBox.Items.Add(Strings.T("{0} × {0} pixels", n));
+
+            // Nicht größer anbieten als das Bild ist: Hochrechnen bringt keine
+            // Bildpunkte dazu, nur Dateigröße.
+            var longest = Math.Max(info.Width, info.Height);
+            var start = Array.FindIndex(_edges, n => n <= longest);
+            EdgeBox.SelectedIndex = start < 0 ? _edges.Length - 1 : start;
+        }
+
+        // Die Beschriftungen stehen im Markup auf Englisch; ohne diesen Lauf
+        // bliebe der Dialog in jeder Sprache englisch.
+        Localizer.Apply(this);
+
         _ready = true;
         Redraw();
+        if (_resizing) Estimate();
+    }
+
+    private void OnOutputChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ready) Estimate();
+    }
+
+    private void OnQualityChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_ready) Estimate();
+    }
+
+    /// <summary>Was am Ende herauskommt, durch tatsächliches Kodieren gemessen.</summary>
+    private async void Estimate()
+    {
+        var mine = ++_pending;
+        ResultLabel.Text = Strings.T("calculating…");
+
+        var result = await BuildAsync();
+        if (mine != _pending) return;
+
+        if (result is null)
+        {
+            ResultLabel.Text = Strings.T("Preview not possible");
+            return;
+        }
+
+        var before = Strings.T("Before {0} KB ({1} × {2}, {3})",
+            $"{_info.Bytes / 1024.0:0.#}", _info.Width, _info.Height, _info.Format);
+        var after = Strings.T("After {0} KB as JPEG", $"{result.Length / 1024.0:0.#}");
+        var delta = result.Length < _info.Bytes
+            ? Strings.T("{0} % smaller", 100 - result.Length * 100 / _info.Bytes)
+            : Strings.T("larger than the original");
+
+        ResultLabel.Text = before + Environment.NewLine + after + ", " + delta;
+    }
+
+    /// <summary>Das Ergebnis aus Ausschnitt, Kantenlänge und Qualität.</summary>
+    private Task<byte[]?> BuildAsync()
+    {
+        var crop = Selection;
+
+        if (!_resizing)
+            return CoverImaging.CropAsync(_source, crop, (uint)Math.Max(1, Math.Round(crop.Size)), _asPng);
+
+        var edge = _edges[Math.Max(0, EdgeBox.SelectedIndex)];
+
+        // Kleiner als der Ausschnitt ist gewollt, größer nie: Das Quadrat aus
+        // dem Bild herauszuvergrößern brächte keinen einzigen Bildpunkt dazu.
+        var side = (uint)Math.Max(1, Math.Min(edge, Math.Round(crop.Size)));
+
+        return CoverImaging.CropAsync(_source, crop, side, asPng: false, QualitySlider.Value / 100.0);
     }
 
     /// <summary>Der gewählte Ausschnitt in Originalpixeln.</summary>
@@ -168,8 +264,12 @@ public sealed partial class CoverCropDialog : ContentDialog
 
         var pixels = (int)Math.Round(Selection.Size);
         SizeLabel.Text = Strings.T("Selection: {0} × {0} pixels", pixels);
-        ResultLabel.Text = Strings.T("Original {0} × {1} · {2}",
-                             _info.Width, _info.Height, _info.Format);
+
+        // Beim Verkleinern steht dort die gemessene Dateigröße, die erst nach
+        // dem Kodieren feststeht. Sie hier zu überschreiben würde flackern.
+        if (_resizing) Estimate();
+        else ResultLabel.Text = Strings.T("Original {0} × {1} · {2}",
+                                          _info.Width, _info.Height, _info.Format);
 
         static void Shade(Microsoft.UI.Xaml.Shapes.Rectangle r,
                           double x, double y, double w, double h)
@@ -187,11 +287,20 @@ public sealed partial class CoverCropDialog : ContentDialog
     public static async Task<byte[]?> CropAsync(
         XamlRoot root, byte[] source, ImageInfo info, bool asPng)
     {
-        var dialog = new CoverCropDialog(source, info) { XamlRoot = root };
+        var dialog = new CoverCropDialog(source, info) { XamlRoot = root, _asPng = asPng };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
+        return await dialog.BuildAsync();
+    }
 
-        var crop = dialog.Selection;
-        var side = (uint)Math.Max(1, Math.Round(crop.Size));
-        return await CoverImaging.CropAsync(source, crop, side, asPng);
+    /// <summary>
+    /// Dasselbe Fenster zum Verkleinern eines vorhandenen Covers: derselbe
+    /// Rahmen zum Zuschneiden, dazu Kantenlänge und Qualität.
+    /// </summary>
+    public static async Task<byte[]?> ResizeAsync(
+        XamlRoot root, byte[] source, ImageInfo info)
+    {
+        var dialog = new CoverCropDialog(source, info, resizing: true) { XamlRoot = root };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
+        return await dialog.BuildAsync();
     }
 }

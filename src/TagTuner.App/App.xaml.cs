@@ -21,7 +21,20 @@ public partial class App : Application
         // Windows-Explorer keine Cover-Thumbnails anzeigt.
         AudioProbe.Configure();
 
-        Launch = CommandLine.Parse(Environment.GetCommandLineArgs().Skip(1).ToList());
+        var line = Environment.GetCommandLineArgs().Skip(1).ToList();
+
+        // Laeuft schon ein TagTuner, bekommt es den Pfad und macht einen Tab
+        // daraus. Dieser Prozess endet dann sofort: Zwei Fenster auf denselben
+        // Ordner wuerden einander die Dateien unter den Haenden wegschreiben.
+        if (SingleInstance.HandOff(line))
+        {
+            // Nicht Exit(): Die Anwendung ist noch nicht so weit aufgebaut,
+            // dass sie sich geordnet beenden koennte.
+            Environment.Exit(0);
+            return;
+        }
+
+        Launch = CommandLine.Parse(line);
 
         CleanUpBackups();
 

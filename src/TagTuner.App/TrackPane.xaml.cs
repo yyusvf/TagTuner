@@ -38,6 +38,14 @@ public sealed partial class TrackPane : UserControl
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? ColumnsResized;
     public event EventHandler<AudioTrack>? PlayRequested;
+    public event EventHandler<AudioTrack>? CopyTagsRequested;
+    public event EventHandler<IReadOnlyList<AudioTrack>>? PasteTagsRequested;
+
+    /// <summary>
+    /// Ob etwas zum Einfügen bereitliegt. Die Liste weiß das nicht von selbst,
+    /// das Hauptfenster hält den Zwischenspeicher.
+    /// </summary>
+    public bool TagsCopied { get; set; }
     public event EventHandler<TrackSort>? SortRequested;
 
     /// <summary>
@@ -344,6 +352,13 @@ public sealed partial class TrackPane : UserControl
         menu.Items.Add(Item("", one ? Strings.T("Copy path")
                                     : Strings.T("Copy {0} paths", picked.Count),
             () => CopyPaths(picked), true));
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        menu.Items.Add(Item("\uE8C8", Strings.T("Copy tags"),
+            () => CopyTagsRequested?.Invoke(this, picked[0]), one));
+        menu.Items.Add(Item("\uE77F", Strings.T("Paste tags"),
+            () => PasteTagsRequested?.Invoke(this, picked), TagsCopied));
 
         menu.Items.Add(new MenuFlyoutSeparator());
 

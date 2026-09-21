@@ -4,6 +4,7 @@ using TagTuner.Core.Metadata;
 using TagTuner.Core.Model;
 using TagTuner.Core.Safety;
 using TagTuner.Core.Settings;
+using TagTuner.Core.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -80,6 +81,8 @@ public sealed partial class MainWindow : Window
             pane.DeleteRequested += OnPaneDeleteRequested;
             pane.PlayRequested += (_, track) => _player.Play(track);
             pane.SortRequested += OnPaneSortRequested;
+            pane.CopyTagsRequested += OnCopyTags;
+            pane.PasteTagsRequested += OnPasteTags;
             pane.NavigateRequested += (_, path) => NavigateActive(path);
             pane.ColumnsResized += (_, _) =>
             {
@@ -130,7 +133,9 @@ public sealed partial class MainWindow : Window
         RebuildChrome();
         _ = LoadTabAsync(ActiveTab, App.Launch.File);
 
-        Fire(CheckForUpdatesAsync(), "Update-Suche");
+        Fire(CheckForUpdatesAsync(), Strings.T("Updates"));
+
+        SingleInstance.Listen(DispatcherQueue, OnSecondLaunch);
 
         Closed += (_, _) =>
         {
@@ -166,7 +171,7 @@ public sealed partial class MainWindow : Window
         try { await work; }
         catch (Exception ex)
         {
-            StatusText.Text = $"{label} fehlgeschlagen: {ex.Message}";
+            StatusText.Text = Strings.T("{0} failed: {1}", label, ex.Message);
         }
     }
 
@@ -488,7 +493,7 @@ public sealed partial class MainWindow : Window
 
         ActiveTab.Navigate(path);
         RebuildChrome();
-        Fire(LoadTabAsync(ActiveTab), "LoadTabAsync");
+        Fire(LoadTabAsync(ActiveTab), Strings.T("Reading…"));
     }
 
     private void OnBack(object sender, RoutedEventArgs e)
@@ -1568,6 +1573,9 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(Item("\uE740", Strings.T("Resize…"),
             hasCover, () => Run(() => ResizeCoverAsync(targets))));
 
+        menu.Items.Add(Item("\uE74E", Strings.T("Extract cover…"),
+            hasCover, () => Run(ExtractCoverAsync)));
+
         menu.Items.Add(Item("\uE74D", many ? Strings.T("Remove cover from {0}", scope) : Strings.T("Remove cover"),
             targets.Any(t => t.HasCover), () => Run(() => ClearCoverAsync(targets))));
 
@@ -1766,6 +1774,12 @@ public sealed partial class MainWindow : Window
 
     // ── Größe anpassen ───────────────────────────────────────────
 
+    /// <summary>
+    /// Verkleinert das Cover — im selben Fenster, in dem auch ein nicht
+    /// quadratisches Bild zugeschnitten wird. Zwei getrennte Fenster für
+    /// „Ausschnitt wählen" und „kleiner machen" waren eine künstliche
+    /// Trennung: Wer verkleinert, will oft genug auch den Rand weghaben.
+    /// </summary>
     private async Task ResizeCoverAsync(List<AudioTrack> targets)
     {
         if (_cover is null) return;
@@ -1778,95 +1792,54 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var sizes = new[] { 1500, 1000, 800, 600, 500, 400, 300 };
-
-        var size = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        foreach (var n in sizes) size.Items.Add($"{n} × {n} Pixel");
-        size.SelectedIndex = Array.FindIndex(sizes, n => n <= Math.Max(info.Width, info.Height));
-        if (size.SelectedIndex < 0) size.SelectedIndex = sizes.Length - 1;
-
-        var quality = new Slider
-        {
-            Minimum = 40, Maximum = 100, Value = 85,
-            IsThumbToolTipEnabled = false,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-
-        var preview = new TextBlock
-        {
-            FontSize = 11,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Res("TextFillColorTertiaryBrush"),
-        };
-
-        // Die Größe lässt sich nicht ausrechnen — sie wird gemessen, indem
-        // tatsächlich kodiert wird. Das kostet wenig und lügt nicht.
-        var pending = 0;
-        async void Estimate()
-        {
-            var mine = ++pending;
-            preview.Text = Strings.T("calculating…");
-
-            var target = (uint)sizes[Math.Max(0, size.SelectedIndex)];
-            var q = quality.Value / 100.0;
-            var result = await CoverImaging.ResizeAsync(_cover.Data, target, asPng: false, q);
-
-            if (mine != pending) return;
-            preview.Text = result is null
-                ? Strings.T("Preview not possible")
-                : Strings.T("Before {0} KB ({1} × {2}, {3})",
-                            $"{info.Bytes / 1024.0:0.#}", info.Width, info.Height, info.Format)
-                  + Environment.NewLine
-                  + Strings.T("After {0} KB as JPEG", $"{result.Length / 1024.0:0.#}")
-                  + ", "
-                  + (result.Length < info.Bytes
-                      ? Strings.T("{0} % smaller", 100 - result.Length * 100 / info.Bytes)
-                      : Strings.T("larger than the original"));
-        }
-
-        size.SelectionChanged += (_, _) => Estimate();
-        quality.ValueChanged += (_, _) => Estimate();
-        Estimate();
-
-        var panel = new StackPanel { Spacing = 12, Width = 340 };
-        panel.Children.Add(Labelled(Strings.T("Maximum edge length"), size));
-        panel.Children.Add(Labelled(Strings.T("JPEG quality"), quality));
-        panel.Children.Add(preview);
-
-        var dialog = new ContentDialog
-        {
-            Title = Strings.T("Resize cover"),
-            Content = panel,
-            PrimaryButtonText = Strings.T("Apply"),
-            CloseButtonText = Strings.T("Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = Root.XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-
-        var final = await CoverImaging.ResizeAsync(
-            _cover.Data, (uint)sizes[Math.Max(0, size.SelectedIndex)],
-            asPng: false, quality.Value / 100.0);
-
-        if (final is null)
-        {
-            await Inform(Strings.T("Resizing failed"),
-                         Strings.T("The image could not be re-encoded."));
-            return;
-        }
+        var final = await CoverCropDialog.ResizeAsync(Root.XamlRoot, _cover.Data, info);
+        if (final is null) return;   // abgebrochen oder nicht kodierbar
 
         await WriteCoverAsync(targets,
             new TagEdit { Cover = final, CoverMimeType = "image/jpeg" },
-            $"Cover verkleinern ({final.Length / 1024.0:0.#} KB)");
+            Strings.T("Shrink cover ({0} KB)", $"{final.Length / 1024.0:0.#}"));
+    }
 
-        static StackPanel Labelled(string caption, FrameworkElement control)
+    /// <summary>
+    /// Schreibt das Cover als Bilddatei heraus, Byte für Byte wie es im Tag
+    /// steht. Kein Umkodieren: Wer das Bild herausholt, will das Original,
+    /// nicht eine zweite Generation davon.
+    /// </summary>
+    private async Task ExtractCoverAsync()
+    {
+        if (_cover is null) return;
+
+        var png = ImageInfo.ShortName(_cover.MimeType) == "PNG";
+        var extension = png ? ".png" : ".jpg";
+
+        var picker = new Windows.Storage.Pickers.FileSavePicker
         {
-            var sp = new StackPanel { Spacing = 4 };
-            sp.Children.Add(new TextBlock { Text = caption, FontSize = 11.5, Opacity = 0.8 });
-            sp.Children.Add(control);
-            return sp;
-        }
+            SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary,
+            SuggestedFileName = SuggestedCoverName(),
+        };
+        picker.FileTypeChoices.Add(png ? "PNG" : "JPEG", [extension]);
+
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+        var file = await picker.PickSaveFileAsync();
+        if (file is null) return;
+
+        await File.WriteAllBytesAsync(file.Path, _cover.Data);
+        StatusText.Text = Strings.T("Cover saved as {0}", Path.GetFileName(file.Path));
+    }
+
+    /// <summary>Ein Name, der zum Ordner passt, statt „Unbenannt".</summary>
+    private string SuggestedCoverName()
+    {
+        var sel = TargetTracks();
+        var album = sel.Select(t => t.Album).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a));
+        var name = string.IsNullOrWhiteSpace(album) ? ActiveTab.Name : album;
+
+        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, ' ');
+        name = name.Trim();
+
+        return name.Length == 0 ? "cover" : name;
     }
 
     // ── Entfernen und Schreiben ──────────────────────────────────
@@ -2264,7 +2237,7 @@ public sealed partial class MainWindow : Window
         if (files.Count > 0) _history.Add("batch", label, files);
 
         // Nach einem Schreibvorgang kann jedes Cover ein anderes sein.
-        TrackArt.Forget();
+        TrackArt.Reload();
         InvalidateIndex();
 
         SetBusy(false, null);
@@ -2276,8 +2249,16 @@ public sealed partial class MainWindow : Window
 
     private async void OnPaneFilesDropped(object? sender, FilesDroppedArgs args)
     {
-        if (args.Pane.Tab is { Analysis: not null, Target: not null } tab)
-            await ImportAsync(tab, args.Paths, args.Index, null);
+        if (args.Pane.Tab is not { Analysis: not null, Target: not null } tab)
+        {
+            // Der Ordner wird gerade noch gelesen. Vorher weiß niemand, auf
+            // welches Format angeglichen und welche Tags übernommen werden
+            // sollen. Früher fiel das Ablegen hier wortlos unter den Tisch.
+            StatusText.Text = Strings.T("The folder is still being read, try again in a moment.");
+            return;
+        }
+
+        await ImportAsync(tab, args.Paths, args.Index, null);
     }
 
     /// <summary>Tracks aus der anderen Hälfte — verschieben, mit Strg kopieren.</summary>
@@ -2285,8 +2266,17 @@ public sealed partial class MainWindow : Window
     {
         var to = args.To.Tab;
         var from = args.From.Tab;
-        if (to is not { Analysis: not null, Target: not null } || from is null) return;
-        if (string.Equals(to.Path, from.Path, StringComparison.OrdinalIgnoreCase)) return;
+        if (from is null) return;
+
+        // Innerhalb desselben Ordners ist das Umsortieren, nicht Verschieben.
+        if (to is not null && string.Equals(to.Path, from.Path, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (to is not { Analysis: not null, Target: not null })
+        {
+            StatusText.Text = Strings.T("The folder is still being read, try again in a moment.");
+            return;
+        }
 
         await ImportAsync(to, args.Tracks.Select(t => t.Path).ToList(), args.Index,
                           args.Copy ? null : from);
@@ -2358,7 +2348,9 @@ public sealed partial class MainWindow : Window
                 if (inherited.Genre is not null) erben.Add(Strings.T("Genre"));
                 text.AppendLine(erben.Count > 0
                     ? Strings.T("Inherited from the folder: {0}", string.Join(", ", erben))
-                    : Strings.T("The folder agrees on no tag, so nothing is inherited."));
+                    : existing.Count == 0
+                        ? Strings.T("The folder is empty, so there is nothing to inherit from.")
+                        : Strings.T("The folder agrees on no tag, so nothing is inherited."));
             }
 
             if (rule.InheritTags)
@@ -2500,7 +2492,7 @@ public sealed partial class MainWindow : Window
                                    done, tab.Name),
                          files);
 
-        TrackArt.Forget();
+        TrackArt.Reload();
         InvalidateIndex();
 
         SetBusy(false, null);
@@ -2804,7 +2796,7 @@ public sealed partial class MainWindow : Window
     {
         if (await HistoryDialog.ShowAsync(Root.XamlRoot, _history))
         {
-            TrackArt.Forget();
+            TrackArt.Reload();
             InvalidateIndex();
             await MergeTabAsync(ActiveTab);
         }   // nach einem Undo liegt anderes im Ordner
@@ -2845,5 +2837,318 @@ public sealed partial class MainWindow : Window
         var missing = FfmpegLocator.Find(_settings.FfmpegPath) is null;
         FfmpegText.Text = missing ? "ffmpeg fehlt" : "";
         FfmpegText.Visibility = missing ? Visibility.Visible : Visibility.Collapsed;
+    }
+    // ══ Umbenennen ═══════════════════════════════════════════════
+
+    /// <summary>
+    /// Benennt die Dateien des Ordners nach ihren Metadaten.
+    ///
+    /// Vorher wird gezeigt, was herauskommt: Ein Muster, das man nicht im
+    /// Kopf ausrechnen kann, ist sonst ein Sprung ins Wasser, und die Namen
+    /// von hundert Dateien wieder herzustellen macht niemandem Freude.
+    /// Jede Datei wird gesichert, der Verlauf holt sie zurück.
+    /// </summary>
+    private async void OnRenameFiles(object sender, RoutedEventArgs e)
+    {
+        var tracks = ActiveTab.Tracks.ToList();
+        if (tracks.Count == 0) return;
+
+        var pattern = new TextBox
+        {
+            Text = _settings.RenamePattern,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+
+        var preview = new TextBlock
+        {
+            FontSize = 11.5,
+            FontFamily = new FontFamily("Consolas"),
+            TextWrapping = TextWrapping.NoWrap,
+            Foreground = Res("TextFillColorSecondaryBrush"),
+        };
+
+        var summary = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+
+        List<(AudioTrack Track, string Target)> plan = [];
+
+        void Recalculate()
+        {
+            plan = RenamePlan(tracks, pattern.Text);
+
+            var changing = plan.Count;
+            summary.Text = changing == 0
+                ? Strings.T("Every file already has this name.")
+                : Strings.T("{0} of {1} file(s) get a new name.", changing, tracks.Count);
+
+            preview.Text = string.Join(Environment.NewLine,
+                plan.Take(8).Select(p => p.Track.FileName + "  →  " + Path.GetFileName(p.Target)));
+
+            if (plan.Count > 8)
+                preview.Text += Environment.NewLine
+                              + Strings.T("… and {0} more", plan.Count - 8);
+        }
+
+        pattern.TextChanged += (_, _) => Recalculate();
+        Recalculate();
+
+        var panel = new StackPanel { Spacing = 10, Width = 460 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = string.Join("  ", FileNaming.Placeholders),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextFillColorTertiaryBrush"),
+        });
+        panel.Children.Add(pattern);
+        panel.Children.Add(summary);
+        panel.Children.Add(new ScrollViewer
+        {
+            MaxHeight = 190,
+            HorizontalScrollMode = ScrollMode.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = preview,
+        });
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.T("Rename by metadata"),
+            Content = panel,
+            PrimaryButtonText = Strings.T("Rename"),
+            CloseButtonText = Strings.T("Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Root.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || plan.Count == 0) return;
+
+        // Das Muster, mit dem es zuletzt gut ging, ist das bessere Standardmuster.
+        _settings.RenamePattern = pattern.Text;
+        _settings.Save();
+
+        await RunRenameAsync(plan);
+    }
+
+    /// <summary>
+    /// Was das Muster aus diesen Tracks macht, ohne die Dateien, die ihren
+    /// Namen behalten. Zwei Tracks dürfen nicht auf demselben Namen landen,
+    /// darum wandert jeder Treffer gleich in die Liste des Belegten.
+    /// </summary>
+    private static List<(AudioTrack Track, string Target)> RenamePlan(
+        IReadOnlyList<AudioTrack> tracks, string pattern)
+    {
+        var plan = new List<(AudioTrack, string)>();
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var track in tracks)
+        {
+            var folder = Path.GetDirectoryName(track.Path)!;
+            var wanted = Path.Combine(folder, FileNaming.Build(track, pattern));
+
+            // Die eigene Datei zählt nicht als Hindernis, sonst bekäme jede
+            // schon richtig benannte Datei ein „(2)" verpasst.
+            if (string.Equals(wanted, track.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                taken.Add(track.Path);
+                continue;
+            }
+
+            var target = FileNaming.Free(wanted, taken);
+            taken.Add(target);
+            plan.Add((track, target));
+        }
+
+        return plan;
+    }
+
+    private async Task RunRenameAsync(List<(AudioTrack Track, string Target)> plan)
+    {
+        ReleaseIfAffected(plan.Select(p => p.Track));
+        SetBusy(true, Strings.T("Renaming {0} file(s)", plan.Count));
+
+        var backups = new BackupStore(_settings.ResolvedBackupFolder);
+        var files = new List<HistoryFile>();
+        var errors = new List<string>();
+
+        for (var i = 0; i < plan.Count; i++)
+        {
+            var (track, target) = plan[i];
+            try
+            {
+                // Erst sichern, dann umbenennen. Der Verlauf legt die Sicherung
+                // an den alten Platz zurück und räumt den neuen Namen weg.
+                var backup = backups.Create(track.Path);
+                File.Move(track.Path, target);
+                files.Add(new HistoryFile
+                {
+                    Original = track.Path,
+                    BackupPath = backup,
+                    OutputPath = target,
+                });
+            }
+            catch (Exception ex) { errors.Add($"{track.FileName}: {ex.Message}"); }
+
+            ShowProgress(true, (i + 1) * 100.0 / plan.Count);
+        }
+
+        if (files.Count > 0)
+            _history.Add("rename", Strings.T("{0} file(s) renamed", files.Count), files);
+
+        TrackArt.Reload();
+        InvalidateIndex();
+
+        SetBusy(false, null);
+        await MergeTabAsync(ActiveTab);
+        await ReportAsync(files.Count, errors, []);
+    }
+
+    /// <summary>Ein Bild als Cover für jede Datei des Ordners.</summary>
+    private void OnCoverForAll(object sender, RoutedEventArgs e)
+    {
+        var targets = ActiveTab.Tracks.ToList();
+        if (targets.Count == 0) return;
+        Run(() => SetFromFileAsync(targets));
+    }
+    // ══ Tags übertragen ══════════════════════════════════════════
+
+    /// <summary>
+    /// Die Tags der zuletzt kopierten Datei, samt Cover.
+    ///
+    /// Bewusst nicht über die Windows-Zwischenablage: Dort landete entweder
+    /// Text, den niemand zurücklesen kann, oder ein eigenes Format, das
+    /// außerhalb der App ohnehin niemand versteht.
+    /// </summary>
+    private (AudioTrack Track, AudioProbe.Cover? Art)? _tagClip;
+
+    private void OnCopyTags(object? sender, AudioTrack track)
+    {
+        AudioProbe.Cover? art = null;
+        try { art = AudioProbe.ReadCover(track.Path); } catch { }
+
+        _tagClip = (track, art);
+        PaneA.TagsCopied = PaneB.TagsCopied = true;
+
+        StatusText.Text = Strings.T("Tags copied from \"{0}\"", track.FileName);
+    }
+
+    private async void OnPasteTags(object? sender, IReadOnlyList<AudioTrack> targets)
+    {
+        if (_tagClip is not { } clip || targets.Count == 0) return;
+
+        var everything = _settings.TagPasteMode == "all";
+
+        // Die Datei, aus der kopiert wurde, noch einmal zu beschreiben wäre
+        // ein Schreibvorgang ohne Wirkung, samt Sicherung und Verlaufseintrag.
+        var write = targets
+            .Where(t => !string.Equals(t.Path, clip.Track.Path, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (write.Count == 0)
+        {
+            StatusText.Text = Strings.T("That is the file the tags came from.");
+            return;
+        }
+
+        var edit = BuildTagCopy(clip.Track, clip.Art, everything);
+
+        var fields = string.Join(", ", CopiedFields(everything));
+        var text = Strings.T("From \"{0}\": {1}", clip.Track.FileName, fields)
+                 + Environment.NewLine + Environment.NewLine
+                 + Strings.T("{0} file(s) will be changed. Each one is backed up first.",
+                             write.Count);
+
+        if (!await Confirm(Strings.T("Paste tags"), text, Strings.T("Apply"))) return;
+
+        await RunJobAsync(Strings.T("Paste tags"), write, _ => (false, null, null, edit));
+    }
+
+    /// <summary>
+    /// Was übernommen wird. Titel und Track-Nummer sind je Datei verschieden:
+    /// Sie mitzuschreiben macht aus einem Album zwölfmal dasselbe Lied, und
+    /// genau deshalb ist „ohne Titel und Nummer" die Vorgabe.
+    /// </summary>
+    private static TagEdit BuildTagCopy(AudioTrack from, AudioProbe.Cover? art, bool everything) => new()
+    {
+        Artist = from.Artist,
+        Album = from.Album,
+        AlbumArtist = from.AlbumArtist,
+        Genre = from.Genre,
+        Composer = from.Composer,
+        Comment = from.Comment,
+        Year = from.Year,
+        Disc = from.Disc,
+
+        Title = everything ? from.Title : null,
+        Track = everything ? from.Track : null,
+
+        // Leeres Array hieße „Cover entfernen". Hat die Quelle keines, bleibt
+        // das Cover des Ziels stehen, statt gelöscht zu werden.
+        Cover = art is { Data.Length: > 0 } ? art.Data : null,
+        CoverMimeType = art?.MimeType,
+    };
+
+    private static IEnumerable<string> CopiedFields(bool everything)
+    {
+        if (everything)
+        {
+            yield return Strings.T("Title");
+            yield return Strings.T("Track");
+        }
+        yield return Strings.T("Artist");
+        yield return Strings.T("Album");
+        yield return Strings.T("Album artist");
+        yield return Strings.T("Year");
+        yield return Strings.T("Disc");
+        yield return Strings.T("Genre");
+        yield return Strings.T("Composer");
+        yield return Strings.T("Comment");
+        yield return Strings.T("Cover");
+    }
+    // ══ Zweiter Start ════════════════════════════════════════════
+
+    /// <summary>
+    /// Jemand hat TagTuner noch einmal gestartet, etwa über das
+    /// Kontextmenü des Explorers. Statt eines zweiten Fensters gibt es einen
+    /// Tab in diesem hier.
+    /// </summary>
+    private void OnSecondLaunch(LaunchTarget target)
+    {
+        var folder = target.FolderToOpen;
+        if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+        {
+            OpenTab(folder);
+
+            // Auf eine Datei gezeigt: sie im neuen Tab auch auswählen.
+            if (target.File is { Length: > 0 } file && File.Exists(file))
+                Fire(LoadTabAsync(ActiveTab, file), Strings.T("Reading…"));
+            else
+                Fire(LoadTabAsync(ActiveTab), Strings.T("Reading…"));
+        }
+
+        ToForeground();
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
+
+    private const int RestoreWindow = 9;
+
+    /// <summary>
+    /// Holt das Fenster nach vorn, auch wenn es minimiert war. Activate()
+    /// allein genügt nicht: Ein minimiertes Fenster bleibt damit minimiert,
+    /// und der Nutzer sieht von seinem neuen Tab nichts.
+    /// </summary>
+    private void ToForeground()
+    {
+        try
+        {
+            var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            ShowWindow(handle, RestoreWindow);
+            SetForegroundWindow(handle);
+            Activate();
+        }
+        catch { }
     }
 }

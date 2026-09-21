@@ -445,9 +445,9 @@
                             <Button x:Name="RecurseBtn" Content="Include subfolders"
                                     HorizontalAlignment="Stretch" Click="OnToggleRecursive" />
                             <Button x:Name="RenameBtn" Content="Rename…"
-                                    HorizontalAlignment="Stretch" IsEnabled="False" />
+                                    HorizontalAlignment="Stretch" Click="OnRenameFiles" />
                             <Button x:Name="CoverAllBtn" Content="Set cover for all…"
-                                    HorizontalAlignment="Stretch" IsEnabled="False" />
+                                    HorizontalAlignment="Stretch" Click="OnCoverForAll" />
                         </StackPanel>
 
                         <!-- Was die App in diesem Ordner von sich aus tun darf.

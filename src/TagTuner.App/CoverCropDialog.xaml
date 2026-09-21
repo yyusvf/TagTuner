@@ -8,7 +8,7 @@
     DefaultButton="Primary">
 
     <StackPanel Spacing="12" Width="380">
-        <TextBlock FontSize="12" TextWrapping="Wrap"
+        <TextBlock x:Name="Hint" FontSize="12" TextWrapping="Wrap"
                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                    Text="The image is not square. Drag the frame over the part you want to keep as the cover." />
 
@@ -51,7 +51,25 @@
                     ValueChanged="OnSizeChanged" />
         </StackPanel>
 
-        <TextBlock x:Name="ResultLabel" FontSize="11"
+        <!-- Nur beim Verkleinern: Wie groß das Ergebnis wird und wie stark es
+             komprimiert. Beim Zuschneiden eines eingefügten Bildes wäre das
+             eine Frage zu viel. -->
+        <StackPanel x:Name="ResizeOptions" Spacing="9" Visibility="Collapsed">
+            <StackPanel Spacing="3">
+                <TextBlock Text="Maximum edge length" FontSize="11.5" Opacity="0.8" />
+                <ComboBox x:Name="EdgeBox" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnOutputChanged" />
+            </StackPanel>
+            <StackPanel Spacing="3">
+                <TextBlock Text="JPEG quality" FontSize="11.5" Opacity="0.8" />
+                <Slider x:Name="QualitySlider" Minimum="40" Maximum="100" Value="85"
+                        IsThumbToolTipEnabled="False"
+                        HorizontalAlignment="Stretch"
+                        ValueChanged="OnQualityChanged" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock x:Name="ResultLabel" FontSize="11" TextWrapping="Wrap"
                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
     </StackPanel>
 </ContentDialog>

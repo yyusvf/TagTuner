@@ -36,6 +36,18 @@ public static class TrackArt
     private static readonly Dictionary<string, ImageSource?> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Die Bilder, die gerade in einer Zeile hängen.
+    ///
+    /// Nur den Zwischenspeicher zu leeren genügt nicht: Eine Zeile, die schon
+    /// dasteht, lädt von sich aus nichts nach. Ihr Pfad hat sich ja nicht
+    /// geändert, also ruft WinUI die Rückmeldung unten nie wieder auf. Darum
+    /// merken wir uns die Bilder und stoßen sie nach einem Schreibvorgang
+    /// selbst an. Schwache Verweise, damit eine weggeworfene Zeile nicht
+    /// ewig am Leben bleibt.
+    /// </summary>
+    private static readonly List<WeakReference<Image>> Live = [];
+
     private const int MaxCached = 3000;
 
     /// <summary>Nicht mehr als eine Handvoll Dateien gleichzeitig anfassen.</summary>
@@ -44,8 +56,13 @@ public static class TrackArt
     private static void OnPathChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Image image) return;
-        var path = e.NewValue as string;
 
+        Track(image);
+        Load(image, e.NewValue as string);
+    }
+
+    private static void Load(Image image, string? path)
+    {
         // Sofort leeren: Sonst zeigt eine wiederverwendete Zeile kurz das
         // Cover des Liedes, das vorher an ihrer Stelle stand.
         image.Source = null;
@@ -68,6 +85,16 @@ public static class TrackArt
 
             ui.TryEnqueue(() => Show(image, path, data));
         });
+    }
+
+    private static void Track(Image image)
+    {
+        for (var i = Live.Count - 1; i >= 0; i--)
+        {
+            if (!Live[i].TryGetTarget(out var known)) { Live.RemoveAt(i); continue; }
+            if (ReferenceEquals(known, image)) return;
+        }
+        Live.Add(new WeakReference<Image>(image));
     }
 
     private static void Show(Image image, string path, byte[]? data)
@@ -97,6 +124,31 @@ public static class TrackArt
             image.Source = picture;
     }
 
-    /// <summary>Nach Schreibvorgängen vergessen, was gemerkt wurde.</summary>
-    public static void Forget() => Cache.Clear();
+    /// <summary>
+    /// Vergisst die gemerkten Bilder und lädt die sichtbaren Zeilen neu.
+    ///
+    /// Nach einem Schreibvorgang aufrufen: Ein ausgetauschtes Cover ändert den
+    /// Dateipfad nicht, also merkt die Liste von allein nichts davon.
+    /// Ohne Angabe gilt es für alle Zeilen.
+    /// </summary>
+    public static void Reload(IEnumerable<string>? paths = null)
+    {
+        var only = paths is null
+            ? null
+            : new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+
+        if (only is null) Cache.Clear();
+        else foreach (var p in only) Cache.Remove(p);
+
+        for (var i = Live.Count - 1; i >= 0; i--)
+        {
+            if (!Live[i].TryGetTarget(out var image)) { Live.RemoveAt(i); continue; }
+
+            var path = GetPath(image);
+            if (string.IsNullOrEmpty(path)) continue;
+            if (only is not null && !only.Contains(path)) continue;
+
+            Load(image, path);
+        }
+    }
 }

@@ -28,6 +28,13 @@ public sealed class AppSettings
     /// <summary>Muster für „Umbenennen".</summary>
     public string RenamePattern { get; set; } = "{track} - {title}";
 
+    /// <summary>
+    /// Was „Tags einfügen" überträgt: „all" nimmt alles mit, „format" lässt
+    /// Titel und Track-Nummer stehen. Die beiden sind je Datei verschieden;
+    /// wer ein Album angleicht, will sie fast nie überschreiben.
+    /// </summary>
+    public string TagPasteMode { get; set; } = "format";
+
     // ── Sicherheit ───────────────────────────────────────────────
     public string? BackupFolder { get; set; }
 

@@ -175,6 +175,25 @@ public static class SettingsDialog
             ownRules,
             clearRules));
 
+        var pasteModes = new[]
+        {
+            ("Everything except title and track number", "format"),
+            ("Everything", "all"),
+        };
+        var pasteMode = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = pasteModes.Select(m => Strings.T(m.Item1)).ToList(),
+            SelectedIndex = Math.Max(0,
+                Array.FindIndex(pasteModes, m => m.Item2 == settings.TagPasteMode)),
+        };
+
+        panel.Children.Add(Group("Tags",
+            Field(Strings.T("Paste tags"), pasteMode),
+            Hint("Copying takes artist, album, album artist, year, disc, genre, " +
+                 "composer, comment and the cover. Title and track number are " +
+                 "different in every file, so they only come along with \"everything\".")));
+
         panel.Children.Add(Group("Naming scheme",
             Field("File name → title", parse),
             Field("Title → file name", rename),
@@ -332,6 +351,7 @@ public static class SettingsDialog
         settings.ParsePattern = parse.SelectedItem as string ?? settings.ParsePattern;
         settings.RenamePattern = rename.Text;
         if (retention.SelectedIndex >= 0) settings.BackupRetention = Retentions[retention.SelectedIndex].Value;
+        if (pasteMode.SelectedIndex >= 0) settings.TagPasteMode = pasteModes[pasteMode.SelectedIndex].Item2;
         if (language.SelectedIndex >= 0)
             settings.Language = Strings.Supported[language.SelectedIndex];
         if (updateMode.SelectedIndex >= 0) settings.UpdateBehavior = behaviours[updateMode.SelectedIndex].Item2;
