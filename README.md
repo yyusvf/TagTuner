@@ -3,7 +3,7 @@
 One window where music folders are treated like playlists. Edit tags, align
 format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
-![Version](https://img.shields.io/badge/version-0.5.1-C8F542)
+![Version](https://img.shields.io/badge/version-0.6.0-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 ## Install
@@ -23,17 +23,26 @@ target for the folder. If the folder is mixed or empty, the default profile
 from the settings applies.
 
 **Drop files in.** A file dropped into a folder is brought to that folder's
-format and sample rate, gets album, artist, year and genre from the folder,
-and the next free track number. You can turn this on or off globally and per
-folder.
+format and sample rate and gets album, artist, year and genre from the folder.
+It lands where you dropped it, and the folder is then numbered from 1 without
+gaps. You can turn this on or off globally and per folder; with it off,
+nothing about the tags is touched.
 
 **Metadata on the left, always visible.** Title, artist, album, year, track,
 disc, genre, album artist, composer and comment. With several files selected,
 each field only shows what they agree on; anything else stays untouched when
 writing. With nothing selected, the whole folder is the target.
 
-**Covers.** Set, copy, paste, remove, shrink. A picture that is not square can
-be cropped first. Anything already square and JPEG or PNG is taken as is.
+**Covers.** Set, copy, paste, extract, remove, resize. Choosing a section and
+scaling happen in the same window. Anything already square and JPEG or PNG is
+taken over byte for byte, without re-encoding.
+
+**Copy tags from one file to the rest.** By default everything except title
+and track number, because those two differ in every file. The other mode takes
+them along. Which one applies is a setting.
+
+**Rename by metadata.** A pattern like `{track} - {title}`, with a preview of
+what comes out before anything is renamed.
 
 **Converting.** MP3, FLAC, WAV, AIFF, M4A and OGG. The bitrate is never
 touched on its own; it only comes into play when a lossy encode happens
@@ -48,7 +57,9 @@ that shows cover and artist per folder. Optionally only folders that actually
 contain music.
 
 **Tabs and split view.** Keep several folders open and drag files between two
-halves. Hold Ctrl to copy instead of move.
+halves. Hold Ctrl to copy instead of move. Opening a folder from the Explorer
+context menu adds a tab to the running window instead of starting a second
+one.
 
 ## Your files are backed up
 
@@ -86,7 +97,7 @@ dotnet build
 dotnet run --project src\TagTuner.App
 
 # Setup and portable ZIP into dist\
-.\tools\build-release.ps1 -Version 0.5.1
+.\tools\build-release.ps1 -Version 0.6.0
 ```
 
 ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
