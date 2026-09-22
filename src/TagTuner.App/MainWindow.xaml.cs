@@ -83,6 +83,7 @@ public sealed partial class MainWindow : Window
 
         _activePane = PaneA;
         foreach (var pane in new[] { PaneA, PaneB }) WirePane(pane);
+        InitSubfolders();
 
         MetaCol.Width = new GridLength(_settings.MetaWidth);
         TreeCol.Width = new GridLength(_settings.TreeWidth);
@@ -392,7 +393,7 @@ public sealed partial class MainWindow : Window
         UpdateMetaPanel();
 
         if (TopTab.Analysis is null) _ = LoadTabAsync(TopTab);
-        else RebuildSubfolders();
+        else _subA.Rebuild();
     }
 
     private void CloseTab(int index)
@@ -451,10 +452,6 @@ public sealed partial class MainWindow : Window
         RebuildChrome();
 
         if (_split is int s && _tabs[s].Analysis is null) _ = LoadTabAsync(_tabs[s]);
-
-        // In der geteilten Ansicht war der Bereich leer geräumt. Ohne das
-        // käme er erst beim nächsten Ordnerwechsel zurück.
-        if (_split is null) RebuildSubfolders();
     }
 
     private void ApplySplitLayout()
@@ -462,19 +459,24 @@ public sealed partial class MainWindow : Window
         if (_split is int s && s < _tabs.Count)
         {
             PaneB.Bind(_tabs[s]);
-            PaneB.Visibility = Visibility.Visible;
+            HalfB.Visibility = Visibility.Visible;
             Splitter.Visibility = Visibility.Visible;
             PaneHost.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+
+            // Noch nicht eingelesen: Das Einlesen baut die Unterordner danach.
+            if (_tabs[s].Analysis is not null) _subB.Rebuild();
         }
         else
         {
-            PaneB.Visibility = Visibility.Collapsed;
+            HalfB.Visibility = Visibility.Collapsed;
             Splitter.Visibility = Visibility.Collapsed;
             PaneHost.RowDefinitions[2].Height = GridLength.Auto;
+            _subB.Clear();
+            _subB.UpdateLayout();
         }
 
         MarkActivePane();
-        UpdateSubLayout();
+        _subA.UpdateLayout();
     }
 
     // ══ Navigation ═══════════════════════════════════════════════
@@ -1207,7 +1209,7 @@ public sealed partial class MainWindow : Window
         // hier soll stehen, was zuletzt getan wurde.
         StatusText.Text = "";
 
-        if (ReferenceEquals(tab, PaneA.Tab)) RebuildSubfolders();
+        if (ReferenceEquals(tab, PaneA.Tab) || ReferenceEquals(tab, PaneB.Tab)) RebuildSubfoldersFor(tab);
         else UpdateSection(tab);
 
         RebuildTabs();
@@ -1284,7 +1286,7 @@ public sealed partial class MainWindow : Window
 
     private TrackPane? PaneFor(FolderTab tab) =>
         PaneA.Tab == tab ? PaneA
-        : PaneB.Tab == tab && PaneB.Visibility == Visibility.Visible ? PaneB
+        : PaneB.Tab == tab && HalfB.Visibility == Visibility.Visible ? PaneB
         : _subPanes.FirstOrDefault(p => p.Tab == tab);
 
     // ══ Auswahl ══════════════════════════════════════════════════
@@ -1293,9 +1295,13 @@ public sealed partial class MainWindow : Window
     {
         if (_activePane == pane) return;
         _activePane = pane;
-        if (pane.Tab is not null)
+
+        // Eine Unterordner-Liste gehört zu einer Hälfte. Deren Tab wird der
+        // aktive, damit Navigieren und Zurück dort wirken, wo man arbeitet.
+        var owner = _subOwner.TryGetValue(pane, out var area) ? area.Main.Tab : pane.Tab;
+        if (owner is not null)
         {
-            var idx = _tabs.IndexOf(pane.Tab);
+            var idx = _tabs.IndexOf(owner);
             if (idx >= 0) _active = idx;
         }
         MarkActivePane();
@@ -3621,396 +3627,5 @@ public sealed partial class MainWindow : Window
         pane.PasteTagsRequested += OnPasteTags;
         pane.NavigateRequested += (_, target) => NavigateActive(target);
         pane.ColumnsResized += (_, _) => RememberColumns();
-    }
-
-    // ══ Unterordner im Hauptfenster ══════════════════════════════
-
-    /// <summary>Die aufgeklappten Unterordner-Listen, in der Reihenfolge der Abschnitte.</summary>
-    private readonly List<TrackPane> _subPanes = [];
-
-    /// <summary>Welcher Abschnitt zu welchem Ordner gehört, für das Nachführen der Zahlen.</summary>
-    private readonly Dictionary<string, TextBlock> _subCounts = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Hochgezählt bei jedem Neuaufbau, damit ein verspätetes Einlesen nichts überschreibt.</summary>
-    private int _subRound;
-
-    /// <summary>
-    /// Ab so vielen Unterordnern ist es kein Album und kein Interpret mehr,
-    /// sondern eine Bibliothek. Dann bleibt der Bereich weg.
-    /// </summary>
-    private const int MaxSubfolders = 80;
-
-    /// <summary>
-    /// Wechselt von einem Unterordner zurück in die obere Liste. Vor dem
-    /// Navigieren nötig: Sonst navigierte man in der Unterordner-Liste, die
-    /// dabei samt Abschnitt verschwindet.
-    /// </summary>
-    private void LeaveSubfolder()
-    {
-        if (_activePane is null || _activePane == PaneA || _activePane == PaneB) return;
-        _activePane = PaneA;
-        MarkActivePane();
-    }
-
-    private void MarkActivePane()
-    {
-        PaneA.SetActive(_activePane == PaneA);
-        PaneB.SetActive(_activePane == PaneB);
-        foreach (var pane in _subPanes) pane.SetActive(_activePane == pane);
-    }
-
-    /// <summary>
-    /// Baut die Abschnitte für die Unterordner des oberen Ordners neu. Das
-    /// Einlesen der Ordner läuft im Hintergrund; bis es fertig ist, bleibt
-    /// der Bereich wie er war, statt kurz zu verschwinden.
-    /// </summary>
-    private async void RebuildSubfolders()
-    {
-        var round = ++_subRound;
-        var top = PaneA.Tab;
-
-        if (top is null || top.Recursive || _split is not null)
-        {
-            ClearSubfolders();
-            UpdateSubLayout();
-            return;
-        }
-
-        var folder = top.Path;
-
-        // Ein Laufwerk ist keine Sammlung von Alben. Unter C:\ läge sonst
-        // „Windows" in der Liste, weil dort Systemklänge als WAV liegen.
-        var root = Path.GetPathRoot(folder);
-        if (root is not null && string.Equals(
-                root.TrimEnd(Path.DirectorySeparatorChar),
-                folder.TrimEnd(Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            ClearSubfolders();
-            UpdateSubLayout();
-            return;
-        }
-
-        var found = await Task.Run(() => FindSubfolders(folder));
-
-        // Zwischenzeitlich woandershin gewechselt.
-        if (round != _subRound || !ReferenceEquals(PaneA.Tab, top)) return;
-
-        ClearSubfolders();
-        foreach (var (subPath, name, count) in found)
-            SubList.Children.Add(Section(subPath, name, count));
-
-        SubCount.Text = found.Count.ToString();
-        UpdateSubLayout();
-    }
-
-    /// <summary>
-    /// Die Unterordner eines Ordners, in denen irgendwo Musik liegt, mit der
-    /// Zahl der Lieder direkt darin. Läuft im Hintergrund.
-    /// </summary>
-    private static List<(string Path, string Name, int Count)> FindSubfolders(string folder)
-    {
-        try
-        {
-            // Erst zählen, dann in die Tiefe schauen: Das Nachsehen, ob
-            // unter einem Ordner Musik liegt, kostet je Ordner einen
-            // Plattenzugriff. Bei hunderten Unterordnern ist das hier die
-            // Bibliothek selbst, und für die gibt es den Baum links.
-            var all = FolderScanner.Subfolders(folder);
-            if (all.Count > MaxSubfolders) return [];
-
-            return all
-                .Where(f => FolderScanner.HasAudioBelow(f.Path))
-                .Select(f => (f.Path, f.Name, Count: CountAudio(f.Path)))
-                .ToList();
-        }
-        catch { return []; }
-
-        static int CountAudio(string path)
-        {
-            try
-            {
-                return Directory.EnumerateFiles(path)
-                    .Count(f => AudioFormats.IsAudioFile(Path.GetFileName(f)));
-            }
-            catch { return 0; }
-        }
-    }
-
-    private void ClearSubfolders()
-    {
-        if (_subPanes.Contains(_activePane)) LeaveSubfolder();
-        _subPanes.Clear();
-        _subCounts.Clear();
-        SubList.Children.Clear();
-        SubCount.Text = "";
-    }
-
-    /// <summary>
-    /// Verteilt den Platz. Hat der Ordner selbst Lieder, bleibt die Liste
-    /// oben groß und die Unterordner bekommen unten einen Streifen; hat er
-    /// keine, gehört der ganze Platz den Unterordnern. In der geteilten
-    /// Ansicht bleibt der Bereich weg: zwei Hälften und ein Stapel darunter
-    /// wären drei Listen übereinander.
-    /// </summary>
-    private void UpdateSubLayout()
-    {
-        var hasSubs = SubList.Children.Count > 0 && _split is null;
-        var ownTracks = PaneA.Tab is { Tracks.Count: > 0 };
-
-        SubHost.Visibility = hasSubs ? Visibility.Visible : Visibility.Collapsed;
-
-        if (!hasSubs)
-        {
-            PaneA.Visibility = Visibility.Visible;
-            PaneHost.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-            PaneHost.RowDefinitions[3].Height = GridLength.Auto;
-            SubHost.MaxHeight = double.PositiveInfinity;
-            return;
-        }
-
-        if (ownTracks)
-        {
-            PaneA.Visibility = Visibility.Visible;
-            PaneHost.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-            PaneHost.RowDefinitions[3].Height = GridLength.Auto;
-
-            // Höchstens gut die Hälfte: Die Lieder des Ordners selbst sollen
-            // nicht zu einem Schlitz zusammengedrückt werden.
-            SubHost.MaxHeight = Math.Max(220, PaneHost.ActualHeight * 0.55);
-        }
-        else
-        {
-            // Ein leerer Ordner mit Unterordnern, etwa der eines Interpreten:
-            // Die obere Liste zeigte nur „0 Tracks" und nähme Platz weg.
-            PaneA.Visibility = Visibility.Collapsed;
-            PaneHost.RowDefinitions[0].Height = GridLength.Auto;
-            PaneHost.RowDefinitions[3].Height = new GridLength(1, GridUnitType.Star);
-            SubHost.MaxHeight = double.PositiveInfinity;
-        }
-    }
-
-    /// <summary>
-    /// Ein Abschnitt: Kopf zum Auf- und Zuklappen, darunter bei Bedarf die
-    /// Liste und die Unterordner dieses Ordners, eingerückt und selbst
-    /// wieder aufklappbar. <paramref name="parent"/> sammelt das Zuklappen,
-    /// damit ein zugeklappter Ordner auch alles darunter schließt.
-    /// </summary>
-    private FrameworkElement Section(string path, string name, int count, List<Action>? parent = null)
-    {
-        var body = new Grid { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 4, 0, 0) };
-
-        var chevron = new FontIcon
-        {
-            Glyph = "\uE76C",
-            FontSize = 11,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = Res("TextFillColorTertiaryBrush"),
-        };
-
-        var art = new Image { Stretch = Stretch.UniformToFill };
-        TrackArt.SetPath(art, path);
-
-        var countText = new TextBlock
-        {
-            FontSize = 11.5,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = Res("TextFillColorTertiaryBrush"),
-            Text = Strings.T("{0} files", count),
-        };
-        _subCounts[path] = countText;
-
-        var openBtn = new Button
-        {
-            Content = "\uE8A7",
-            FontFamily = new FontFamily("Segoe Fluent Icons"),
-            FontSize = 11,
-            Width = 30,
-            Height = 30,
-            Padding = new Thickness(0),
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            BorderThickness = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        ToolTipService.SetToolTip(openBtn, Strings.T("Open this folder"));
-        openBtn.Click += (_, _) => NavigateActive(path);
-
-        var head = new Grid
-        {
-            ColumnSpacing = 10,
-            Padding = new Thickness(10, 6, 6, 6),
-            CornerRadius = new CornerRadius(6),
-            Background = Res("CardBackgroundFillColorDefaultBrush"),
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Auto },
-            },
-        };
-
-        var cover = new Border
-        {
-            Width = 36,
-            Height = 36,
-            CornerRadius = new CornerRadius(4),
-            Background = Res("ControlFillColorDefaultBrush"),
-            Child = new Grid
-            {
-                Children =
-                {
-                    new FontIcon { Glyph = "\uE8B7", FontSize = 13,
-                                   Foreground = Res("TextFillColorTertiaryBrush") },
-                    art,
-                },
-            },
-        };
-
-        var title = new TextBlock
-        {
-            Text = name,
-            FontSize = 13.5,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-
-        Grid.SetColumn(chevron, 0);
-        Grid.SetColumn(cover, 1);
-        Grid.SetColumn(title, 2);
-        Grid.SetColumn(countText, 3);
-        Grid.SetColumn(openBtn, 4);
-        head.Children.Add(chevron);
-        head.Children.Add(cover);
-        head.Children.Add(title);
-        head.Children.Add(countText);
-        head.Children.Add(openBtn);
-
-        TrackPane? pane = null;
-        var expanded = false;
-        var expandRound = 0;
-        var children = new List<Action>();
-        parent?.Add(Collapse);
-
-        head.Tapped += (_, e) =>
-        {
-            // Der Knopf zum Öffnen liegt auf dieser Fläche. Sein Klick soll
-            // nur navigieren, nicht nebenbei einen Abschnitt aufklappen, der
-            // im nächsten Moment verschwindet.
-            for (var node = e.OriginalSource as DependencyObject; node is not null && node != head;
-                 node = VisualTreeHelper.GetParent(node))
-            {
-                if (node == openBtn) return;
-            }
-
-            if (!expanded) Expand();
-            else Collapse();
-            e.Handled = true;
-        };
-
-        head.RightTapped += (_, e) =>
-        {
-            var menu = new MenuFlyout();
-            menu.Items.Add(Item(!expanded ? Strings.T("Expand") : Strings.T("Collapse"),
-                () => { if (!expanded) Expand(); else Collapse(); }));
-            menu.Items.Add(new MenuFlyoutSeparator());
-            menu.Items.Add(Item(Strings.T("Open this folder"), () => NavigateActive(path)));
-            menu.Items.Add(Item(Strings.T("Open in a new tab"), () => OpenTab(path)));
-            menu.Items.Add(Item(Strings.T("Open in Explorer"), () => Reveal(path)));
-            menu.ShowAt(head, e.GetPosition(head));
-            e.Handled = true;
-        };
-
-        async void Expand()
-        {
-            var round = ++expandRound;
-            expanded = true;
-            body.Visibility = Visibility.Visible;
-            chevron.Glyph = "\uE70D";
-
-            var list = new StackPanel { Spacing = 6 };
-            body.Children.Add(list);
-
-            // Ein Ordner ohne eigene Lieder, etwa ein Album aus mehreren CDs,
-            // bekommt keine leere Liste, nur seine Unterordner.
-            if (count > 0)
-            {
-                var tab = new FolderTab(path);
-
-                // Eine feste Höhe: Mehrere offene Abschnitte sollen nebeneinander
-                // Platz haben, und die Liste darin scrollt selbst.
-                pane = new TrackPane { Height = 380 };
-                WirePane(pane);
-                pane.ApplyColumns(_settings);
-                pane.Bind(tab);
-
-                _subPanes.Add(pane);
-                list.Children.Add(pane);
-
-                Fire(LoadTabAsync(tab), Strings.T("Reading…"));
-            }
-
-            var found = await Task.Run(() => FindSubfolders(path));
-
-            // Inzwischen zugeklappt, oder der ganze Bereich ist neu aufgebaut.
-            if (round != expandRound || !expanded || found.Count == 0) return;
-
-            var nested = new StackPanel { Spacing = 6, Margin = new Thickness(22, 0, 0, 0) };
-            foreach (var (subPath, subName, subCount) in found)
-                nested.Children.Add(Section(subPath, subName, subCount, children));
-            list.Children.Add(nested);
-        }
-
-        void Collapse()
-        {
-            if (!expanded) return;
-            expanded = false;
-            expandRound++;
-
-            // Erst alles darunter schließen, damit keine Liste übrig bleibt,
-            // die noch als aktiv oder als Ziel gilt.
-            foreach (var close in children.ToList()) close();
-            children.Clear();
-
-            if (pane is not null)
-            {
-                if (_activePane == pane) LeaveSubfolder();
-                _subPanes.Remove(pane);
-                pane = null;
-            }
-
-            body.Children.Clear();
-            body.Visibility = Visibility.Collapsed;
-            chevron.Glyph = "\uE76C";
-
-            if (parent is null)
-            {
-                RebuildChrome();
-                UpdateAnalysisPanel();
-                UpdateMetaPanel();
-            }
-        }
-
-        return new StackPanel { Children = { head, body } };
-
-        static MenuFlyoutItem Item(string text, Action run)
-        {
-            var item = new MenuFlyoutItem { Text = text };
-            item.Click += (_, _) => run();
-            return item;
-        }
-    }
-
-    /// <summary>Hält die Zahl im Kopf eines Abschnitts aktuell, nachdem Dateien hinzukamen oder gingen.</summary>
-    private void UpdateSection(FolderTab tab)
-    {
-        if (_subCounts.TryGetValue(tab.Path, out var label))
-            label.Text = Strings.T("{0} files", tab.Tracks.Count);
-
-        // Die Dateien des oberen Ordners haben sich geändert; ob er noch
-        // eigene Lieder hat, entscheidet über die Aufteilung.
-        if (ReferenceEquals(tab, PaneA.Tab)) UpdateSubLayout();
     }
 }

@@ -616,6 +616,14 @@ public sealed partial class TrackPane : UserControl
         Columns.PropertyChanged += (_, _) => UpdateWidth();
     }
 
+    /// <summary>
+    /// Nur die Kopfzeile mit dem Ordnernamen, ohne Spalten und Liste. Für
+    /// einen Ordner ohne eigene Lieder, dessen Platz seine Unterordner
+    /// brauchen.
+    /// </summary>
+    public void SetCompact(bool compact) =>
+        WideScroll.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+
     /// <summary>Hebt die Hälfte hervor, die gerade die Metadatenspalte speist.</summary>
     public void SetActive(bool active)
     {
