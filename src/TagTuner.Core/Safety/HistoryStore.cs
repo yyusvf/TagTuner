@@ -154,6 +154,68 @@ public sealed class HistoryStore
         return new UndoResult(restored, failed);
     }
 
+    /// <summary>Der Eintrag und die Datei darin, zu der eine Sicherung gehört.</summary>
+    public (HistoryEntry Entry, HistoryFile File)? Find(string backupPath)
+    {
+        foreach (var entry in _entries)
+            foreach (var file in entry.Files)
+                if (string.Equals(file.BackupPath, backupPath, StringComparison.OrdinalIgnoreCase))
+                    return (entry, file);
+        return null;
+    }
+
+    /// <summary>
+    /// Schreibt eine einzelne Sicherung zurück.
+    ///
+    /// Anders als <see cref="Undo"/> für einen ganzen Eintrag: Hier wählt man
+    /// Dateien einzeln. Die Fassung, die gerade an der Stelle liegt, wird
+    /// vorher selbst gesichert; die zurückgegebenen Dateien gehören in einen
+    /// neuen Verlaufseintrag, damit auch das Wiederherstellen rückgängig geht.
+    /// </summary>
+    /// <param name="target">
+    /// Wohin. Ohne Angabe an den Ort, von dem die Sicherung stammt; den kennt
+    /// nur der Verlauf. Für eine Sicherung ohne Eintrag muss er genannt werden.
+    /// </param>
+    public List<HistoryFile> Restore(string backupPath, BackupStore store, string? target = null)
+    {
+        if (!File.Exists(backupPath))
+            throw new InvalidOperationException(Strings.T("The backup no longer exists."));
+
+        var owner = Find(backupPath);
+        var destination = target ?? owner?.File.Original
+            ?? throw new InvalidOperationException(Strings.T("The original location is unknown."));
+
+        var undo = new List<HistoryFile>();
+
+        // Was jetzt dort liegt, bleibt über den neuen Eintrag erreichbar.
+        string? current = null;
+        if (File.Exists(destination)) current = store.Create(destination);
+
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(backupPath, destination, overwrite: true);
+        undo.Add(new HistoryFile { Original = destination, BackupPath = current, OutputPath = current is null ? destination : null });
+
+        // Eine bei der Konvertierung entstandene Datei gehört zu dem Stand,
+        // der gerade zurückgenommen wird. Sie wird gesichert, dann entfernt.
+        if (owner?.File.OutputPath is { } output
+            && !string.Equals(output, destination, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(output))
+        {
+            var kept = store.Create(output);
+            File.Delete(output);
+            undo.Add(new HistoryFile { Original = output, BackupPath = kept });
+        }
+
+        File.Delete(backupPath);
+        if (owner is { } found)
+        {
+            found.File.BackupPath = null;
+            if (!found.Entry.CanUndo) _entries.Remove(found.Entry);
+        }
+        Save();
+        return undo;
+    }
+
     public void Clear()
     {
         _entries.Clear();

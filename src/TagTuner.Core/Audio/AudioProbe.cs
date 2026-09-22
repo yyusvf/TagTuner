@@ -55,6 +55,20 @@ public static class AudioProbe
     /// Liest eine Datei ein. Wirft nie: eine kaputte Datei soll den Ordner
     /// nicht unlesbar machen, sondern als Zeile mit fehlenden Werten erscheinen.
     /// </summary>
+    /// <summary>
+    /// Öffnet eine Datei für TagLib. Sicherungen enden auf .bak, und daran
+    /// erkennt TagLib kein Format. Das steckt im ursprünglichen Namen, den der
+    /// Name der Sicherung noch trägt.
+    /// </summary>
+    private static TagLib.File Open(string path)
+    {
+        if (!Safety.BackupStore.IsBackup(path)) return TagLib.File.Create(path);
+
+        var ext = System.IO.Path.GetExtension(Safety.BackupStore.OriginalName(path)).TrimStart('.');
+        return TagLib.File.Create(new TagLib.File.LocalFileAbstraction(path),
+                                  "taglib/" + ext.ToLowerInvariant(), TagLib.ReadStyle.Average);
+    }
+
     public static AudioTrack? Read(string path)
     {
         FileInfo info;
@@ -69,13 +83,14 @@ public static class AudioProbe
         {
             Path = path,
             FileName = System.IO.Path.GetFileName(path),
-            Format = AudioFormats.Normalize(path).ToUpperInvariant(),
+            Format = AudioFormats.Normalize(Safety.BackupStore.IsBackup(path)
+                ? Safety.BackupStore.OriginalName(path) : path).ToUpperInvariant(),
             Size = info.Length,
         };
 
         try
         {
-            using var file = TagLib.File.Create(path);
+            using var file = Open(path);
 
             track.SampleRate = file.Properties?.AudioSampleRate ?? 0;
             track.Channels = file.Properties?.AudioChannels ?? 0;
@@ -115,7 +130,8 @@ public static class AudioProbe
         // M4A/AAC melden über TagLib keinen Titel, wenn gar keine Tags da sind —
         // dann ist der Dateiname die einzig sinnvolle Anzeige.
         if (string.IsNullOrWhiteSpace(track.Title))
-            track.Title = System.IO.Path.GetFileNameWithoutExtension(path);
+            track.Title = System.IO.Path.GetFileNameWithoutExtension(
+                Safety.BackupStore.IsBackup(path) ? Safety.BackupStore.OriginalName(path) : path);
 
         return track;
     }
@@ -128,7 +144,7 @@ public static class AudioProbe
     {
         try
         {
-            using var file = TagLib.File.Create(path);
+            using var file = Open(path);
             var pic = file.Tag?.Pictures?.FirstOrDefault();
             if (pic?.Data?.Data is not { Length: > 0 } bytes) return null;
 

@@ -2928,6 +2928,7 @@ public sealed partial class MainWindow : Window
         // wird — ein Baum mit tausend Ordnern merkt das.
         var libraryChanged = false;
         var sortingChanged = false;
+        var filesChanged = false;
 
         var wanted = await SettingsDialog.ShowAsync(
             Root.XamlRoot,
@@ -2940,7 +2941,23 @@ public sealed partial class MainWindow : Window
                 if (what is "rules") UpdateRuleSwitches();
                 if (what is "columns") ApplyColumns();
                 if (what is "sorting") sortingChanged = true;
+
+                // Vor dem Zurückschreiben einer Sicherung: Der Player darf
+                // die Datei nicht mehr offen halten.
+                if (what.StartsWith("release:", StringComparison.Ordinal))
+                    _player.ReleaseIfPlaying([what["release:".Length..]]);
+                if (what is "files") filesChanged = true;
             });
+
+        // Sicherungen wurden zurückgeschrieben: Tags und Cover in den offenen
+        // Ordnern können andere sein.
+        if (filesChanged)
+        {
+            TrackArt.Reload();
+            InvalidateIndex();
+            foreach (var tab in _tabs.Where(t => t.Analysis is not null))
+                Fire(MergeTabAsync(tab), Strings.T("Reading…"));
+        }
 
         if (libraryChanged)
         {

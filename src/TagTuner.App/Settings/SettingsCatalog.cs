@@ -28,6 +28,7 @@ internal static class SettingsCatalog
         new("Library", "", Library),
         new("Tags", "", Tags),
         new("Track list", "", TrackList),
+        new("Backups", "", BackupsPage.Build),
     ];
 
     private static readonly int[] Rates = [44100, 48000, 88200, 96000, 176400, 192000];
@@ -115,56 +116,6 @@ internal static class SettingsCatalog
                  "\"Automatically\" downloads and installs without asking."),
             updateState,
             Buttons(checkBtn, installBtn));
-
-        // ── Sicherungen ──────────────────────────────────────────
-        var backups = new BackupStore(c.Settings.ResolvedBackupFolder);
-        var info = Hint("");
-        var deleteBtn = new Button { Content = Strings.T("Delete all backups") };
-
-        void RefreshBackups()
-        {
-            var (count, bytes) = backups.Info();
-            info.Text = count == 0
-                ? Strings.T("No backups stored.")
-                : Strings.T("{0} file(s), {1} MB", count, $"{bytes / 1024.0 / 1024.0:0.#}");
-            deleteBtn.IsEnabled = count > 0;
-        }
-        RefreshBackups();
-
-        deleteBtn.Click += (_, _) =>
-        {
-            var gone = backups.DeleteAll();
-
-            // Der Verlauf muss es erfahren, sonst bietet er ein Rückgängig
-            // an, das ins Leere läuft.
-            c.History.ForgetBackups(gone);
-            RefreshBackups();
-            info.Text += Strings.T(". Affected history entries can no longer be undone.");
-        };
-
-        yield return Group("Backups",
-            Field("Delete automatically", Choice(
-                [("Never", "never"), ("After 7 days", "7"), ("After 30 days", "30")],
-                c.Settings.BackupRetention,
-                value => { c.Settings.BackupRetention = value; c.Save(); })),
-            Hint("Runs on start. Older backups are removed, and the history entries " +
-                 "that belong to them can no longer be undone afterwards."),
-            info,
-            Buttons(deleteBtn, Action("Open backup folder", () =>
-            {
-                // Anlegen, falls es ihn noch nicht gibt: Sonst öffnet der
-                // Explorer stattdessen „Dokumente", und man sucht an der
-                // falschen Stelle.
-                var folder = c.Settings.ResolvedBackupFolder;
-                try { System.IO.Directory.CreateDirectory(folder); } catch { }
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"\"{folder}\"",
-                    UseShellExecute = true,
-                });
-            })),
-            Hint(c.Settings.ResolvedBackupFolder));
 
         // ── Explorer-Kontextmenü ─────────────────────────────────
         var shellState = Hint("");

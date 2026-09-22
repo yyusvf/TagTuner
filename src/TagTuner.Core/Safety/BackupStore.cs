@@ -88,7 +88,7 @@ public sealed class BackupStore(string folder)
 
         var cutoff = DateTime.Now.AddDays(-days);
         var gone = new List<string>();
-        foreach (var f in All().Where(f => AgeOf(f) < cutoff))
+        foreach (var f in All().Where(f => CreatedAt(f) < cutoff))
         {
             try { f.Delete(); gone.Add(f.FullName); } catch { }
         }
@@ -102,7 +102,7 @@ public sealed class BackupStore(string folder)
     /// Angabe, die weder vom Kopiervorgang noch von der Quelldatei stammt.
     /// Erst danach die Dateizeiten, und davon die jüngere.
     /// </summary>
-    private static DateTime AgeOf(FileInfo file)
+    public static DateTime CreatedAt(FileInfo file)
     {
         var name = Path.GetFileNameWithoutExtension(file.Name);
         var mark = name.LastIndexOf('_');
@@ -115,6 +115,23 @@ public sealed class BackupStore(string folder)
 
         return file.CreationTime > file.LastWriteTime ? file.CreationTime : file.LastWriteTime;
     }
+
+    /// <summary>
+    /// Der Name der gesicherten Datei, ohne den Zeitstempel und die Endung
+    /// der Sicherung: aus „Lied.mp3_20250101-120000-000.bak" wird „Lied.mp3".
+    /// </summary>
+    public static string OriginalName(string backupPath)
+    {
+        var name = Path.GetFileNameWithoutExtension(backupPath);
+        var mark = name.LastIndexOf('_');
+        return mark > 0 && name.Length - mark - 1 == "yyyyMMdd-HHmmss-fff".Length
+            ? name[..mark]
+            : name;
+    }
+
+    /// <summary>Ob ein Pfad eine Sicherung ist und keine Musikdatei.</summary>
+    public static bool IsBackup(string path) =>
+        path.EndsWith(".bak", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Wirft Sicherungen weg, auf die kein Verlaufseintrag mehr zeigt.
