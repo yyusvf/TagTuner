@@ -2913,12 +2913,16 @@ public sealed partial class MainWindow : Window
 
     private async void OnOpenHistory(object sender, RoutedEventArgs e)
     {
-        if (await HistoryDialog.ShowAsync(Root.XamlRoot, _history))
+        // Der Player darf nichts offen halten, was gleich zurückgeschrieben wird.
+        if (await HistoryDialog.ShowAsync(Root.XamlRoot, _history, paths => _player.ReleaseIfPlaying(paths)))
         {
+            // Nach einem Rückgängig liegt anderes im Ordner, und womöglich in
+            // mehreren: Jeder offene Tab wird abgeglichen.
             TrackArt.Reload();
             InvalidateIndex();
-            await MergeTabAsync(ActiveTab);
-        }   // nach einem Undo liegt anderes im Ordner
+            foreach (var tab in _tabs.Where(t => t.Analysis is not null))
+                await MergeTabAsync(tab);
+        }
     }
 
     private async void OnOpenSettings(object sender, RoutedEventArgs e)

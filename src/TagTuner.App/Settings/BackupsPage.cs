@@ -509,7 +509,7 @@ internal static class BackupsPage
     }
 
     /// <summary>Wann, so wie man es sagt: „vor 5 Min.", „gestern 14:03", „12.03.2025".</summary>
-    private static string Relative(DateTime when)
+    internal static string Relative(DateTime when)
     {
         var span = DateTime.Now - when;
         if (span.TotalMinutes < 1) return Strings.T("just now");
@@ -519,7 +519,7 @@ internal static class BackupsPage
         return when.ToString("d");
     }
 
-    private static Button IconButton(string glyph, string tip)
+    internal static Button IconButton(string glyph, string tip)
     {
         var button = new Button
         {
@@ -540,7 +540,7 @@ internal static class BackupsPage
     /// Eine Rückfrage direkt am Knopf. Die Einstellungen sind selbst ein
     /// Dialog, und WinUI erlaubt keinen zweiten darüber.
     /// </summary>
-    private static Flyout ConfirmFlyout(string question, string confirm, System.Action run)
+    internal static Flyout ConfirmFlyout(string question, string confirm, System.Action run)
     {
         var flyout = new Flyout();
         var yes = new Button
@@ -563,12 +563,12 @@ internal static class BackupsPage
         return flyout;
     }
 
-    private static Style RowStyle()
+    internal static Style RowStyle(double height = 62)
     {
         var style = new Style(typeof(ListViewItem));
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 0, 6, 0)));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 62.0));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, height));
         return style;
     }
 
