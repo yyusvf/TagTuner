@@ -165,10 +165,8 @@ internal static class TrackColumns
                 Spacing = 3,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 VerticalAlignment = VerticalAlignment.Center,
-                // Die Nummer steht mittig, und das # genau darüber.
-                HorizontalAlignment = column.Id == "track" ? HorizontalAlignment.Center
-                    : column.Look == ColumnLook.MonoRight ? HorizontalAlignment.Right
-                    : HorizontalAlignment.Left,
+                HorizontalAlignment = column.Look == ColumnLook.MonoRight
+                    ? HorizontalAlignment.Right : HorizontalAlignment.Left,
             };
 
             if (column.Id == "title" && combined)
@@ -192,6 +190,18 @@ internal static class TrackColumns
                         Foreground = dim,
                     });
                 }
+                else if (column.Id == "track")
+                {
+                    // Genau so breit wie das Feld der Nummer darunter, damit
+                    // das # mittig über ihr steht.
+                    cell.Children.Add(new TextBlock
+                    {
+                        Text = Strings.T(column.Header),
+                        Style = header,
+                        Width = NumberWidth,
+                        TextAlignment = TextAlignment.Center,
+                    });
+                }
                 else if (column.Header.Length > 0)
                 {
                     cell.Children.Add(new TextBlock { Text = Strings.T(column.Header), Style = header });
@@ -200,6 +210,15 @@ internal static class TrackColumns
                 if (column.Sort is { } key)
                 {
                     var mark = new TextBlock { Style = header, Foreground = accent };
+
+                    // Der Pfeil ragt in den Abstand zur nächsten Spalte, statt
+                    // das # beim Sortieren zur Seite zu schieben.
+                    if (column.Id == "track")
+                    {
+                        mark.Width = TrackMarkWidth;
+                        cell.Margin = new Thickness(0, 0, -TrackMarkWidth - cell.Spacing, 0);
+                    }
+
                     cell.Children.Add(mark);
                     sortMarks[key] = mark;
 
@@ -216,6 +235,8 @@ internal static class TrackColumns
 
             if (column.Look == ColumnLook.MonoRight && column.Id != "track")
                 cell.Margin = new Thickness(0, 0, 12, 0);
+
+            if (column.Id == "track") cell.HorizontalAlignment = HorizontalAlignment.Right;
 
             Grid.SetColumn(cell, i);
             host.Children.Add(cell);
@@ -316,6 +337,10 @@ internal static class TrackColumns
             Padding = new Thickness(2, 14, 0, 6),
             Visibility = Visibility.Collapsed,
             Tag = DiscHeaderTag,
+
+            // Durchsichtig statt leer: Sonst nimmt nur der Text Klicks an,
+            // und ein Klick daneben landete beim Lied darunter.
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Children = { DiscIcon(second), discText },
         };
         Grid.SetRow(discHeader, 0);
@@ -356,7 +381,12 @@ internal static class TrackColumns
                     FontFamily = new FontFamily("Consolas"),
                     Foreground = dim,
                     VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Center,
+
+                    // Rechts in der Spalte, also nah an dem, was danach kommt;
+                    // der freie Platz liegt links als Rand. Mittig im festen
+                    // Feld, damit 1 und 10 auf einer Achse stehen.
+                    Width = NumberWidth,
+                    HorizontalAlignment = HorizontalAlignment.Right,
                     TextAlignment = TextAlignment.Center,
                 };
                 cell = number;
@@ -420,7 +450,13 @@ internal static class TrackColumns
     }
 
     /// <summary>Erkennungszeichen der Disc-Zeile unter den Kindern einer Zeile.</summary>
-    private const string DiscHeaderTag = "disc-header";
+    public const string DiscHeaderTag = "disc-header";
+
+    /// <summary>Das Feld der Tracknummer, breit genug für drei Ziffern.</summary>
+    private const double NumberWidth = 22;
+
+    /// <summary>Platz für den Sortierpfeil hinter dem #.</summary>
+    private const double TrackMarkWidth = 10;
 
     /// <summary>Eine kleine Scheibe: Ring mit Punkt in der Mitte.</summary>
     private static FrameworkElement DiscIcon(Brush brush) => new Grid

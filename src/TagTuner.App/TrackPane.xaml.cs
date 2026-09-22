@@ -139,6 +139,7 @@ public sealed partial class TrackPane : UserControl
         if (row.Tag as string != Stamp())
         {
             TrackColumns.BuildRow(row, _columns, Columns, _combined);
+            WireDiscHeader(row);
             row.Tag = Stamp();
         }
 
@@ -213,6 +214,53 @@ public sealed partial class TrackPane : UserControl
             }
             previous = track.Disc;
         }
+    }
+
+    /// <summary>
+    /// Die Disc-Zeile gehört zur Zeile ihres ersten Lieds, soll aber nicht
+    /// dieses Lied wählen, sondern die ganze Disc. Darum fängt sie Drücken
+    /// und Loslassen selbst ab, bevor die Liste es als Klick auf die Zeile
+    /// nimmt. Mit Strg kommt die Disc zur Auswahl dazu.
+    /// </summary>
+    private void WireDiscHeader(Grid row)
+    {
+        foreach (var child in row.Children)
+        {
+            if (child is not StackPanel { Tag: TrackColumns.DiscHeaderTag } header) continue;
+
+            header.PointerPressed += (_, e) => e.Handled = true;
+            header.Tapped += (_, e) => e.Handled = true;
+            header.DoubleTapped += (_, e) => e.Handled = true;
+            header.RightTapped += (_, e) => e.Handled = true;
+            header.PointerReleased += (_, e) =>
+            {
+                e.Handled = true;
+                if (row.DataContext is not AudioTrack first) return;
+
+                var add = e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control);
+                SelectDisc(first.Disc, add);
+            };
+        }
+    }
+
+    /// <summary>Wählt alle Lieder einer Disc.</summary>
+    private void SelectDisc(uint disc, bool add)
+    {
+        if (Tab is null) return;
+
+        _suppress = true;
+        if (!add) List.SelectedItems.Clear();
+        foreach (var track in Tab.Tracks)
+        {
+            if (track.Disc == disc && !List.SelectedItems.Contains(track))
+                List.SelectedItems.Add(track);
+        }
+        _suppress = false;
+
+        Tab.SelectedPaths.Clear();
+        Tab.SelectedPaths.AddRange(Selected().Select(t => t.Path));
+        List.Focus(FocusState.Pointer);
+        SelectionChanged?.Invoke(this, this);
     }
 
     /// <summary>
