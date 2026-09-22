@@ -173,7 +173,7 @@ public sealed partial class TrackPane : UserControl
             // Zeilen werden zwischen Liedern und Discs weitergereicht; die
             // Mindesthöhe eines Lieds passt nicht zu einer Disc-Zeile.
             container.MinHeight = 0;
-            container.Background = null;
+            PaintHeader(container, header, SelectedSet());
             if (row.Tag as string != TrackColumns.DiscRowTag) TrackColumns.BuildDiscRow(row);
             row.DataContext = header;
             TrackColumns.FillDiscRow(row, header.Disc);
@@ -338,6 +338,40 @@ public sealed partial class TrackPane : UserControl
             RefillRealized();
         });
     }
+
+    /// <summary>
+    /// Eine Disc-Zeile ist selbst nie in der Auswahl, sonst zöge sie beim
+    /// Ziehen mit und zählte bei allem, was mit der Auswahl geschieht. Sie
+    /// sieht aber gewählt aus, solange alle ihre Lieder es sind.
+    /// </summary>
+    private void PaintHeaders()
+    {
+        if (!_sectioned) return;
+        var selected = SelectedSet();
+        foreach (var item in _view)
+        {
+            if (item is DiscHeader header && List.ContainerFromItem(header) is ListViewItem container)
+                PaintHeader(container, header, selected);
+        }
+    }
+
+    private void PaintHeader(ListViewItem container, DiscHeader header, HashSet<AudioTrack> selected)
+    {
+        var any = false;
+        var all = true;
+        foreach (var track in SectionOf(header))
+        {
+            any = true;
+            if (!selected.Contains(track)) { all = false; break; }
+        }
+
+        container.Background = any && all
+            ? (Brush)Application.Current.Resources["ListViewItemBackgroundSelected"]
+            : null;
+    }
+
+    private HashSet<AudioTrack> SelectedSet() =>
+        new(List.SelectedItems.OfType<AudioTrack>(), ReferenceEqualityComparer.Instance);
 
     /// <summary>Die Lieder unter einer Disc-Zeile, bis zur nächsten.</summary>
     private IEnumerable<AudioTrack> SectionOf(DiscHeader header)
@@ -552,6 +586,7 @@ public sealed partial class TrackPane : UserControl
         List.SelectedItems.Clear();
         List.SelectedItems.Add(track);
         _suppress = false;
+        PaintHeaders();
         SelectionChanged?.Invoke(this, this);
     }
 
@@ -624,6 +659,7 @@ public sealed partial class TrackPane : UserControl
         foreach (var t in Tab.Tracks.Where(t => Tab.SelectedPaths.Contains(t.Path)))
             List.SelectedItems.Add(t);
         _suppress = false;
+        PaintHeaders();
     }
 
     public List<AudioTrack> Selected() => List.SelectedItems.OfType<AudioTrack>().ToList();
@@ -651,6 +687,7 @@ public sealed partial class TrackPane : UserControl
             _suppress = false;
         }
 
+        PaintHeaders();
         Tab.SelectedPaths.Clear();
         Tab.SelectedPaths.AddRange(Selected().Select(t => t.Path));
         SelectionChanged?.Invoke(this, this);

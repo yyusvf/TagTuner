@@ -351,9 +351,11 @@ internal static class TrackColumns
                     VerticalAlignment = VerticalAlignment.Center,
 
                     // Rechts in der Spalte, also nah an dem, was danach kommt;
-                    // der freie Platz liegt links als Rand. Mittig im festen
-                    // Feld, damit 1 und 10 auf einer Achse stehen.
-                    Width = NumberWidth,
+                    // der freie Platz liegt links als Rand. Mittig in einem
+                    // Feld fester Mindestbreite, damit 1 und 10 auf einer
+                    // Achse stehen; „1-01" darf breiter werden, statt
+                    // abgeschnitten zu sein.
+                    MinWidth = NumberWidth,
                     HorizontalAlignment = HorizontalAlignment.Right,
                     TextAlignment = TextAlignment.Center,
                 };
@@ -436,7 +438,7 @@ internal static class TrackColumns
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Padding = new Thickness(6, 8, 0, 0),
+            Padding = new Thickness(6, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
