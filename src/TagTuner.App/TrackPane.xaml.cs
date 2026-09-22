@@ -173,8 +173,9 @@ public sealed partial class TrackPane : UserControl
             // Zeilen werden zwischen Liedern und Discs weitergereicht; die
             // Mindesthöhe eines Lieds passt nicht zu einer Disc-Zeile.
             container.MinHeight = 0;
-            PaintHeader(container, header, SelectedSet());
+            container.Background = null;
             if (row.Tag as string != TrackColumns.DiscRowTag) TrackColumns.BuildDiscRow(row);
+            PaintHeader(container, header, SelectedSet());
             row.DataContext = header;
             TrackColumns.FillDiscRow(row, header.Disc);
             args.Handled = true;
@@ -365,9 +366,16 @@ public sealed partial class TrackPane : UserControl
             if (!selected.Contains(track)) { all = false; break; }
         }
 
-        container.Background = any && all
-            ? (Brush)Application.Current.Resources["ListViewItemBackgroundSelected"]
-            : null;
+        // In die Zeile selbst gemalt, nicht als Hintergrund des Eintrags:
+        // Den zeichnet die Liste erst beim nächsten Überfahren mit der Maus
+        // neu, und die Disc blieb so hervorgehoben, obwohl nichts mehr
+        // gewählt war.
+        if (container.ContentTemplateRoot is Grid row)
+        {
+            row.Background = any && all
+                ? (Brush)Application.Current.Resources["ListViewItemBackgroundSelected"]
+                : null;
+        }
     }
 
     private HashSet<AudioTrack> SelectedSet() =>

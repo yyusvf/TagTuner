@@ -304,6 +304,11 @@ internal static class TrackColumns
         grid.ColumnSpacing = 10;
         grid.Height = 56;
 
+        // Zurücksetzen, falls die Zeile vorher eine Disc war.
+        grid.Margin = new Thickness(0);
+        grid.CornerRadius = new CornerRadius(0);
+        grid.Background = null;
+
         var dim = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
         var second = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         var fill = (Brush)Application.Current.Resources["ControlFillColorDefaultBrush"];
@@ -432,13 +437,19 @@ internal static class TrackColumns
         grid.RowDefinitions.Clear();
         grid.Height = 46;
 
+        // Bis an den Rand des Eintrags, über dessen Innenabstand hinweg, und
+        // gerundet wie er: Die Markierung einer gewählten Disc malt diese
+        // Zeile selbst.
+        grid.Margin = new Thickness(-4, 0, -12, 0);
+        grid.CornerRadius = new CornerRadius(4);
+
         var second = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
 
         grid.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Padding = new Thickness(6, 0, 0, 0),
+            Padding = new Thickness(10, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
