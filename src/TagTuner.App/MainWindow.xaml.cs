@@ -2059,7 +2059,7 @@ public sealed partial class MainWindow : Window
         // tun sie nichts, und ein bedienbarer Haken würde etwas anderes
         // behaupten.
         BaseTagsBox.IsEnabled = CoverBox.IsEnabled = NumberingBox.IsEnabled =
-            rule.AlbumMode && !ActiveTab.Recursive;
+            AlbumApplyBtn.IsEnabled = rule.AlbumMode && !ActiveTab.Recursive;
         _suppressRules = false;
 
         // Mit Unterordnern wird nichts abgelegt, also gibt es auch nichts zu regeln.
@@ -2087,6 +2087,8 @@ public sealed partial class MainWindow : Window
     {
         if (_suppressRules) return;
 
+        var before = _settings.RuleFor(ActiveTab.Path);
+
         _settings.SetRule(ActiveTab.Path, new FolderRule
         {
             AutoConform = ConformSwitch.IsOn,
@@ -2097,6 +2099,17 @@ public sealed partial class MainWindow : Window
         });
         UpdateRuleSwitches();
         PaneFor(ActiveTab)?.Refresh();
+
+        // Etwas ist dazugekommen, das der Album-Modus angleicht. Die Dateien,
+        // die schon hier liegen, bleiben sonst, wie sie sind; angeboten wird,
+        // sie auch anzugleichen, mit Vorschau.
+        var after = _settings.RuleFor(ActiveTab.Path);
+        if ((!before.WritesBaseTags && after.WritesBaseTags)
+            || (!before.WritesCover && after.WritesCover)
+            || (!before.WritesNumbers && after.WritesNumbers))
+        {
+            _ = ApplyAlbumToExistingAsync(ActiveTab, offered: true);
+        }
     }
 
     /// <summary>Nimmt die eigene Regel zurück, sodass wieder die globale gilt.</summary>
@@ -2580,21 +2593,8 @@ public sealed partial class MainWindow : Window
         return edit.IsEmpty ? null : edit;
     }
 
-    /// <summary>
-    /// Der Interpret des Ordners, außer die Datei nennt ihn schon und noch
-    /// jemanden dazu.
-    ///
-    /// „Kollektiv Halle feat. Gast" bleibt stehen: Dieser Zusatz gehört zum
-    /// Lied, nicht zum Ordner, und ihn zu überschreiben wäre ein Verlust, den
-    /// niemand bemerkt, bis die Angabe fehlt. Steht schon genau der
-    /// Ordner-Interpret dort, wird gar nicht erst geschrieben.
-    /// </summary>
-    private static string? ArtistFor(string own, string? folder)
-    {
-        if (folder is null) return null;
-        if (string.IsNullOrWhiteSpace(own)) return folder;
-        return own.Contains(folder, StringComparison.OrdinalIgnoreCase) ? null : folder;
-    }
+    private static string? ArtistFor(string own, string? folder) =>
+        AlbumPlanner.ArtistFor(own, folder);
 
     /// <summary>
     /// Entfernt eine verschobene Quelldatei — vorher gesichert, damit der
@@ -2697,6 +2697,10 @@ public sealed partial class MainWindow : Window
 
         var perDisc = new Dictionary<uint, uint>();
 
+        // Ohne Disc-Zeilen dieselbe Zählung wie beim Anwenden auf vorhandene
+        // Dateien: mit mehreren Discs jede für sich.
+        var plain = AlbumPlanner.Numbers(order);
+
         for (var i = 0; i < order.Count; i++)
         {
             uint wanted;
@@ -2710,7 +2714,7 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                wanted = (uint)(i + 1);
+                wanted = plain[i];
             }
 
             if (order[i].Track == wanted && disc is null) continue;

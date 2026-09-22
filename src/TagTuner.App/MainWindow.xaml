@@ -535,6 +535,9 @@
 
                                 <TextBlock x:Name="AlbumNote" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                <Button x:Name="AlbumApplyBtn" HorizontalAlignment="Stretch"
+                                        Content="Apply to existing files…"
+                                        Click="OnApplyAlbumToExisting" />
 
                                 <TextBlock Text="ON DROP" FontSize="11" FontWeight="Bold"
                                            Margin="0,4,0,0"

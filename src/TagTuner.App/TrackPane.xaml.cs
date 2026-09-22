@@ -72,6 +72,9 @@ public sealed partial class TrackPane : UserControl
     private bool _suppress;
     private bool _droppedHere;
 
+    /// <summary>Die Einträge beim Beginn eines Zugs, um danach zu sehen, ob sich die Reihenfolge geändert hat.</summary>
+    private List<object>? _orderBefore;
+
     // ── Spalten ──────────────────────────────────────────────────
 
     private readonly Dictionary<TrackSort, TextBlock> _sortMarks = [];
@@ -745,19 +748,22 @@ public sealed partial class TrackPane : UserControl
     {
         if (e.Items.Any(i => i is DiscHeader)) { e.Cancel = true; return; }
         _drag = (this, e.Items.OfType<AudioTrack>().ToList());
+        _orderBefore = List.Items.ToList();
         _droppedHere = false;
     }
 
     private void OnReorderCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
     {
-        var landedElsewhere = _drag?.Pane == this && !_droppedHere;
         _drag = null;
+        var before = _orderBefore;
+        _orderBefore = null;
 
-        // Ein Zug in die andere Hälfte darf hier nicht als Umsortieren gelten —
-        // sonst würde der Quellordner neu durchnummeriert, obwohl sich an seiner
-        // Reihenfolge nichts geändert hat.
-        if (landedElsewhere) return;
-        if (args.DropResult != DataPackageOperation.Move) return;
+        // Umsortiert ist, was jetzt anders dasteht als beim Beginn des Zugs.
+        // Vorher hing das daran, dass das Ablegen hier gemeldet wurde; beim
+        // Umsortieren innerhalb der Liste behält die Liste das aber für sich,
+        // und die Nummern wurden nie geschrieben. Ein Zug in die andere Hälfte
+        // ändert an dieser Reihenfolge nichts und zählt damit auch nicht.
+        if (before is null || List.Items.SequenceEqual(before)) return;
 
         ReorderedSections = null;
         if (_sectioned && Tab is not null)
