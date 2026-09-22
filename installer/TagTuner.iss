@@ -9,7 +9,7 @@
 #define AppId        "{{8C4A3F21-7D6B-4E9A-B2C5-1F0E9D3A6B47}"
 
 #ifndef AppVersion
-  #define AppVersion "0.7.0"
+  #define AppVersion "0.7.1"
 #endif
 
 #ifndef SourceDir

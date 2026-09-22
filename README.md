@@ -3,7 +3,7 @@
 One window where music folders are treated like playlists. Edit tags, align
 format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
-![Version](https://img.shields.io/badge/version-0.7.0-C8F542)
+![Version](https://img.shields.io/badge/version-0.7.1-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 ## Install
@@ -28,7 +28,9 @@ metadata, cover, track numbering. A dropped file lands where you dropped it
 and the folder is numbered from 1 without gaps; reordering by hand renumbers
 right away. A guest artist survives, so "Kollektiv Halle feat. Gast" is not
 flattened to the folder artist. Leave the mode off for folders where you
-collect mixed music, and nothing is touched.
+collect mixed music, and nothing is touched. Turning it on for a folder that
+already has music in it offers to bring those files in line too, with a
+preview that looks exactly like the track list afterwards.
 
 **Metadata on the left, always visible.** Title, artist, album, year, track,
 disc, genre, album artist, composer and comment. With several files selected,
@@ -38,7 +40,9 @@ writing. With nothing selected, the whole folder is the target.
 **The track list is yours.** Pick the columns, put them in the order you want,
 drag them as wide as you like. Seventeen to choose from, including year, disc,
 genre, album artist, composer, comment, bitrate, tag format and codec. Title
-and artist can share a column or have one each.
+and artist can share a column or have one each. Every column sorts. Albums
+with several discs get a line per disc, like in a streaming app; click it to
+select that disc.
 
 **Ctrl+F searches the open folder.** A small bar like the one in a browser,
 with a match counter, up, down and Escape. Matches are highlighted in the
@@ -76,13 +80,17 @@ Windows says. Everything applies as you change it.
 **Tabs and split view.** Keep several folders open and drag files between two
 halves. Hold Ctrl to copy instead of move. Opening a folder from the Explorer
 context menu adds a tab to the running window instead of starting a second
-one.
+one. Subfolders show up below the list and open in place, several at once, so
+an artist folder with its albums works like one view.
 
 ## Your files are backed up
 
 Before every write, TagTuner copies the file to
 `%APPDATA%\TagTuner\Backups`, outside your music library. The history shows
 what happened when and undoes it. How long backups are kept is a setting.
+The backups page in the settings lists every backup, newest first, with what
+changed since, and restores one or many at once. Restoring backs up the
+current version first, so it can be undone as well.
 
 After every conversion the result is read back and checked: is the sample rate
 right, is the cover still there. If the cover was dropped, it is put back.
