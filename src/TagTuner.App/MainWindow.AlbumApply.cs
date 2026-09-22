@@ -55,7 +55,7 @@ public sealed partial class MainWindow
             return;
         }
 
-        if (!await ConfirmAlbumPlan(tab, plan, ordered.Count)) return;
+        if (!await ConfirmAlbumPlan(tab, plan, ordered, cover)) return;
 
         ReleaseIfAffected(plan.Select(c => c.Track));
         SetBusy(true, Strings.T("Applying album mode"));
@@ -140,64 +140,105 @@ public sealed partial class MainWindow
         return (samples[winner], needs);
     }
 
-    /// <summary>Die Vorschau: welche Datei was bekommt. Erst nach „Anwenden" wird geschrieben.</summary>
-    private async Task<bool> ConfirmAlbumPlan(FolderTab tab, List<AlbumChange> plan, int total)
+    /// <summary>
+    /// Die Vorschau: der Ordner, wie er danach in der Liste aussieht, mit den
+    /// geänderten Feldern in der Akzentfarbe. Erst nach „Anwenden" wird
+    /// geschrieben.
+    /// </summary>
+    private async Task<bool> ConfirmAlbumPlan(
+        FolderTab tab, List<AlbumChange> plan, IReadOnlyList<AudioTrack> ordered, AudioProbe.Cover? cover)
     {
-        var list = new StackPanel { Spacing = 10 };
+        var byPath = plan.ToDictionary(c => c.Track.Path, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var change in plan)
+        // Welche Spalte zu welchem Feld gehört. Das Cover steht als Bild da und
+        // braucht keine Farbe: Man sieht, dass es ein anderes ist.
+        static string Column(string field) => field switch
         {
-            var lines = new StackPanel { Spacing = 1, Margin = new Thickness(12, 2, 0, 0) };
-            foreach (var c in change.Changes)
+            "Title" => "title",
+            "Artist" => "artist",
+            "Album" => "album",
+            "Album artist" => "albumartist",
+            "Genre" => "genre",
+            "Year" => "year",
+            "Track" => "track",
+            _ => "",
+        };
+
+        var changedColumns = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var previewKeys = new List<string>();
+        var preview = new FolderTab(tab.Path);
+
+        foreach (var track in ordered)
+        {
+            if (!byPath.TryGetValue(track.Path, out var change))
             {
-                lines.Children.Add(new TextBlock
-                {
-                    FontSize = 12,
-                    TextWrapping = TextWrapping.Wrap,
-                    Foreground = Res("TextFillColorSecondaryBrush"),
-                    Text = c.Field == "Cover"
-                        ? Strings.T("Cover: taken from the folder")
-                        : Strings.T("{0}: {1} → {2}", Strings.T(c.Field),
-                                    c.From.Length == 0 ? "–" : c.From, c.To),
-                });
+                preview.Tracks.Add(track);
+                continue;
             }
 
-            list.Children.Add(new StackPanel
+            var copy = track.Copy();
+            var edit = change.Edit;
+            if (edit.Title is { } title) copy.Title = title;
+            if (edit.Album is { } album) copy.Album = album;
+            if (edit.Artist is { } artist) copy.Artist = artist;
+            if (edit.AlbumArtist is { } albumArtist) copy.AlbumArtist = albumArtist;
+            if (edit.Genre is { } genre) copy.Genre = genre;
+            if (edit.Year is { } year) copy.Year = year;
+            if (edit.Track is { } number) copy.Track = number;
+
+            // Ein neues Cover steht noch in keiner Datei. Die Kopie bekommt
+            // einen erfundenen Pfad, unter dem das Bild schon bereitliegt.
+            if (cover is not null && change.Changes.Any(c => c.Field == "Cover"))
             {
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = change.Track.FileName,
-                        FontSize = 13,
-                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                        TextTrimming = TextTrimming.CharacterEllipsis,
-                    },
-                    lines,
-                },
-            });
+                copy.Path = "preview|" + track.Path;
+                copy.HasCover = true;
+                TrackArt.Preview(copy.Path, cover.Data);
+                previewKeys.Add(copy.Path);
+            }
+
+            changedColumns[copy.Path] = change.Changes.Select(c => Column(c.Field)).ToHashSet();
+            preview.Tracks.Add(copy);
         }
+
+        var pane = new TrackPane
+        {
+            ReadOnly = true,
+            Height = 440,
+            Width = Math.Clamp(Root.ActualWidth - 160, 560, 1100),
+            IsAlbumFolder = _ => true,
+            Highlight = (track, column) =>
+                changedColumns.TryGetValue(track.Path, out var set) && set.Contains(column),
+        };
+        pane.ApplyColumns(_settings);
+        pane.Bind(preview);
 
         var dialog = new ContentDialog
         {
             Title = Strings.T("Apply album mode to \"{0}\"", tab.Name),
             Content = new StackPanel
             {
-                Spacing = 12,
+                Spacing = 10,
                 Children =
                 {
                     new TextBlock
                     {
                         TextWrapping = TextWrapping.Wrap,
                         Text = Strings.T("{0} of {1} files change. Every file is backed up "
-                                         + "first; the history can undo it.", plan.Count, total),
+                                         + "first; the history can undo it.", plan.Count, ordered.Count),
                     },
-                    new ScrollViewer
+                    new TextBlock
                     {
-                        MaxHeight = 380,
-                        Padding = new Thickness(0, 0, 14, 0),
-                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        Content = list,
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = Res("TextFillColorTertiaryBrush"),
+                        Text = Strings.T("This is how the folder looks afterwards. Changed values are in colour."),
+                    },
+                    new Border
+                    {
+                        CornerRadius = new CornerRadius(6),
+                        BorderThickness = new Thickness(1),
+                        BorderBrush = Res("DividerStrokeColorDefaultBrush"),
+                        Child = pane,
                     },
                 },
             },
@@ -206,8 +247,18 @@ public sealed partial class MainWindow
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Root.XamlRoot,
         };
-        dialog.Resources["ContentDialogMaxWidth"] = 640.0;
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        // Ein ContentDialog klemmt seinen Inhalt sonst auf rund 548 Pixel.
+        dialog.Resources["ContentDialogMaxWidth"] = 1200.0;
+        dialog.Resources["ContentDialogMaxHeight"] = 900.0;
+
+        try
+        {
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        }
+        finally
+        {
+            foreach (var key in previewKeys) TrackArt.ForgetPreview(key);
+        }
     }
 }

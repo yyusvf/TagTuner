@@ -404,6 +404,7 @@ public static partial class Strings
         ["There are no audio files below this folder."] = "Bu klasörün altında ses dosyası yok.",
         ["This ffmpeg cannot produce the target format."] = "Bu ffmpeg hedef biçimi üretemiyor.",
         ["This folder is one release"] = "Bu klasör tek bir yayın",
+        ["This is how the folder looks afterwards. Changed values are in colour."] = "Klasör sonrasında böyle görünür. Değişen değerler renklidir.",
         ["Time"] = "Zaman",
         ["Title"] = "Başlık",
         ["TITLE"] = "BAŞLIK",

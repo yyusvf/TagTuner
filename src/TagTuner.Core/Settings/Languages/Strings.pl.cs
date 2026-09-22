@@ -404,6 +404,7 @@ public static partial class Strings
         ["There are no audio files below this folder."] = "Poniżej tego folderu nie ma plików dźwiękowych.",
         ["This ffmpeg cannot produce the target format."] = "Ten ffmpeg nie potrafi utworzyć formatu docelowego.",
         ["This folder is one release"] = "Ten folder to osobne wydawnictwo",
+        ["This is how the folder looks afterwards. Changed values are in colour."] = "Tak folder będzie wyglądał potem. Zmienione wartości są kolorowe.",
         ["Time"] = "Czas",
         ["Title"] = "Tytuł",
         ["TITLE"] = "TYTUŁ",

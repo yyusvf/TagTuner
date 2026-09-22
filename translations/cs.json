@@ -338,6 +338,7 @@
  "There are no audio files below this folder.": "Pod touto složkou nejsou žádné zvukové soubory.",
  "This ffmpeg cannot produce the target format.": "Tento ffmpeg neumí vytvořit cílový formát.",
  "This folder is one release": "Tato složka je samostatné vydání",
+ "This is how the folder looks afterwards. Changed values are in colour.": "Takto bude složka vypadat potom. Změněné hodnoty jsou barevně.",
  "Time": "Čas",
  "Title": "Název",
  "Title and artist": "Název a interpret",

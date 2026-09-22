@@ -404,6 +404,7 @@ public static partial class Strings
         ["There are no audio files below this folder."] = "Усередині цієї теки немає аудіофайлів.",
         ["This ffmpeg cannot produce the target format."] = "Цей ffmpeg не може створити цільовий формат.",
         ["This folder is one release"] = "Ця тека — окремий реліз",
+        ["This is how the folder looks afterwards. Changed values are in colour."] = "Так тека виглядатиме після. Змінені значення виділено кольором.",
         ["Time"] = "Час",
         ["Title"] = "Назва",
         ["TITLE"] = "НАЗВА",

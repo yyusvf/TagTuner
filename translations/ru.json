@@ -338,6 +338,7 @@
  "There are no audio files below this folder.": "Внутри этой папки нет аудиофайлов.",
  "This ffmpeg cannot produce the target format.": "Этот ffmpeg не может создать целевой формат.",
  "This folder is one release": "Эта папка — отдельный релиз",
+ "This is how the folder looks afterwards. Changed values are in colour.": "Так папка будет выглядеть после. Изменённые значения выделены цветом.",
  "Time": "Время",
  "Title": "Название",
  "Title and artist": "Название и исполнитель",

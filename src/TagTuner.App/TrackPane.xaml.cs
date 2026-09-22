@@ -88,6 +88,16 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     public Func<string, bool>? IsAlbumFolder { get; set; }
 
+    /// <summary>Welche Felder hervorgehoben werden, nach Kürzel der Spalte. Für Vorschauen.</summary>
+    public Func<AudioTrack, string, bool>? Highlight { get; set; }
+
+    /// <summary>
+    /// Nur zum Ansehen: kein Ziehen, kein Umsortieren, kein Kontextmenü und
+    /// keine Spalten verschieben. Für Vorschauen, in denen die Liste zeigt,
+    /// wie etwas aussehen würde, und nichts davon schon echt ist.
+    /// </summary>
+    public bool ReadOnly { get; set; }
+
     /// <summary>Eine Spalte wurde in der Kopfzeile an eine andere Stelle gezogen.</summary>
     public event EventHandler? ColumnsReordered;
 
@@ -199,7 +209,7 @@ public sealed partial class TrackPane : UserControl
         // bekommt, ist nicht zugesichert.
         row.DataContext = track;
 
-        TrackColumns.FillRow(row, track, _combined, TrackTextFor);
+        TrackColumns.FillRow(row, track, _combined, TrackTextFor, Highlight);
         Paint(container, track);
         args.Handled = true;
     }
@@ -407,7 +417,7 @@ public sealed partial class TrackPane : UserControl
             if (item is not AudioTrack track) continue;
             if (List.ContainerFromItem(item) is not ListViewItem container) continue;
             if (container.ContentTemplateRoot is not Grid row || row.Tag as string != Stamp()) continue;
-            TrackColumns.FillRow(row, track, _combined, TrackTextFor);
+            TrackColumns.FillRow(row, track, _combined, TrackTextFor, Highlight);
         }
     }
 
@@ -434,6 +444,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnColumnPressed(int index, PointerRoutedEventArgs e)
     {
+        if (ReadOnly) return;
         _dragColumn = index;
         _dragStartX = e.GetCurrentPoint(HeaderRow).Position.X;
         _columnDragging = false;
@@ -664,9 +675,9 @@ public sealed partial class TrackPane : UserControl
         // Playlist-Reihenfolge ist. Nach Interpret sortiert waere das Ziehen
         // einer Zeile eine Nummernvergabe, die niemand so gemeint hat.
         var natural = !Tab.Recursive && Tab.Sort == TrackSort.Natural;
-        List.CanReorderItems = natural;
-        List.CanDragItems = !Tab.Recursive;
-        List.AllowDrop = !Tab.Recursive;
+        List.CanReorderItems = natural && !ReadOnly;
+        List.CanDragItems = !Tab.Recursive && !ReadOnly;
+        List.AllowDrop = !Tab.Recursive && !ReadOnly;
 
         UpdateSortMarks();
         ComputeTrackText();
@@ -994,6 +1005,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
+        if (ReadOnly) return;
         if (TrackAt(e.OriginalSource) is not { } hit) return;
 
         Activated?.Invoke(this, this);

@@ -95,6 +95,15 @@ public static class TrackArt
         });
     }
 
+    /// <summary>
+    /// Legt ein Bild unter einem erfundenen Schlüssel ab, damit eine Vorschau
+    /// ein Cover zeigen kann, das noch in keiner Datei steht. Der Schlüssel
+    /// ist kein Dateipfad, damit die echte Liste davon nichts sieht.
+    /// </summary>
+    public static void Preview(string key, byte[] data) => Show(new Image(), key, data);
+
+    public static void ForgetPreview(string key) => Cache.Remove(key);
+
     private static void Track(Image image)
     {
         for (var i = Live.Count - 1; i >= 0; i--)

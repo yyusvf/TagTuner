@@ -16,6 +16,9 @@ public sealed class AudioTrack
     public long Size { get; set; }
     public bool HasCover { get; set; }
 
+    /// <summary>Eine flache Kopie, etwa um eine Änderung vorab zu zeigen, ohne das Original anzufassen.</summary>
+    public AudioTrack Copy() => (AudioTrack)MemberwiseClone();
+
     /// <summary>Welche Tag-Art in der Datei steckt: „ID3v2.3", „Vorbis", „MP4".</summary>
     public string TagFormat { get; set; } = "";
 

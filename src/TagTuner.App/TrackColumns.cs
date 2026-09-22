@@ -517,10 +517,23 @@ internal static class TrackColumns
     /// Was in der Track-Zelle steht. Das hängt am Ordner und an seiner
     /// Reihenfolge, darum rechnet es die Liste aus und nicht diese Klasse.
     /// </param>
+    /// <param name="changed">
+    /// Ob ein Feld hervorgehoben wird, nach Kürzel der Spalte. Für die
+    /// Vorschau: Was sich ändern würde, steht in der Akzentfarbe da.
+    /// </param>
     public static void FillRow(
         Grid row, AudioTrack track, bool combined,
-        Func<AudioTrack, string>? trackText = null)
+        Func<AudioTrack, string>? trackText = null,
+        Func<AudioTrack, string, bool>? changed = null)
     {
+        var accent = changed is null ? null : (Brush)Application.Current.Resources["AccentBrush"];
+
+        void Mark(TextBlock? text, Brush? normal, string id)
+        {
+            if (text is null || changed is null) return;
+            text.Foreground = changed(track, id) ? accent : normal;
+        }
+
         var number = trackText?.Invoke(track) ?? track.TrackLabel;
 
         foreach (var child in row.Children)
@@ -536,6 +549,7 @@ internal static class TrackColumns
             if (tag.Column.Id == "track")
             {
                 tag.First!.Text = number;
+                Mark(tag.First, tag.FirstBrush, "track");
                 continue;
             }
 
@@ -543,10 +557,16 @@ internal static class TrackColumns
             {
                 tag.First!.Text = track.Title;
                 artistLine.Text = track.Artist;
+                Mark(tag.First, tag.FirstBrush, "title");
+                Mark(artistLine, tag.SecondBrush, "artist");
                 continue;
             }
 
-            if (tag.First is { } line) line.Text = Value(track, tag.Column);
+            if (tag.First is { } line)
+            {
+                line.Text = Value(track, tag.Column);
+                Mark(line, tag.FirstBrush, tag.Column.Id);
+            }
         }
     }
 
@@ -584,5 +604,10 @@ internal static class TrackColumns
         TrackColumn Column,
         Image? Picture = null,
         TextBlock? First = null,
-        TextBlock? Second = null);
+        TextBlock? Second = null)
+    {
+        /// <summary>Die eigene Farbe der Texte, um nach einer Hervorhebung dorthin zurückzukehren.</summary>
+        public Brush? FirstBrush { get; init; } = First?.Foreground;
+        public Brush? SecondBrush { get; init; } = Second?.Foreground;
+    }
 }

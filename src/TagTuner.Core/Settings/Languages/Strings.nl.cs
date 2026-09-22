@@ -404,6 +404,7 @@ public static partial class Strings
         ["There are no audio files below this folder."] = "Onder deze map staan geen audiobestanden.",
         ["This ffmpeg cannot produce the target format."] = "Deze ffmpeg kan het doelformaat niet maken.",
         ["This folder is one release"] = "Deze map is één uitgave",
+        ["This is how the folder looks afterwards. Changed values are in colour."] = "Zo ziet de map er daarna uit. Gewijzigde waarden zijn gekleurd.",
         ["Time"] = "Tijd",
         ["Title"] = "Titel",
         ["TITLE"] = "TITEL",
