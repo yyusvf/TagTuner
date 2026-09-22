@@ -3661,24 +3661,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var found = await Task.Run(() =>
-        {
-            try
-            {
-                // Erst zählen, dann in die Tiefe schauen: Das Nachsehen, ob
-                // unter einem Ordner Musik liegt, kostet je Ordner einen
-                // Plattenzugriff. Bei hunderten Unterordnern ist das hier die
-                // Bibliothek selbst, und für die gibt es den Baum links.
-                var all = FolderScanner.Subfolders(folder);
-                if (all.Count > MaxSubfolders) return [];
-
-                return all
-                    .Where(f => FolderScanner.HasAudioBelow(f.Path))
-                    .Select(f => (f.Path, f.Name, Count: CountAudio(f.Path)))
-                    .ToList();
-            }
-            catch { return []; }
-        });
+        var found = await Task.Run(() => FindSubfolders(folder));
 
         // Zwischenzeitlich woandershin gewechselt.
         if (round != _subRound || !ReferenceEquals(PaneA.Tab, top)) return;
@@ -3689,6 +3672,29 @@ public sealed partial class MainWindow : Window
 
         SubCount.Text = found.Count.ToString();
         UpdateSubLayout();
+    }
+
+    /// <summary>
+    /// Die Unterordner eines Ordners, in denen irgendwo Musik liegt, mit der
+    /// Zahl der Lieder direkt darin. Läuft im Hintergrund.
+    /// </summary>
+    private static List<(string Path, string Name, int Count)> FindSubfolders(string folder)
+    {
+        try
+        {
+            // Erst zählen, dann in die Tiefe schauen: Das Nachsehen, ob
+            // unter einem Ordner Musik liegt, kostet je Ordner einen
+            // Plattenzugriff. Bei hunderten Unterordnern ist das hier die
+            // Bibliothek selbst, und für die gibt es den Baum links.
+            var all = FolderScanner.Subfolders(folder);
+            if (all.Count > MaxSubfolders) return [];
+
+            return all
+                .Where(f => FolderScanner.HasAudioBelow(f.Path))
+                .Select(f => (f.Path, f.Name, Count: CountAudio(f.Path)))
+                .ToList();
+        }
+        catch { return []; }
 
         static int CountAudio(string path)
         {
@@ -3754,8 +3760,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Ein Abschnitt: Kopf zum Auf- und Zuklappen, darunter bei Bedarf die Liste.</summary>
-    private FrameworkElement Section(string path, string name, int count)
+    /// <summary>
+    /// Ein Abschnitt: Kopf zum Auf- und Zuklappen, darunter bei Bedarf die
+    /// Liste und die Unterordner dieses Ordners, eingerückt und selbst
+    /// wieder aufklappbar. <paramref name="parent"/> sammelt das Zuklappen,
+    /// damit ein zugeklappter Ordner auch alles darunter schließt.
+    /// </summary>
+    private FrameworkElement Section(string path, string name, int count, List<Action>? parent = null)
     {
         var body = new Grid { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 4, 0, 0) };
 
@@ -3848,6 +3859,10 @@ public sealed partial class MainWindow : Window
         head.Children.Add(openBtn);
 
         TrackPane? pane = null;
+        var expanded = false;
+        var expandRound = 0;
+        var children = new List<Action>();
+        parent?.Add(Collapse);
 
         head.Tapped += (_, e) =>
         {
@@ -3860,7 +3875,7 @@ public sealed partial class MainWindow : Window
                 if (node == openBtn) return;
             }
 
-            if (pane is null) Expand();
+            if (!expanded) Expand();
             else Collapse();
             e.Handled = true;
         };
@@ -3868,8 +3883,8 @@ public sealed partial class MainWindow : Window
         head.RightTapped += (_, e) =>
         {
             var menu = new MenuFlyout();
-            menu.Items.Add(Item(pane is null ? Strings.T("Expand") : Strings.T("Collapse"),
-                () => { if (pane is null) Expand(); else Collapse(); }));
+            menu.Items.Add(Item(!expanded ? Strings.T("Expand") : Strings.T("Collapse"),
+                () => { if (!expanded) Expand(); else Collapse(); }));
             menu.Items.Add(new MenuFlyoutSeparator());
             menu.Items.Add(Item(Strings.T("Open this folder"), () => NavigateActive(path)));
             menu.Items.Add(Item(Strings.T("Open in a new tab"), () => OpenTab(path)));
@@ -3878,39 +3893,74 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
         };
 
-        void Expand()
+        async void Expand()
         {
-            var tab = new FolderTab(path);
-
-            // Eine feste Höhe: Mehrere offene Abschnitte sollen nebeneinander
-            // Platz haben, und die Liste darin scrollt selbst.
-            pane = new TrackPane { Height = 380 };
-            WirePane(pane);
-            pane.ApplyColumns(_settings);
-            pane.Bind(tab);
-
-            _subPanes.Add(pane);
-            body.Children.Add(pane);
+            var round = ++expandRound;
+            expanded = true;
             body.Visibility = Visibility.Visible;
             chevron.Glyph = "\uE70D";
 
-            Fire(LoadTabAsync(tab), Strings.T("Reading…"));
+            var list = new StackPanel { Spacing = 6 };
+            body.Children.Add(list);
+
+            // Ein Ordner ohne eigene Lieder, etwa ein Album aus mehreren CDs,
+            // bekommt keine leere Liste, nur seine Unterordner.
+            if (count > 0)
+            {
+                var tab = new FolderTab(path);
+
+                // Eine feste Höhe: Mehrere offene Abschnitte sollen nebeneinander
+                // Platz haben, und die Liste darin scrollt selbst.
+                pane = new TrackPane { Height = 380 };
+                WirePane(pane);
+                pane.ApplyColumns(_settings);
+                pane.Bind(tab);
+
+                _subPanes.Add(pane);
+                list.Children.Add(pane);
+
+                Fire(LoadTabAsync(tab), Strings.T("Reading…"));
+            }
+
+            var found = await Task.Run(() => FindSubfolders(path));
+
+            // Inzwischen zugeklappt, oder der ganze Bereich ist neu aufgebaut.
+            if (round != expandRound || !expanded || found.Count == 0) return;
+
+            var nested = new StackPanel { Spacing = 6, Margin = new Thickness(22, 0, 0, 0) };
+            foreach (var (subPath, subName, subCount) in found)
+                nested.Children.Add(Section(subPath, subName, subCount, children));
+            list.Children.Add(nested);
         }
 
         void Collapse()
         {
-            if (pane is null) return;
-            if (_activePane == pane) LeaveSubfolder();
+            if (!expanded) return;
+            expanded = false;
+            expandRound++;
 
-            _subPanes.Remove(pane);
+            // Erst alles darunter schließen, damit keine Liste übrig bleibt,
+            // die noch als aktiv oder als Ziel gilt.
+            foreach (var close in children.ToList()) close();
+            children.Clear();
+
+            if (pane is not null)
+            {
+                if (_activePane == pane) LeaveSubfolder();
+                _subPanes.Remove(pane);
+                pane = null;
+            }
+
             body.Children.Clear();
             body.Visibility = Visibility.Collapsed;
             chevron.Glyph = "\uE76C";
-            pane = null;
 
-            RebuildChrome();
-            UpdateAnalysisPanel();
-            UpdateMetaPanel();
+            if (parent is null)
+            {
+                RebuildChrome();
+                UpdateAnalysisPanel();
+                UpdateMetaPanel();
+            }
         }
 
         return new StackPanel { Children = { head, body } };
