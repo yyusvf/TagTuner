@@ -14,7 +14,12 @@ public sealed record EncodeOptions
     /// ohnehin verlustbehaftet kodiert wird — vorhandene Dateien werden nie
     /// wegen ihrer Bitrate angefasst.
     /// </summary>
-    public int Kbps { get; init; } = 256;
+    /// <summary>
+    /// So hoch, wie das Format es zulässt. Eine Bitrate zum Einstellen gab
+    /// es einmal; sie war eine Frage, auf die niemand eine andere Antwort
+    /// als „die beste" gab, und für AAC deckelt der Kodierer ohnehin.
+    /// </summary>
+    public int Kbps { get; init; } = 320;
 
     /// <summary>MP3 mit variabler Bitrate (-q:a 0) statt fester Rate.</summary>
     public bool Mp3Vbr { get; init; }

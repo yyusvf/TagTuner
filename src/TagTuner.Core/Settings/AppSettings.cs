@@ -15,16 +15,7 @@ public sealed class AppSettings
     public string DefaultFormat { get; set; } = "FLAC";
     public int DefaultSampleRate { get; set; } = 44100;
 
-    /// <summary>
-    /// Nur relevant, wenn eine Konvertierung ohnehin verlustbehaftet kodiert.
-    /// Vorhandene Dateien werden nie wegen ihrer Bitrate angefasst.
-    /// </summary>
-    public int DefaultKbps { get; set; } = 256;
-
     // ── Namensschema ─────────────────────────────────────────────
-    /// <summary>Muster, nach dem aus einem Dateinamen Titel und Track gelesen werden.</summary>
-    public string ParsePattern { get; set; } = "{track} - {title}";
-
     /// <summary>Muster für „Umbenennen".</summary>
     public string RenamePattern { get; set; } = "{track} - {title}";
 
@@ -50,6 +41,12 @@ public sealed class AppSettings
     /// ersten Start die Sprache des Systems.
     /// </summary>
     public string Language { get; set; } = "";
+
+    /// <summary>
+    /// „system", „dark" oder „light". Systemstandard folgt der Einstellung
+    /// von Windows und wechselt mit ihr.
+    /// </summary>
+    public string Theme { get; set; } = "system";
     public string? LastFolder { get; set; }
     public double WindowWidth { get; set; } = 2000;
     public double WindowHeight { get; set; } = 1125;

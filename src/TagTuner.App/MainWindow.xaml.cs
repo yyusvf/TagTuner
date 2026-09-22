@@ -58,6 +58,7 @@ public sealed partial class MainWindow : Window
         // Markup, damit die festen Beschriftungen stimmen.
         Strings.Use(_settings.Language);
         Localizer.Apply(Root);
+        ApplyTheme();
 
         Title = "TagTuner";
         ExtendsContentIntoTitleBar = true;
@@ -2226,7 +2227,6 @@ public sealed partial class MainWindow : Window
                 {
                     Format = format ?? track.Format,
                     SampleRate = rate,
-                    Kbps = _settings.DefaultKbps,
                 };
                 outcome = await Task.Run(() => svc.ConvertAsync(
                     new ConversionRequest { Track = track, Options = opts, Tags = tags },
@@ -2475,8 +2475,7 @@ public sealed partial class MainWindow : Window
                     {
                         Format = target.Format,
                         SampleRate = target.SampleRate,
-                        Kbps = _settings.DefaultKbps,
-                    },
+                        },
                     Tags = tags,
                 }, pct => DispatcherQueue.TryEnqueue(() =>
                     ShowProgress(true, (slot * 100 + pct) / (double)incoming.Count))));
@@ -2890,10 +2889,23 @@ public sealed partial class MainWindow : Window
 
     private async void OnOpenSettings(object sender, RoutedEventArgs e)
     {
-        var beforeFilter = _settings.OnlyAudioFolders;
-        var wanted = await SettingsDialog.ShowAsync(Root.XamlRoot, _settings, _history);
+        // Die Einstellungen schreiben sofort. Was das Hauptfenster angeht,
+        // meldet sich hier, damit nicht vorsichtshalber alles neu aufgebaut
+        // wird — ein Baum mit tausend Ordnern merkt das.
+        var libraryChanged = false;
 
-        if (beforeFilter != _settings.OnlyAudioFolders)
+        var wanted = await SettingsDialog.ShowAsync(
+            Root.XamlRoot,
+            WinRT.Interop.WindowNative.GetWindowHandle(this),
+            _settings, _history,
+            what =>
+            {
+                if (what == "theme") ApplyTheme();
+                if (what is "library") libraryChanged = true;
+                if (what is "rules") UpdateRuleSwitches();
+            });
+
+        if (libraryChanged)
         {
             FolderScanner.ForgetAudioScan();
             InvalidateIndex();
@@ -3236,5 +3248,23 @@ public sealed partial class MainWindow : Window
             Activate();
         }
         catch { }
+    }
+    // ══ Darstellung ══════════════════════════════════════════════
+
+    /// <summary>
+    /// Hell oder dunkel, oder was Windows gerade sagt.
+    ///
+    /// Am Wurzelelement statt an der Anwendung: Application.RequestedTheme
+    /// lässt sich nur vor dem ersten Fenster setzen, danach wirft es. So
+    /// wechselt die Darstellung sofort, ohne Neustart.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        Root.RequestedTheme = _settings.Theme switch
+        {
+            "dark" => ElementTheme.Dark,
+            "light" => ElementTheme.Light,
+            _ => ElementTheme.Default,
+        };
     }
 }
