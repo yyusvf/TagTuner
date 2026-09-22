@@ -3,7 +3,7 @@
 One window where music folders are treated like playlists. Edit tags, align
 format and sample rate, set covers, reorder tracks by dragging. For Windows.
 
-![Version](https://img.shields.io/badge/version-0.6.0-C8F542)
+![Version](https://img.shields.io/badge/version-0.7.0-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 ## Install
@@ -22,20 +22,32 @@ files share the same format and sample rate. If they do, that becomes the
 target for the folder. If the folder is mixed or empty, the default profile
 from the settings applies.
 
-**Drop files in.** A file dropped into a folder is brought to that folder's
-format and sample rate and gets album, artist, year and genre from the folder.
-It lands where you dropped it, and the folder is then numbered from 1 without
-gaps. You can turn this on or off globally and per folder; with it off,
-nothing about the tags is touched.
+**Album mode.** Say that a folder is one release, an album, an EP, a single,
+and TagTuner keeps it uniform. Three switches decide what that covers: base
+metadata, cover, track numbering. A dropped file lands where you dropped it
+and the folder is numbered from 1 without gaps; reordering by hand renumbers
+right away. A guest artist survives, so "Kollektiv Halle feat. Gast" is not
+flattened to the folder artist. Leave the mode off for folders where you
+collect mixed music, and nothing is touched.
 
 **Metadata on the left, always visible.** Title, artist, album, year, track,
 disc, genre, album artist, composer and comment. With several files selected,
 each field only shows what they agree on; anything else stays untouched when
 writing. With nothing selected, the whole folder is the target.
 
+**The track list is yours.** Pick the columns, put them in the order you want,
+drag them as wide as you like. Seventeen to choose from, including year, disc,
+genre, album artist, composer, comment, bitrate, tag format and codec. Title
+and artist can share a column or have one each.
+
+**Ctrl+F searches the open folder.** A small bar like the one in a browser,
+with a match counter, up, down and Escape. Matches are highlighted in the
+list.
+
 **Covers.** Set, copy, paste, extract, remove, resize. Choosing a section and
-scaling happen in the same window. Anything already square and JPEG or PNG is
-taken over byte for byte, without re-encoding.
+scaling happen in the same window. Setting one cover for a whole folder offers
+the covers already in it, so you rarely need a file at all. Anything already
+square and JPEG or PNG is taken over byte for byte, without re-encoding.
 
 **Copy tags from one file to the rest.** By default everything except title
 and track number, because those two differ in every file. The other mode takes
@@ -44,17 +56,22 @@ them along. Which one applies is a setting.
 **Rename by metadata.** A pattern like `{track} - {title}`, with a preview of
 what comes out before anything is renamed.
 
-**Converting.** MP3, FLAC, WAV, AIFF, M4A and OGG. The bitrate is never
-touched on its own; it only comes into play when a lossy encode happens
-anyway.
+**Converting.** MP3, FLAC, WAV, AIFF, M4A and OGG. A lossy encode uses the
+highest bitrate the format allows. Existing files are never touched because of
+their bitrate.
 
 **Preview player.** Play with a double click or the space bar, volume at the
 bottom left. Playback keeps running unless the file being played is the one
 being written.
 
-**Library.** Add your own folders, search folders and songs, browse a tree
-that shows cover and artist per folder. Optionally only folders that actually
+**Library.** Add your own folders, reorder them, search folders and songs,
+browse a tree that shows cover and artist per folder. Search results carry
+covers and their own right click menus. Optionally only folders that actually
 contain music.
+
+**Settings with a sidebar.** Five categories instead of one long roll, so
+there is room for settings that would not have fit. Light, dark or whatever
+Windows says. Everything applies as you change it.
 
 **Tabs and split view.** Keep several folders open and drag files between two
 halves. Hold Ctrl to copy instead of move. Opening a folder from the Explorer
@@ -97,7 +114,7 @@ dotnet build
 dotnet run --project src\TagTuner.App
 
 # Setup and portable ZIP into dist\
-.\tools\build-release.ps1 -Version 0.6.0
+.\tools\build-release.ps1 -Version 0.7.0
 ```
 
 ffmpeg is not in the repository. `tools\fetch-ffmpeg.ps1` fetches it into
