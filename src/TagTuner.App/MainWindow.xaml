@@ -11,7 +11,9 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="Root" RowDefinitions="48,*,46">
+    <!-- Hidden: Das Kürzel hängt am ganzen Fenster, und WinUI zeigt es sonst
+         als Tooltip über allem, was keinen eigenen hat. -->
+    <Grid x:Name="Root" RowDefinitions="48,*,46" KeyboardAcceleratorPlacementMode="Hidden">
 
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindShortcut" />
