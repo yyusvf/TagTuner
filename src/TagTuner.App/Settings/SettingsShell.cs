@@ -73,16 +73,16 @@ internal static class SettingsShell
         // ── Inhalt rechts ────────────────────────────────────────
         var heading = new TextBlock
         {
-            FontSize = 19,
+            FontSize = 18,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 10),
+            Margin = new Thickness(0, 0, 0, 7),
         };
 
-        var body = new StackPanel { Spacing = 9 };
+        var body = new StackPanel { Spacing = 7 };
 
         var content = new ScrollViewer
         {
-            Padding = new Thickness(22, 14, 22, 16),
+            Padding = new Thickness(16, 12, 16, 12),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = new StackPanel { Children = { heading, body } },
         };
@@ -92,9 +92,9 @@ internal static class SettingsShell
         // eine Linie dazwischen genügt als Trennung.
         var rail = new ListView
         {
-            Width = 178,
+            Width = 172,
             SelectionMode = ListViewSelectionMode.Single,
-            Padding = new Thickness(8, 10, 8, 10),
+            Padding = new Thickness(6, 8, 6, 8),
             Background = null,
             ItemContainerStyle = RailItemStyle(),
         };
@@ -163,10 +163,10 @@ internal static class SettingsShell
             Content = "\uE711",
             FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
             FontSize = 12,
-            Width = 34,
-            Height = 34,
+            Width = 32,
+            Height = 32,
             Padding = new Thickness(0),
-            Margin = new Thickness(0, 8, 8, 0),
+            Margin = new Thickness(0, 6, 6, 0),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Background = null,
@@ -177,8 +177,8 @@ internal static class SettingsShell
 
         var layout = new Grid
         {
-            Height = 620,
-            Width = 1000,
+            Height = 660,
+            Width = 1180,
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Auto },
@@ -205,6 +205,16 @@ internal static class SettingsShell
             Padding = new Thickness(0),
         };
 
+        // Ein ContentDialog klemmt seinen Inhalt auf rund 548 Pixel — diese
+        // Werte stehen als Ressourcen in seiner Vorlage, nicht als
+        // Eigenschaften. Ohne sie zu überschreiben wird alles rechts davon
+        // abgeschnitten, samt dem Schließen-Knopf in der Ecke, und man sieht
+        // nur, dass etwas fehlt, nicht warum.
+        dialog.Resources["ContentDialogMaxWidth"] = 1400.0;
+        dialog.Resources["ContentDialogMinWidth"] = 640.0;
+        dialog.Resources["ContentDialogMaxHeight"] = 1200.0;
+        dialog.Resources["ContentDialogMinHeight"] = 320.0;
+
         // Ohne Knopfleiste schließt der Dialog nicht mehr von selbst auf
         // Escape. Das wäre eine Falle: Man drückt Escape und nichts passiert.
         layout.KeyDown += (_, e) =>
@@ -230,8 +240,8 @@ internal static class SettingsShell
                                      HorizontalAlignment.Stretch));
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,
                                      HorizontalAlignment.Stretch));
-        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(11, 0, 11, 0)));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 38.0));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 0, 10, 0)));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 34.0));
         style.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(5)));
         style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 1, 0, 1)));
         return style;

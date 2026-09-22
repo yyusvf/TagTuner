@@ -33,7 +33,7 @@ internal static class SettingsUi
         control.HorizontalAlignment = HorizontalAlignment.Stretch;
         return new StackPanel
         {
-            Spacing = 3,
+            Spacing = 2,
             Children =
             {
                 new TextBlock { Text = Strings.T(label), FontSize = 11.5, Opacity = 0.8 },
@@ -57,7 +57,7 @@ internal static class SettingsUi
 
     public static Border Group(string title, params FrameworkElement?[] content)
     {
-        var panel = new StackPanel { Spacing = 7 };
+        var panel = new StackPanel { Spacing = 5 };
         panel.Children.Add(new TextBlock
         {
             Text = Strings.T(title).ToUpperInvariant(),
@@ -73,7 +73,7 @@ internal static class SettingsUi
 
         return new Border
         {
-            Padding = new Thickness(12, 10, 12, 11),
+            Padding = new Thickness(11, 8, 11, 9),
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
             BorderBrush = (Brush)Application.Current.Resources["ControlStrokeColorDefaultBrush"],
@@ -84,7 +84,7 @@ internal static class SettingsUi
     /// <summary>Ein Haken, der sofort schreibt.</summary>
     public static CheckBox Tick(string label, bool on, Action<bool> apply)
     {
-        var box = new CheckBox { Content = Strings.T(label), IsChecked = on, MinHeight = 30 };
+        var box = new CheckBox { Content = Strings.T(label), IsChecked = on, MinHeight = 26 };
         box.Checked += (_, _) => apply(true);
         box.Unchecked += (_, _) => apply(false);
         return box;
@@ -164,7 +164,7 @@ internal static class SettingsUi
 
     public static StackPanel Buttons(params FrameworkElement[] items)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         foreach (var item in items) panel.Children.Add(item);
         return panel;
     }
