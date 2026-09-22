@@ -179,8 +179,8 @@ public sealed partial class TrackPane : UserControl
     /// <summary>
     /// Rechnet aus, was in jeder Track-Zelle steht.
     ///
-    /// Im Album mit mehreren Discs und in Playlist-Reihenfolge steht die Disc
-    /// nur beim ersten Lied jeder Disc, wie eine Zwischenüberschrift. Sonst,
+    /// Im Album mit mehreren Discs und in Playlist-Reihenfolge bekommt das
+    /// erste Lied jeder Disc eine eigene Zeile darüber, wie bei Spotify. Sonst,
     /// wenn überhaupt mehrere Discs vorkommen, kompakt als „2-04". Bei einer
     /// einzigen Disc bleibt es bei der Nummer: Eine „1" vor jedem Lied sagt
     /// nichts.
@@ -203,7 +203,7 @@ public sealed partial class TrackPane : UserControl
             if (album)
             {
                 var first = track.Disc > 0 && track.Disc != previous;
-                _trackText[track.Path] = (first ? $"CD {track.Disc}" : "", track.TrackLabel);
+                _trackText[track.Path] = (first ? Strings.T("Disc {0}", track.Disc) : "", track.TrackLabel);
             }
             else
             {

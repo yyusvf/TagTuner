@@ -149,6 +149,7 @@ public static partial class Strings
         ["Description"] = "Descrição",
         ["Disc"] = "Disco",
         ["DISC"] = "DISCO",
+        ["Disc {0}"] = "Disco {0}",
         ["Disc and track"] = "Disco e faixa",
         ["Down"] = "Descer",
         ["Download and install"] = "Baixar e instalar",

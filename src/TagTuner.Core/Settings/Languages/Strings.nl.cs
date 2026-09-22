@@ -149,6 +149,7 @@ public static partial class Strings
         ["Description"] = "Beschrijving",
         ["Disc"] = "Schijf",
         ["DISC"] = "SCHIJF",
+        ["Disc {0}"] = "Schijf {0}",
         ["Disc and track"] = "Schijf en track",
         ["Down"] = "Omlaag",
         ["Download and install"] = "Downloaden en installeren",

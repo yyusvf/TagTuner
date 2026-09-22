@@ -149,6 +149,7 @@ public static partial class Strings
         ["Description"] = "Описание",
         ["Disc"] = "Диск",
         ["DISC"] = "ДИСК",
+        ["Disc {0}"] = "Диск {0}",
         ["Disc and track"] = "Диск и дорожка",
         ["Down"] = "Вниз",
         ["Download and install"] = "Скачать и установить",

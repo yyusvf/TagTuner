@@ -149,6 +149,7 @@ public static partial class Strings
         ["Description"] = "Popis",
         ["Disc"] = "Disk",
         ["DISC"] = "DISK",
+        ["Disc {0}"] = "Disk {0}",
         ["Disc and track"] = "Disk a stopa",
         ["Down"] = "Dolů",
         ["Download and install"] = "Stáhnout a nainstalovat",

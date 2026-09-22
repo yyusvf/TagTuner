@@ -149,6 +149,7 @@ public static partial class Strings
         ["Description"] = "Açıklama",
         ["Disc"] = "Disk",
         ["DISC"] = "DİSK",
+        ["Disc {0}"] = "Disk {0}",
         ["Disc and track"] = "Disk ve parça",
         ["Down"] = "Aşağı",
         ["Download and install"] = "İndir ve kur",

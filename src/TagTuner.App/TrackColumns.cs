@@ -276,8 +276,13 @@ internal static class TrackColumns
     {
         grid.Children.Clear();
         grid.ColumnDefinitions.Clear();
+        grid.RowDefinitions.Clear();
         grid.ColumnSpacing = 10;
-        grid.Height = 56;
+        grid.Height = double.NaN;
+
+        // Oben die Zeile für die Disc, sonst eingeklappt; darunter die Werte.
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(56) });
 
         var dim = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
         var second = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
@@ -289,6 +294,30 @@ internal static class TrackColumns
             Bind(grid.ColumnDefinitions[i], widths, i);
         }
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // Wie bei Spotify: Die Disc steht einmal als eigene Zeile über ihrem
+        // ersten Lied, statt klein in der Nummernspalte. Sie gehört zur Zeile
+        // dieses Lieds, damit Auswahl, Ziehen und Umsortieren weiter nur
+        // Lieder kennen.
+        var discText = new TextBlock
+        {
+            FontSize = 13,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = second,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var discHeader = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Padding = new Thickness(2, 14, 0, 6),
+            Visibility = Visibility.Collapsed,
+            Tag = DiscHeaderTag,
+            Children = { DiscIcon(second), discText },
+        };
+        Grid.SetRow(discHeader, 0);
+        Grid.SetColumnSpan(discHeader, columns.Count + 1);
+        grid.Children.Add(discHeader);
 
         for (var i = 0; i < columns.Count; i++)
         {
@@ -318,32 +347,16 @@ internal static class TrackColumns
             }
             else if (column.Id == "track")
             {
-                // Zwei Zeilen: klein darüber die Disc, sofern sie hier
-                // erscheinen soll, darunter die Nummer. Die Disc steht so nur
-                // beim ersten Lied jeder Disc, nicht zwölfmal untereinander.
-                var mark = new TextBlock
-                {
-                    FontSize = 9.5,
-                    FontFamily = new FontFamily("Consolas"),
-                    Foreground = (Brush)Application.Current.Resources["AccentBrush"],
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    Visibility = Visibility.Collapsed,
-                };
                 var number = new TextBlock
                 {
                     FontSize = 12,
                     FontFamily = new FontFamily("Consolas"),
                     Foreground = dim,
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                };
-                cell = new StackPanel
-                {
                     VerticalAlignment = VerticalAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Right,
-                    Spacing = 0,
-                    Children = { mark, number },
                 };
-                cell.Tag = new CellTag(column, null, number, mark);
+                cell = number;
+                cell.Tag = new CellTag(column, null, number);
             }
             else if (column.Id == "title" && combined)
             {
@@ -397,22 +410,53 @@ internal static class TrackColumns
             }
 
             Grid.SetColumn(cell, i);
+            Grid.SetRow(cell, 1);
             grid.Children.Add(cell);
         }
     }
 
+    /// <summary>Erkennungszeichen der Disc-Zeile unter den Kindern einer Zeile.</summary>
+    private const string DiscHeaderTag = "disc-header";
+
+    /// <summary>Eine kleine Scheibe: Ring mit Punkt in der Mitte.</summary>
+    private static FrameworkElement DiscIcon(Brush brush) => new Grid
+    {
+        Width = 18,
+        Height = 18,
+        VerticalAlignment = VerticalAlignment.Center,
+        Children =
+        {
+            new Microsoft.UI.Xaml.Shapes.Ellipse { Stroke = brush, StrokeThickness = 1.4 },
+            new Microsoft.UI.Xaml.Shapes.Ellipse
+            {
+                Width = 6, Height = 6, Stroke = brush, StrokeThickness = 1.4,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        },
+    };
+
     /// <summary>Setzt die Werte einer schon gebauten Zeile auf einen Track.</summary>
     /// <param name="trackText">
-    /// Was in der Track-Zelle steht: oben die Disc, sofern sie hier erscheinen
-    /// soll, unten die Nummer. Das hängt am Ordner und an seiner Reihenfolge,
+    /// Die Disc-Zeile über dem Lied, leer wenn es keine bekommt, und was in
+    /// der Track-Zelle steht. Das hängt am Ordner und an seiner Reihenfolge,
     /// darum rechnet es die Liste aus und nicht diese Klasse.
     /// </param>
     public static void FillRow(
         Grid row, AudioTrack track, bool combined,
         Func<AudioTrack, (string Mark, string Number)>? trackText = null)
     {
+        var (mark, number) = trackText?.Invoke(track) ?? ("", track.TrackLabel);
+
         foreach (var child in row.Children)
         {
+            if (child is StackPanel { Tag: DiscHeaderTag } header)
+            {
+                header.Visibility = mark.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                if (header.Children[1] is TextBlock discText) discText.Text = mark;
+                continue;
+            }
+
             if (child is not FrameworkElement { Tag: CellTag tag }) continue;
 
             if (tag.Picture is { } picture)
@@ -421,12 +465,9 @@ internal static class TrackColumns
                 continue;
             }
 
-            if (tag.Column.Id == "track" && tag.Second is { } discLine)
+            if (tag.Column.Id == "track")
             {
-                var (mark, number) = trackText?.Invoke(track) ?? ("", track.TrackLabel);
                 tag.First!.Text = number;
-                discLine.Text = mark;
-                discLine.Visibility = mark.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 continue;
             }
 
