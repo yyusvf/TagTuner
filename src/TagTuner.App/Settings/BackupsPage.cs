@@ -29,6 +29,13 @@ internal static class BackupsPage
         public AudioTrack? Track { get; set; }
         public bool Reading { get; set; }
 
+        /// <summary>
+        /// Gewählt. Die Liste selbst wählt nichts aus: Ihre eigenen Haken
+        /// sahen anders aus als der für „Alle auswählen" und ließen sich
+        /// schlecht treffen. Jede Zeile hat stattdessen dasselbe Kästchen.
+        /// </summary>
+        public bool Selected { get; set; }
+
         /// <summary>Was sich seitdem an der Datei geändert hat, fertig zum Anzeigen. Null, solange noch gelesen wird.</summary>
         public string? Changes { get; set; }
     }
@@ -69,7 +76,8 @@ internal static class BackupsPage
         // ── Liste ────────────────────────────────────────────────
         var list = new ListView
         {
-            SelectionMode = ListViewSelectionMode.Multiple,
+            SelectionMode = ListViewSelectionMode.None,
+            IsItemClickEnabled = true,
             Height = 420,
             ItemsSource = rows,
             ItemTemplate = (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
@@ -100,9 +108,32 @@ internal static class BackupsPage
             UpdateButtons();
         }
 
+        // Beim Setzen der Haken aus dem Code nicht auf die eigenen Ereignisse hören.
+        var filling = false;
+
+        List<Row> Chosen() => rows.Where(r => r.Selected).ToList();
+
+        void RefreshChecks()
+        {
+            filling = true;
+            foreach (var row in rows)
+            {
+                if (list.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: Grid { Tag: RowParts parts } })
+                    parts.Check!.IsChecked = row.Selected;
+            }
+            filling = false;
+        }
+
+        void SelectAll(bool on)
+        {
+            foreach (var row in rows) row.Selected = on;
+            RefreshChecks();
+            UpdateButtons();
+        }
+
         void UpdateButtons()
         {
-            var n = list.SelectedItems.Count;
+            var n = rows.Count(r => r.Selected);
             restoreBtn.Content = n > 0 ? Strings.T("Restore ({0})", n) : Strings.T("Restore");
             deleteBtn.Content = n > 0 ? Strings.T("Delete ({0})", n) : Strings.T("Delete");
             restoreBtn.IsEnabled = deleteBtn.IsEnabled = n > 0;
@@ -114,8 +145,8 @@ internal static class BackupsPage
             selectAll.Unchecked += OnSelectNone;
         }
 
-        void OnSelectAll(object sender, RoutedEventArgs e) => list.SelectAll();
-        void OnSelectNone(object sender, RoutedEventArgs e) => list.SelectedItems.Clear();
+        void OnSelectAll(object sender, RoutedEventArgs e) => SelectAll(true);
+        void OnSelectNone(object sender, RoutedEventArgs e) => SelectAll(false);
         selectAll.Checked += OnSelectAll;
         selectAll.Unchecked += OnSelectNone;
 
@@ -123,7 +154,14 @@ internal static class BackupsPage
         // ein Teil gewählt ist. Er leerte vorher die Auswahl, und jeder
         // Haken an einer Zeile verschwand im selben Moment wieder.
 
-        list.SelectionChanged += (_, _) => UpdateButtons();
+        // Ein Klick irgendwo auf die Zeile setzt oder löst ihren Haken.
+        list.ItemClick += (_, e) =>
+        {
+            if (e.ClickedItem is not Row row) return;
+            row.Selected = !row.Selected;
+            RefreshChecks();
+            UpdateButtons();
+        };
 
         // ── Wiederherstellen ─────────────────────────────────────
         async Task RestoreAsync(IReadOnlyList<Row> chosen)
@@ -189,9 +227,9 @@ internal static class BackupsPage
             status.Text = Strings.T("{0} backup(s) deleted.", gone.Count);
         }
 
-        restoreBtn.Click += async (_, _) => await RestoreAsync(list.SelectedItems.OfType<Row>().ToList());
+        restoreBtn.Click += async (_, _) => await RestoreAsync(Chosen());
         deleteBtn.Flyout = ConfirmFlyout(Strings.T("Delete the selected backups for good?"),
-            Strings.T("Delete"), () => Delete(list.SelectedItems.OfType<Row>().ToList()));
+            Strings.T("Delete"), () => Delete(Chosen()));
 
         deleteAllBtn.Click += (_, _) =>
         {
@@ -220,10 +258,23 @@ internal static class BackupsPage
                 };
                 parts.Delete.Flyout = ConfirmFlyout(Strings.T("Delete this backup for good?"),
                     Strings.T("Delete"), () => { if (grid.DataContext is Row r) Delete([r]); });
+
+                void Toggle(bool on)
+                {
+                    if (filling || grid.DataContext is not Row r) return;
+                    r.Selected = on;
+                    UpdateButtons();
+                }
+                parts.Check!.Checked += (_, _) => Toggle(true);
+                parts.Check.Unchecked += (_, _) => Toggle(false);
             }
 
             grid.DataContext = row;
             Fill(parts, row);
+
+            filling = true;
+            parts.Check!.IsChecked = row.Selected;
+            filling = false;
             args.Handled = true;
 
             // Tags erst lesen, wenn die Zeile zu sehen ist: Bei hunderten
@@ -309,6 +360,9 @@ internal static class BackupsPage
 
         /// <summary>Was sich seitdem geändert hat.</summary>
         public TextBlock? Changes { get; init; }
+
+        /// <summary>Der Haken der Zeile.</summary>
+        public CheckBox? Check { get; init; }
     }
 
     /// <summary>
@@ -323,6 +377,7 @@ internal static class BackupsPage
 
         grid.Height = 62;
         grid.ColumnSpacing = 10;
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
@@ -396,10 +451,20 @@ internal static class BackupsPage
             Children = { restore, delete },
         };
 
-        Grid.SetColumn(names, 1);
-        Grid.SetColumn(origin, 2);
-        Grid.SetColumn(stamp, 3);
-        Grid.SetColumn(buttons, 4);
+        // Dasselbe Kästchen wie „Alle auswählen", nur ohne Beschriftung.
+        var check = new CheckBox
+        {
+            MinWidth = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        Grid.SetColumn(coverBox, 1);
+        Grid.SetColumn(names, 2);
+        Grid.SetColumn(origin, 3);
+        Grid.SetColumn(stamp, 4);
+        Grid.SetColumn(buttons, 5);
+        grid.Children.Add(check);
         grid.Children.Add(coverBox);
         grid.Children.Add(names);
         grid.Children.Add(origin);
@@ -411,6 +476,7 @@ internal static class BackupsPage
         {
             Action = action,
             Changes = changes,
+            Check = check,
         };
     }
 
