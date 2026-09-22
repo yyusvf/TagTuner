@@ -83,6 +83,8 @@ public sealed partial class MainWindow : Window
             pane.PlayRequested += (_, track) => _player.Play(track);
             pane.SortRequested += OnPaneSortRequested;
             pane.ScopeExitRequested += OnScopeExit;
+            pane.ColumnsReordered += (_, _) => ApplyColumns();
+            pane.IsAlbumFolder = path => _settings.RuleFor(path).AlbumMode;
             pane.CopyTagsRequested += OnCopyTags;
             pane.PasteTagsRequested += OnPasteTags;
             pane.NavigateRequested += (_, path) => NavigateActive(path);
@@ -2071,6 +2073,7 @@ public sealed partial class MainWindow : Window
             Numbering = NumberingBox.IsChecked == true,
         });
         UpdateRuleSwitches();
+        PaneFor(ActiveTab)?.Refresh();
     }
 
     /// <summary>Nimmt die eigene Regel zurück, sodass wieder die globale gilt.</summary>

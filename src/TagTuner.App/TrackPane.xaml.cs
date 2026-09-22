@@ -67,6 +67,24 @@ public sealed partial class TrackPane : UserControl
     private readonly Dictionary<TrackSort, TextBlock> _sortMarks = [];
     private List<TrackColumn> _columns = [];
     private bool _combined = true;
+    private AppSettings? _settings;
+
+    /// <summary>
+    /// Ob ein Ordner im Album-Modus steht. Die Liste kennt die Regeln nicht
+    /// selbst; das Hauptfenster reicht die Frage durch.
+    /// </summary>
+    public Func<string, bool>? IsAlbumFolder { get; set; }
+
+    /// <summary>Eine Spalte wurde in der Kopfzeile an eine andere Stelle gezogen.</summary>
+    public event EventHandler? ColumnsReordered;
+
+    /// <summary>
+    /// Was in der Track-Zelle steht, je Pfad. Wird bei jedem Auffrischen neu
+    /// berechnet, weil es an der Reihenfolge hängt: „die erste Datei jeder
+    /// Disc" ist nach einem Umsortieren eine andere.
+    /// </summary>
+    private Dictionary<string, (string Mark, string Number)> _trackText =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Übernimmt Auswahl, Reihenfolge und Breiten der Spalten. Baut die
@@ -75,18 +93,23 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     public void ApplyColumns(AppSettings settings)
     {
+        _settings = settings;
         _columns = TrackColumns.Resolve(settings);
         _combined = settings.CombineTitleAndArtist;
 
         Columns.Set(TrackColumns.Widths(settings, _columns));
 
         TrackColumns.BuildHeader(
-            HeaderRow, _columns, Columns, _sortMarks,
-            OnHeaderTapped,
+            HeaderRow, _columns, Columns, _combined, _sortMarks,
+            OnHeaderTapped, OnColumnPressed,
             (Style)Application.Current.Resources["ColumnGrip"],
             OnGripPressed, OnGripMoved, OnGripReleased, OnGripExited);
 
+        HeaderRow.Children.Add(_dropMark);
+
         UpdateSortMarks();
+        ComputeTrackText();
+        UpdateWidth();
 
         // Die Liste hält gebaute Zeilen für das Wiederverwenden bereit. Nach
         // einer Änderung der Spalten passen die nicht mehr, und ohne diesen
@@ -119,10 +142,244 @@ public sealed partial class TrackPane : UserControl
             row.Tag = Stamp();
         }
 
-        TrackColumns.FillRow(row, track, _combined);
+        // Ausdrücklich setzen: Mit Handled = true übernimmt die Liste das
+        // Binden nicht mehr, und ob die Zeile ihren DataContext dann noch
+        // bekommt, ist nicht zugesichert.
+        row.DataContext = track;
+
+        TrackColumns.FillRow(row, track, _combined, TrackTextFor);
         Paint(container, track);
         args.Handled = true;
     }
+
+    /// <summary>
+    /// Der Track unter einem Zeiger- oder Tastenereignis.
+    ///
+    /// Über den Container statt über DataContext: Seit die Zeilen im Code
+    /// gebaut werden, ist der DataContext der Zelle nicht mehr verlässlich
+    /// gesetzt. Rechtsklick und Doppelklick fanden deshalb keinen Track und
+    /// taten einfach nichts.
+    /// </summary>
+    private AudioTrack? TrackAt(object? source)
+    {
+        for (var node = source as DependencyObject; node is not null;
+             node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ListViewItem item) return List.ItemFromContainer(item) as AudioTrack;
+            if (ReferenceEquals(node, List)) break;
+        }
+        return null;
+    }
+
+    // ── Disc und Track ───────────────────────────────────────────
+
+    private (string Mark, string Number) TrackTextFor(AudioTrack track) =>
+        _trackText.TryGetValue(track.Path, out var text) ? text : ("", track.TrackLabel);
+
+    /// <summary>
+    /// Rechnet aus, was in jeder Track-Zelle steht.
+    ///
+    /// Im Album mit mehreren Discs und in Playlist-Reihenfolge steht die Disc
+    /// nur beim ersten Lied jeder Disc, wie eine Zwischenüberschrift. Sonst,
+    /// wenn überhaupt mehrere Discs vorkommen, kompakt als „2-04". Bei einer
+    /// einzigen Disc bleibt es bei der Nummer: Eine „1" vor jedem Lied sagt
+    /// nichts.
+    /// </summary>
+    private void ComputeTrackText()
+    {
+        _trackText = new(StringComparer.OrdinalIgnoreCase);
+        if (Tab is null || _settings is not { CombineDiscAndTrack: true }) return;
+
+        var discs = Tab.Tracks.Select(t => t.Disc).Where(d => d > 0).Distinct().Count();
+        if (discs < 2) return;
+
+        var album = !Tab.Recursive
+                    && Tab.Sort == TrackSort.Natural
+                    && (IsAlbumFolder?.Invoke(Tab.Path) ?? false);
+
+        uint? previous = null;
+        foreach (var track in Tab.Tracks)
+        {
+            if (album)
+            {
+                var first = track.Disc > 0 && track.Disc != previous;
+                _trackText[track.Path] = (first ? $"CD {track.Disc}" : "", track.TrackLabel);
+            }
+            else
+            {
+                _trackText[track.Path] = ("",
+                    track.Disc > 0 && track.Track > 0 ? $"{track.Disc}-{track.Track:00}"
+                                                      : track.TrackLabel);
+            }
+            previous = track.Disc;
+        }
+    }
+
+    /// <summary>
+    /// Füllt die Zeilen neu, die gerade gezeichnet sind. Nach einem
+    /// Umsortieren hat sich geändert, welche Datei die erste ihrer Disc ist,
+    /// die Zeilen selbst aber nicht.
+    /// </summary>
+    private void RefillRealized()
+    {
+        foreach (var item in List.Items)
+        {
+            if (item is not AudioTrack track) continue;
+            if (List.ContainerFromItem(item) is not ListViewItem container) continue;
+            if (container.ContentTemplateRoot is not Grid row || row.Tag as string != Stamp()) continue;
+            TrackColumns.FillRow(row, track, _combined, TrackTextFor);
+        }
+    }
+
+    // ── Spalten verschieben ──────────────────────────────────────
+
+    private int _dragColumn = -1;
+    private double _dragStartX;
+    private bool _columnDragging;
+    private bool _columnDragged;
+    private int _dropAt = -1;
+
+    /// <summary>Die Einfügemarke beim Ziehen einer Spalte.</summary>
+    private readonly Microsoft.UI.Xaml.Shapes.Rectangle _dropMark = new()
+    {
+        Width = 2,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Stretch,
+        Visibility = Visibility.Collapsed,
+        IsHitTestVisible = false,
+        Fill = (Brush)Application.Current.Resources["AccentBrush"],
+    };
+
+    private const double DragThreshold = 8;
+
+    private void OnColumnPressed(int index, PointerRoutedEventArgs e)
+    {
+        _dragColumn = index;
+        _dragStartX = e.GetCurrentPoint(HeaderRow).Position.X;
+        _columnDragging = false;
+    }
+
+    private void OnHeaderMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragColumn < 0) return;
+
+        var x = e.GetCurrentPoint(HeaderRow).Position.X;
+
+        // Erst ab ein paar Pixeln ist es ein Zug. Darunter bleibt es ein
+        // Klick, und der sortiert.
+        if (!_columnDragging)
+        {
+            if (Math.Abs(x - _dragStartX) < DragThreshold) return;
+            _columnDragging = true;
+            HeaderRow.CapturePointer(e.Pointer);
+        }
+
+        _dropAt = InsertionIndex(x);
+        _dropMark.Margin = new Thickness(BoundaryX(_dropAt), 0, 0, 0);
+        Grid.SetColumnSpan(_dropMark, _columns.Count + 1);
+        _dropMark.Visibility = Visibility.Visible;
+        e.Handled = true;
+    }
+
+    private void OnHeaderReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragColumn < 0) return;
+
+        var from = _dragColumn;
+        var to = _dropAt;
+        var dragged = _columnDragging;
+
+        _dragColumn = -1;
+        _columnDragging = false;
+        _dropMark.Visibility = Visibility.Collapsed;
+        HeaderRow.ReleasePointerCaptures();
+
+        if (!dragged) return;
+
+        _columnDragged = true;
+        e.Handled = true;
+        MoveColumn(from, to);
+    }
+
+    /// <summary>
+    /// Vor welche sichtbare Spalte der Zeiger zielt. Die Grenze liegt in der
+    /// Mitte jeder Spalte, sonst müsste man eine breite Spalte bis ganz
+    /// hinüber ziehen, um an ihr vorbeizukommen.
+    /// </summary>
+    private int InsertionIndex(double x)
+    {
+        var left = HeaderRow.Padding.Left;
+        for (var i = 0; i < _columns.Count; i++)
+        {
+            var width = Columns.WidthAt(i);
+            if (x < left + width / 2) return i;
+            left += width + HeaderRow.ColumnSpacing;
+        }
+        return _columns.Count;
+    }
+
+    /// <summary>Wo die Einfügemarke steht, gemessen vom Anfang der ersten Spalte.</summary>
+    private double BoundaryX(int index)
+    {
+        var x = 0.0;
+        for (var i = 0; i < index && i < _columns.Count; i++)
+            x += Columns.WidthAt(i) + HeaderRow.ColumnSpacing;
+        return Math.Max(0, x - HeaderRow.ColumnSpacing / 2 - 1);
+    }
+
+    /// <summary>
+    /// Verschiebt eine Spalte in der gespeicherten Reihenfolge. Gerechnet wird
+    /// über die Kürzel, nicht über Positionen: In der gespeicherten Liste
+    /// stehen auch Spalten, die gerade ausgeblendet sind.
+    /// </summary>
+    private void MoveColumn(int from, int to)
+    {
+        if (_settings is null || from < 0 || from >= _columns.Count) return;
+        if (to == from || to == from + 1) return;
+
+        TrackColumns.EnsureStates(_settings);
+        var states = _settings.TrackColumns;
+
+        var moving = states.First(st => st.Id == _columns[from].Id);
+        states.Remove(moving);
+
+        if (to >= _columns.Count)
+        {
+            // Hinter die letzte sichtbare Spalte.
+            var last = states.FindIndex(st => st.Id == _columns[^1].Id);
+            states.Insert(last + 1, moving);
+        }
+        else
+        {
+            var before = states.FindIndex(st => st.Id == _columns[to].Id);
+            states.Insert(before, moving);
+        }
+
+        _settings.Save();
+        ColumnsReordered?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ── Breite für waagerechtes Scrollen ─────────────────────────
+
+    /// <summary>
+    /// Wie breit Kopfzeile und Liste sein müssen. Passen die Spalten nicht
+    /// ins Fenster, wird der Bereich breiter und lässt sich waagerecht
+    /// schieben; passen sie, füllt er das Fenster wie bisher.
+    /// </summary>
+    private void UpdateWidth()
+    {
+        var needed = HeaderRow.Padding.Left + HeaderRow.Padding.Right;
+        for (var i = 0; i < _columns.Count; i++)
+            needed += Columns.WidthAt(i) + HeaderRow.ColumnSpacing;
+
+        // Etwas Luft für die Zeilen, deren Innenabstand größer ist als der
+        // der Kopfzeile, und für die senkrechte Laufleiste.
+        needed += 24;
+
+        Wide.Width = Math.Max(WideScroll.ActualWidth, needed);
+    }
+
+    private void OnWideScrollResized(object sender, SizeChangedEventArgs e) => UpdateWidth();
 
     // ── Hervorheben ──────────────────────────────────────────────
 
@@ -172,7 +429,14 @@ public sealed partial class TrackPane : UserControl
     private string Stamp() =>
         string.Join(",", _columns.Select(c => c.Id)) + (_combined ? "|1" : "|0");
 
-    public TrackPane() => InitializeComponent();
+    public TrackPane()
+    {
+        InitializeComponent();
+
+        // Zieht jemand eine Spalte breiter, muss der Bereich mitwachsen,
+        // sonst verschwindet ihr rechter Teil hinter dem Fensterrand.
+        Columns.PropertyChanged += (_, _) => UpdateWidth();
+    }
 
     /// <summary>Hebt die Hälfte hervor, die gerade die Metadatenspalte speist.</summary>
     public void SetActive(bool active)
@@ -211,6 +475,8 @@ public sealed partial class TrackPane : UserControl
         List.AllowDrop = !Tab.Recursive;
 
         UpdateSortMarks();
+        ComputeTrackText();
+        RefillRealized();
 
         // Auswahl nach einem Neueinlesen wiederherstellen — sonst verliert
         // man nach jeder Operation, woran man gerade gearbeitet hat.
@@ -248,7 +514,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnListDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is not AudioTrack track) return;
+        if (TrackAt(e.OriginalSource) is not { } track) return;
         PlayRequested?.Invoke(this, track);
         e.Handled = true;
     }
@@ -413,6 +679,10 @@ public sealed partial class TrackPane : UserControl
 
     private void OnHeaderTapped(object sender, TappedRoutedEventArgs e)
     {
+        // Ein Zug endet mit Loslassen, und darauf kann noch ein Tippen
+        // folgen. Das war dann kein Klick zum Sortieren.
+        if (_columnDragged) { _columnDragged = false; e.Handled = true; return; }
+
         Activated?.Invoke(this, this);
         if (Enum.TryParse<TrackSort>((string)((FrameworkElement)sender).Tag, out var key))
             SortRequested?.Invoke(this, key);
@@ -435,7 +705,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is not AudioTrack hit) return;
+        if (TrackAt(e.OriginalSource) is not { } hit) return;
 
         Activated?.Invoke(this, this);
 

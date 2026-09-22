@@ -50,6 +50,10 @@ internal static class TrackColumns
         if (settings.CombineTitleAndArtist)
             chosen.RemoveAll(c => c.Id == "artist");
 
+        // Ebenso die Disc: Sie steht dann in der Track-Zelle.
+        if (settings.CombineDiscAndTrack)
+            chosen.RemoveAll(c => c.Id == "disc");
+
         // Ganz ohne Spalten wäre die Liste leer und der Weg zurück führte nur
         // über die Einstellungsdatei.
         if (chosen.Count == 0)
@@ -125,8 +129,10 @@ internal static class TrackColumns
         Grid host,
         IReadOnlyList<TrackColumn> columns,
         TrackColumnLayout widths,
+        bool combined,
         Dictionary<TrackSort, TextBlock> sortMarks,
         TappedEventHandler onHeaderTapped,
+        Action<int, PointerRoutedEventArgs> onColumnPressed,
         Style gripStyle,
         PointerEventHandler onGripPressed,
         PointerEventHandler onGripMoved,
@@ -163,30 +169,48 @@ internal static class TrackColumns
                     ? HorizontalAlignment.Right : HorizontalAlignment.Left,
             };
 
-            if (column.Id == "duration")
+            if (column.Id == "title" && combined)
             {
-                // Die Dauer trägt eine Uhr statt eines Wortes.
-                cell.Children.Add(new FontIcon
+                // Vereint stehen beide Wörter in dieser einen Überschrift, und
+                // jedes sortiert für sich. Fehlte der Interpret hier, gäbe es
+                // keinen Weg mehr, nach ihm zu sortieren.
+                cell.Children.Add(Part("TITLE", TrackSort.Title));
+                cell.Children.Add(new TextBlock { Text = "·", Style = header });
+                cell.Children.Add(Part("ARTIST", TrackSort.Artist));
+            }
+            else
+            {
+                if (column.Id == "duration")
                 {
-                    Glyph = "",
-                    FontSize = 11,
-                    Foreground = dim,
-                });
-            }
-            else if (column.Header.Length > 0)
-            {
-                cell.Children.Add(new TextBlock { Text = Strings.T(column.Header), Style = header });
+                    // Die Dauer trägt eine Uhr statt eines Wortes.
+                    cell.Children.Add(new FontIcon
+                    {
+                        Glyph = "",
+                        FontSize = 11,
+                        Foreground = dim,
+                    });
+                }
+                else if (column.Header.Length > 0)
+                {
+                    cell.Children.Add(new TextBlock { Text = Strings.T(column.Header), Style = header });
+                }
+
+                if (column.Sort is { } key)
+                {
+                    var mark = new TextBlock { Style = header, Foreground = accent };
+                    cell.Children.Add(mark);
+                    sortMarks[key] = mark;
+
+                    cell.Tag = key.ToString();
+                    cell.Tapped += onHeaderTapped;
+                }
             }
 
-            if (column.Sort is { } key)
-            {
-                var mark = new TextBlock { Style = header, Foreground = accent };
-                cell.Children.Add(mark);
-                sortMarks[key] = mark;
-
-                cell.Tag = key.ToString();
-                cell.Tapped += onHeaderTapped;
-            }
+            // Ziehen verschiebt die Spalte. Ein kurzer Klick bleibt Sortieren;
+            // was davon gemeint war, entscheidet die Liste an der Strecke,
+            // die der Zeiger zurücklegt.
+            var index = i;
+            cell.PointerPressed += (_, e) => onColumnPressed(index, e);
 
             if (column.Look == ColumnLook.MonoRight) cell.Margin = new Thickness(0, 0, 12, 0);
 
@@ -205,6 +229,24 @@ internal static class TrackColumns
 
             Grid.SetColumn(grip, i);
             host.Children.Add(grip);
+        }
+
+        // Ein anklickbarer Teil der Überschrift mit eigenem Sortierpfeil.
+        StackPanel Part(string text, TrackSort key)
+        {
+            var mark = new TextBlock { Style = header, Foreground = accent };
+            sortMarks[key] = mark;
+
+            var part = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 3,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                Tag = key.ToString(),
+                Children = { new TextBlock { Text = Strings.T(text), Style = header }, mark },
+            };
+            part.Tapped += onHeaderTapped;
+            return part;
         }
     }
 
@@ -274,6 +316,35 @@ internal static class TrackColumns
                 };
                 cell.Tag = new CellTag(column, picture);
             }
+            else if (column.Id == "track")
+            {
+                // Zwei Zeilen: klein darüber die Disc, sofern sie hier
+                // erscheinen soll, darunter die Nummer. Die Disc steht so nur
+                // beim ersten Lied jeder Disc, nicht zwölfmal untereinander.
+                var mark = new TextBlock
+                {
+                    FontSize = 9.5,
+                    FontFamily = new FontFamily("Consolas"),
+                    Foreground = (Brush)Application.Current.Resources["AccentBrush"],
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Visibility = Visibility.Collapsed,
+                };
+                var number = new TextBlock
+                {
+                    FontSize = 12,
+                    FontFamily = new FontFamily("Consolas"),
+                    Foreground = dim,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                };
+                cell = new StackPanel
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 0,
+                    Children = { mark, number },
+                };
+                cell.Tag = new CellTag(column, null, number, mark);
+            }
             else if (column.Id == "title" && combined)
             {
                 var title = new TextBlock { FontSize = 13.5, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -331,7 +402,14 @@ internal static class TrackColumns
     }
 
     /// <summary>Setzt die Werte einer schon gebauten Zeile auf einen Track.</summary>
-    public static void FillRow(Grid row, AudioTrack track, bool combined)
+    /// <param name="trackText">
+    /// Was in der Track-Zelle steht: oben die Disc, sofern sie hier erscheinen
+    /// soll, unten die Nummer. Das hängt am Ordner und an seiner Reihenfolge,
+    /// darum rechnet es die Liste aus und nicht diese Klasse.
+    /// </param>
+    public static void FillRow(
+        Grid row, AudioTrack track, bool combined,
+        Func<AudioTrack, (string Mark, string Number)>? trackText = null)
     {
         foreach (var child in row.Children)
         {
@@ -340,6 +418,15 @@ internal static class TrackColumns
             if (tag.Picture is { } picture)
             {
                 TrackArt.SetPath(picture, track.Path);
+                continue;
+            }
+
+            if (tag.Column.Id == "track" && tag.Second is { } discLine)
+            {
+                var (mark, number) = trackText?.Invoke(track) ?? ("", track.TrackLabel);
+                tag.First!.Text = number;
+                discLine.Text = mark;
+                discLine.Visibility = mark.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 continue;
             }
 

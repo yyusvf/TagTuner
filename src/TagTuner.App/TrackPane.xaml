@@ -32,14 +32,32 @@
                              Padding="6,2" Click="OnSelectAll" />
         </Grid>
 
+        <!-- Kopfzeile und Liste scrollen gemeinsam waagerecht, wenn die
+             Spalten nicht ins Fenster passen. Senkrecht bleibt der
+             ScrollViewer aus: Das Scrollen übernimmt die Liste selbst, und
+             nur so behält sie eine feste Höhe und virtualisiert weiter. -->
+        <ScrollViewer Grid.Row="1" Grid.RowSpan="2" x:Name="WideScroll"
+                      HorizontalScrollMode="Auto"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Disabled"
+                      VerticalScrollBarVisibility="Disabled"
+                      SizeChanged="OnWideScrollResized">
+        <Grid x:Name="Wide" RowDefinitions="Auto,*" HorizontalAlignment="Left">
+
         <!-- Kopfzeile: Inhalt und Breiten entstehen zur Laufzeit, weil
              Auswahl und Reihenfolge der Spalten dem Nutzer gehören.
-             Siehe TrackColumns.BuildHeader. -->
-        <Grid Grid.Row="1" x:Name="HeaderRow" Padding="12,4,20,6" ColumnSpacing="10"
+             Siehe TrackColumns.BuildHeader. Der durchsichtige Hintergrund
+             lässt Zeigerbewegungen auch zwischen den Überschriften ankommen,
+             sonst bräche das Ziehen einer Spalte an jeder Lücke ab. -->
+        <Grid Grid.Row="0" x:Name="HeaderRow" Padding="12,4,20,6" ColumnSpacing="10"
+              Background="Transparent"
+              PointerMoved="OnHeaderMoved"
+              PointerReleased="OnHeaderReleased"
+              PointerCaptureLost="OnHeaderReleased"
               BorderThickness="0,0,0,1"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="1">
             <ListView x:Name="List"
                       SelectionMode="Extended"
                       SelectionChanged="OnSelectionChanged"
@@ -84,5 +102,7 @@
                        Visibility="Collapsed"
                        Fill="{StaticResource AccentBrush}" />
         </Grid>
+        </Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>

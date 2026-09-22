@@ -77,6 +77,13 @@ public sealed class AppSettings
     /// </summary>
     public bool SortByDiscThenTrack { get; set; } = true;
 
+    /// <summary>
+    /// Disc und Track in einer Spalte. In einem Album mit mehreren Discs
+    /// steht die Disc dann nur beim ersten Lied jeder Disc; sonst kompakt
+    /// als „2-04" vor der Nummer.
+    /// </summary>
+    public bool CombineDiscAndTrack { get; set; } = true;
+
     // ── Bibliothek ───────────────────────────────────────────────
 
     /// <summary>

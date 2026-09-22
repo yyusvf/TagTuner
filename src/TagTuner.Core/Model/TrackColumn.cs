@@ -34,7 +34,7 @@ public sealed record TrackColumn(
     /// <summary>Die Reihenfolge hier ist die Vorgabe, solange nichts anderes gespeichert ist.</summary>
     public static readonly IReadOnlyList<TrackColumn> All =
     [
-        new("track",       "#",             nameof(AudioTrack.TrackLabel),      ColumnLook.MonoRight,  30, true,  TrackSort.Track),
+        new("track",       "#",             nameof(AudioTrack.TrackLabel),      ColumnLook.MonoRight,  40, true,  TrackSort.Track),
         new("cover",       "",              "",                                 ColumnLook.Text,       52, true),
         new("title",       "TITLE",         nameof(AudioTrack.Title),           ColumnLook.Text,      240, true,  TrackSort.Title),
         new("artist",      "ARTIST",        nameof(AudioTrack.Artist),          ColumnLook.Text,      170, true,  TrackSort.Artist),

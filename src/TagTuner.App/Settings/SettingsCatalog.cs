@@ -150,7 +150,20 @@ internal static class SettingsCatalog
             Hint("Runs on start. Older backups are removed, and the history entries " +
                  "that belong to them can no longer be undone afterwards."),
             info,
-            deleteBtn,
+            Buttons(deleteBtn, Action("Open backup folder", () =>
+            {
+                // Anlegen, falls es ihn noch nicht gibt: Sonst öffnet der
+                // Explorer stattdessen „Dokumente", und man sucht an der
+                // falschen Stelle.
+                var folder = c.Settings.ResolvedBackupFolder;
+                try { System.IO.Directory.CreateDirectory(folder); } catch { }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{folder}\"",
+                    UseShellExecute = true,
+                });
+            })),
             Hint(c.Settings.ResolvedBackupFolder));
 
         // ── Explorer-Kontextmenü ─────────────────────────────────
@@ -483,6 +496,19 @@ internal static class SettingsCatalog
                 }),
             Hint("Off means two columns of their own. The artist column is then " +
                  "moved and sized like any other."));
+
+        yield return Group("Disc and track",
+            Tick("Show disc and track number in one column",
+                c.Settings.CombineDiscAndTrack,
+                on =>
+                {
+                    c.Settings.CombineDiscAndTrack = on;
+                    c.Save();
+                    c.Changed("columns");
+                }),
+            Hint("In an album with several discs the disc number appears once, at " +
+                 "the first track of each disc. Elsewhere it stands in front of the " +
+                 "number, like 2-04. With a single disc only the number is shown."));
 
         yield return Group("Sorting",
             Tick("In playlist order, sort by disc first, then by track",
