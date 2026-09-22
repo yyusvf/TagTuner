@@ -103,6 +103,14 @@ internal static class SettingsShell
             ItemContainerStyle = RailItemStyle(),
         };
 
+        // Die Vorlage der Zeilen nimmt ihre Ecken aus einer Ressource, nicht
+        // aus CornerRadius. Ohne das bleibt die Auswahl ein eckiger Kasten.
+        // Dazu der kleine farbige Strich links an der gewählten Zeile, wie
+        // in den Windows-Einstellungen.
+        rail.Resources["ListViewItemCornerRadius"] = new CornerRadius(6);
+        rail.Resources["ListViewItemSelectionIndicatorVisualEnabled"] = true;
+        rail.Resources["ListViewItemSelectionIndicatorCornerRadius"] = new CornerRadius(1.5);
+
         foreach (var section in sections)
         {
             rail.Items.Add(new StackPanel
@@ -264,9 +272,9 @@ internal static class SettingsShell
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,
                                      HorizontalAlignment.Stretch));
         style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 0, 10, 0)));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 34.0));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 36.0));
         style.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(5)));
-        style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 1, 0, 1)));
+        style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 2, 0, 2)));
         return style;
     }
 }
