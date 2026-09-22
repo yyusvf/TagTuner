@@ -57,7 +57,7 @@ internal static class SettingsUi
 
     public static Border Group(string title, params FrameworkElement?[] content)
     {
-        var panel = new StackPanel { Spacing = 9 };
+        var panel = new StackPanel { Spacing = 7 };
         panel.Children.Add(new TextBlock
         {
             Text = Strings.T(title).ToUpperInvariant(),
@@ -73,7 +73,7 @@ internal static class SettingsUi
 
         return new Border
         {
-            Padding = new Thickness(13),
+            Padding = new Thickness(12, 10, 12, 11),
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
             BorderBrush = (Brush)Application.Current.Resources["ControlStrokeColorDefaultBrush"],

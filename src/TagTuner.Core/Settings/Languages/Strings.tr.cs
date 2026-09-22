@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "KLASÖR ANALİZİ",
         ["Folder is not uniform"] = "Klasör tekdüze değil",
         ["Folder target"] = "Klasör hedefi",
+        ["Folders"] = "Klasörler",
         ["Follow the system"] = "Sistemi izle",
         ["Follows the global setting from the settings."] = "Ayarlardaki genel ayarı izler.",
         ["Follows Windows and changes with it."] = "Windows'u izler ve onunla birlikte değişir.",

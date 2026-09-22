@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "MAPPANALYS",
         ["Folder is not uniform"] = "Mappen är inte enhetlig",
         ["Folder target"] = "Mappens mål",
+        ["Folders"] = "Mappar",
         ["Follow the system"] = "Följ systemet",
         ["Follows the global setting from the settings."] = "Följer den globala inställningen från inställningarna.",
         ["Follows Windows and changes with it."] = "Följer Windows och ändras med det.",

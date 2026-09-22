@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "ANÁLISIS DE CARPETA",
         ["Folder is not uniform"] = "La carpeta no es uniforme",
         ["Folder target"] = "Objetivo de la carpeta",
+        ["Folders"] = "Carpetas",
         ["Follow the system"] = "Seguir al sistema",
         ["Follows the global setting from the settings."] = "Sigue el ajuste global de la configuración.",
         ["Follows Windows and changes with it."] = "Sigue a Windows y cambia con él.",

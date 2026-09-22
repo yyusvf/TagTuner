@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "ANALÝZA SLOŽKY",
         ["Folder is not uniform"] = "Složka není jednotná",
         ["Folder target"] = "Cíl složky",
+        ["Folders"] = "Složky",
         ["Follow the system"] = "Podle systému",
         ["Follows the global setting from the settings."] = "Řídí se globálním nastavením z nastavení.",
         ["Follows Windows and changes with it."] = "Řídí se Windows a mění se s ním.",

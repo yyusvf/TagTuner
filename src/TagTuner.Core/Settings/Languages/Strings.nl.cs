@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "MAPANALYSE",
         ["Folder is not uniform"] = "De map is niet uniform",
         ["Folder target"] = "Mapdoel",
+        ["Folders"] = "Mappen",
         ["Follow the system"] = "Systeemstandaard",
         ["Follows the global setting from the settings."] = "Volgt de globale instelling uit de instellingen.",
         ["Follows Windows and changes with it."] = "Volgt Windows en wisselt mee.",

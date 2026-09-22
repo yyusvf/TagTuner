@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "АНАЛИЗ ПАПКИ",
         ["Folder is not uniform"] = "Папка неоднородна",
         ["Folder target"] = "Цель папки",
+        ["Folders"] = "Папки",
         ["Follow the system"] = "Как в системе",
         ["Follows the global setting from the settings."] = "Следует общей настройке из параметров.",
         ["Follows Windows and changes with it."] = "Следует за Windows и меняется вместе с ней.",

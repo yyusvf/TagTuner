@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "АНАЛІЗ ТЕКИ",
         ["Folder is not uniform"] = "Тека неоднорідна",
         ["Folder target"] = "Ціль теки",
+        ["Folders"] = "Теки",
         ["Follow the system"] = "Як у системі",
         ["Follows the global setting from the settings."] = "Дотримується загального налаштування з параметрів.",
         ["Follows Windows and changes with it."] = "Слідує за Windows і змінюється разом із нею.",

@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "ANALYSE DU DOSSIER",
         ["Folder is not uniform"] = "Le dossier n'est pas homogène",
         ["Folder target"] = "Cible du dossier",
+        ["Folders"] = "Dossiers",
         ["Follow the system"] = "Suivre le système",
         ["Follows the global setting from the settings."] = "Suit le réglage global défini dans les paramètres.",
         ["Follows Windows and changes with it."] = "Suit Windows et change avec lui.",

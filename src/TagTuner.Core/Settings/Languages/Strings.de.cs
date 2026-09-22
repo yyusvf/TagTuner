@@ -179,6 +179,7 @@ public static partial class Strings
         ["FOLDER ANALYSIS"] = "ORDNER-ANALYSE",
         ["Folder is not uniform"] = "Ordner ist uneinheitlich",
         ["Folder target"] = "Ordner-Ziel",
+        ["Folders"] = "Ordner",
         ["Follow the system"] = "Systemstandard",
         ["Follows the global setting from the settings."] = "Folgt der globalen Einstellung aus den Einstellungen.",
         ["Follows Windows and changes with it."] = "Folgt Windows und wechselt mit.",

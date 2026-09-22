@@ -75,25 +75,27 @@ internal static class SettingsShell
         {
             FontSize = 19,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 12),
+            Margin = new Thickness(0, 0, 0, 10),
         };
 
-        var body = new StackPanel { Spacing = 12 };
+        var body = new StackPanel { Spacing = 9 };
 
         var content = new ScrollViewer
         {
-            Padding = new Thickness(18, 16, 18, 18),
+            Padding = new Thickness(22, 14, 22, 16),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = new StackPanel { Children = { heading, body } },
         };
 
         // ── Leiste links ─────────────────────────────────────────
+        // Ohne eigenen Hintergrund: Leiste und Inhalt sind eine Fläche, und
+        // eine Linie dazwischen genügt als Trennung.
         var rail = new ListView
         {
-            Width = 186,
+            Width = 178,
             SelectionMode = ListViewSelectionMode.Single,
-            Padding = new Thickness(6, 8, 6, 8),
-            Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorSecondaryBrush"],
+            Padding = new Thickness(8, 10, 8, 10),
+            Background = null,
             ItemContainerStyle = RailItemStyle(),
         };
 
@@ -146,10 +148,37 @@ internal static class SettingsShell
             content.ChangeView(null, 0, null, disableAnimation: true);
         };
 
+        var divider = new Border
+        {
+            Width = 1,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"],
+        };
+
+        // Schließen oben rechts statt als Knopf unten: Der Knopfbalken des
+        // Dialogs nimmt Höhe weg, die der Inhalt besser gebrauchen kann, und
+        // ein X in der Ecke ist dort, wo man es sucht.
+        var close = new Button
+        {
+            Content = "\uE711",
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
+            FontSize = 12,
+            Width = 34,
+            Height = 34,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 8, 8, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = null,
+            BorderThickness = new Thickness(0),
+        };
+        ToolTipService.SetToolTip(close, Strings.T("Close"));
+        close.Click += (_, _) => dialog?.Hide();
+
         var layout = new Grid
         {
-            Height = 560,
-            Width = 820,
+            Height = 620,
+            Width = 1000,
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Auto },
@@ -158,19 +187,31 @@ internal static class SettingsShell
         };
 
         Grid.SetColumn(rail, 0);
+        Grid.SetColumn(divider, 1);
         Grid.SetColumn(content, 1);
+        Grid.SetColumn(close, 1);
         layout.Children.Add(rail);
+        layout.Children.Add(divider);
         layout.Children.Add(content);
+        layout.Children.Add(close);
 
         dialog = new ContentDialog
         {
             Content = layout,
-            CloseButtonText = Strings.T("Close"),
             XamlRoot = root,
 
             // Der Rahmen des Dialogs würde sonst einen Rand um die Leiste
             // legen, und die soll bis an die Kante gehen.
             Padding = new Thickness(0),
+        };
+
+        // Ohne Knopfleiste schließt der Dialog nicht mehr von selbst auf
+        // Escape. Das wäre eine Falle: Man drückt Escape und nichts passiert.
+        layout.KeyDown += (_, e) =>
+        {
+            if (e.Key != Windows.System.VirtualKey.Escape) return;
+            dialog?.Hide();
+            e.Handled = true;
         };
 
         rail.SelectedIndex = 0;
