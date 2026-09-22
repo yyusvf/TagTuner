@@ -2003,11 +2003,24 @@ public sealed partial class MainWindow : Window
 
         _suppressRules = true;
         ConformSwitch.IsOn = rule.AutoConform;
-        InheritSwitch.IsOn = rule.InheritTags;
+        AlbumSwitch.IsOn = rule.AlbumMode;
+        BaseTagsBox.IsChecked = rule.BaseTags;
+        CoverBox.IsChecked = rule.Cover;
+        NumberingBox.IsChecked = rule.Numbering;
+
+        // Die Unterpunkte beschreiben, was der Album-Modus tut. Ist er aus,
+        // tun sie nichts, und ein bedienbarer Haken würde etwas anderes
+        // behaupten.
+        BaseTagsBox.IsEnabled = CoverBox.IsEnabled = NumberingBox.IsEnabled =
+            rule.AlbumMode && !ActiveTab.Recursive;
         _suppressRules = false;
 
         // Mit Unterordnern wird nichts abgelegt, also gibt es auch nichts zu regeln.
-        ConformSwitch.IsEnabled = InheritSwitch.IsEnabled = !ActiveTab.Recursive;
+        ConformSwitch.IsEnabled = AlbumSwitch.IsEnabled = !ActiveTab.Recursive;
+
+        AlbumNote.Text = !rule.AlbumMode
+            ? Strings.T("Tags, cover and track numbers stay untouched here.")
+            : Strings.T("Applies when files are dropped in and when the order changes.");
 
         var own = _settings.HasOwnRule(ActiveTab.Path);
         ResetRuleBtn.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
@@ -2030,7 +2043,10 @@ public sealed partial class MainWindow : Window
         _settings.SetRule(ActiveTab.Path, new FolderRule
         {
             AutoConform = ConformSwitch.IsOn,
-            InheritTags = InheritSwitch.IsOn,
+            AlbumMode = AlbumSwitch.IsOn,
+            BaseTags = BaseTagsBox.IsChecked == true,
+            Cover = CoverBox.IsChecked == true,
+            Numbering = NumberingBox.IsChecked == true,
         });
         UpdateRuleSwitches();
     }
@@ -2298,7 +2314,7 @@ public sealed partial class MainWindow : Window
         var target = tab.Target!;
         // Album-Modus: Wer die Übernahme anhat, will einen Ordner, der sich
         // wie ein Album verhält — auch wenn er gerade noch uneinheitlich ist.
-        var inherited = analysis.Inherited(byMajority: _settings.RuleFor(tab.Path).InheritTags);
+        var inherited = analysis.Inherited(byMajority: _settings.RuleFor(tab.Path).AlbumMode);
         var move = removeFrom is not null;
 
         // Was dieser Ordner an Automatik erlaubt. Ist beides aus, werden die
@@ -2324,7 +2340,7 @@ public sealed partial class MainWindow : Window
         // andernfalls bekam die Datei die nächste freie Nummer und sprang beim
         // nächsten Einlesen ans Ende — sichtbar woanders hin, als man sie
         // abgelegt hatte.
-        var renumber = rule.InheritTags;
+        var renumber = rule.WritesNumbers;
 
         if (!_settings.SkipConformDialog)
         {
@@ -2339,7 +2355,7 @@ public sealed partial class MainWindow : Window
                                 needConvert.Count, target.Format, FormatRate(target.SampleRate))
                     : Strings.T("No conversion needed."));
 
-            if (!rule.InheritTags)
+            if (!rule.WritesBaseTags)
             {
                 text.AppendLine(Strings.T(
                     "Tags are left alone, switched off for this folder."));
@@ -2359,7 +2375,7 @@ public sealed partial class MainWindow : Window
                         : Strings.T("The folder agrees on no tag, so nothing is inherited."));
             }
 
-            if (rule.InheritTags)
+            if (rule.WritesNumbers)
             {
                 text.AppendLine(existing.Count == 0
                     ? Strings.T("The folder is empty, numbering starts at 1.")
@@ -2404,28 +2420,28 @@ public sealed partial class MainWindow : Window
         var errors = new List<string>();
         var notes = new List<string>();
 
+        // Das Cover des Ordners, einmal gelesen statt je Datei. Die erste
+        // Datei, die eines trägt, gibt es vor — in einer Veröffentlichung
+        // haben ohnehin alle dasselbe.
+        AudioProbe.Cover? folderCover = null;
+        if (rule.WritesCover)
+        {
+            foreach (var candidate in existing.Where(t => t.HasCover))
+            {
+                try { folderCover = AudioProbe.ReadCover(candidate.Path); } catch { }
+                if (folderCover is { Data.Length: > 0 }) break;
+            }
+        }
+
         // Die Nummer der ersten hereinkommenden Datei ist ihre Stelle in der
-        // Liste. Ohne Übernahme wird gar keine geschrieben.
+        // Liste. Ohne Nummerierung wird gar keine geschrieben.
         var number = (uint)(at + 1);
         var done = 0;
 
         for (var i = 0; i < incoming.Count; i++)
         {
             var src = incoming[i];
-            var tags = rule.InheritTags
-                ? new TagEdit
-                {
-                    Title = string.IsNullOrWhiteSpace(src.Title)
-                        ? Path.GetFileNameWithoutExtension(src.Path) : src.Title,
-                    Album = inherited.Album,
-                    Artist = inherited.Artist ?? src.Artist,
-                    AlbumArtist = inherited.AlbumArtist,
-                    Genre = inherited.Genre,
-                    Year = uint.TryParse(inherited.Year, out var y) ? y : null,
-                    Disc = uint.TryParse(inherited.Disc, out var d) ? d : null,
-                    Track = number,
-                }
-                : null;
+            var tags = DropTags(src, rule, inherited, folderCover, number);
 
             // Erst in den Zielordner holen, dann dort angleichen — die Quelle
             // bleibt bis zum Schluss unangetastet.
@@ -2521,6 +2537,58 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Was eine hereinkommende Datei vom Ordner übernimmt.
+    ///
+    /// Jeder Unterpunkt des Album-Modus schreibt genau seinen Teil. Was
+    /// er nicht abdeckt, bleibt null und damit unangetastet — so kann man
+    /// etwa Nummern vergeben lassen, ohne dass Tags angefasst werden.
+    /// </summary>
+    private static TagEdit? DropTags(
+        AudioTrack src, FolderRule rule, InheritedTags inherited,
+        AudioProbe.Cover? cover, uint number)
+    {
+        if (!rule.AlbumMode) return null;
+
+        var edit = new TagEdit
+        {
+            // Ein leerer Titel ist keiner. Der Dateiname ist zwar geraten,
+            // aber immer noch besser als eine Zeile ohne Beschriftung.
+            Title = rule.BaseTags && string.IsNullOrWhiteSpace(src.Title)
+                ? Path.GetFileNameWithoutExtension(src.Path) : null,
+
+            Album = rule.BaseTags ? inherited.Album : null,
+            Artist = rule.BaseTags ? ArtistFor(src.Artist, inherited.Artist) : null,
+            AlbumArtist = rule.BaseTags ? inherited.AlbumArtist : null,
+            Genre = rule.BaseTags ? inherited.Genre : null,
+            Year = rule.BaseTags && uint.TryParse(inherited.Year, out var y) ? y : null,
+            Disc = rule.BaseTags && uint.TryParse(inherited.Disc, out var d) ? d : null,
+
+            Track = rule.Numbering ? number : null,
+
+            Cover = rule.Cover && cover is { Data.Length: > 0 } ? cover.Data : null,
+            CoverMimeType = rule.Cover && cover is { Data.Length: > 0 } ? cover.MimeType : null,
+        };
+
+        return edit.IsEmpty ? null : edit;
+    }
+
+    /// <summary>
+    /// Der Interpret des Ordners, außer die Datei nennt ihn schon und noch
+    /// jemanden dazu.
+    ///
+    /// „Kollektiv Halle feat. Gast" bleibt stehen: Dieser Zusatz gehört zum
+    /// Lied, nicht zum Ordner, und ihn zu überschreiben wäre ein Verlust, den
+    /// niemand bemerkt, bis die Angabe fehlt. Steht schon genau der
+    /// Ordner-Interpret dort, wird gar nicht erst geschrieben.
+    /// </summary>
+    private static string? ArtistFor(string own, string? folder)
+    {
+        if (folder is null) return null;
+        if (string.IsNullOrWhiteSpace(own)) return folder;
+        return own.Contains(folder, StringComparison.OrdinalIgnoreCase) ? null : folder;
+    }
+
+    /// <summary>
     /// Entfernt eine verschobene Quelldatei — vorher gesichert, damit der
     /// Verlauf sie an ihren alten Platz zurücklegen kann.
     /// </summary>
@@ -2598,23 +2666,16 @@ public sealed partial class MainWindow : Window
 
         var order = tab.Tracks.ToList();
 
-        if (!_settings.RuleFor(tab.Path).InheritTags)
+        if (!_settings.RuleFor(tab.Path).WritesNumbers)
         {
             StatusText.Text = Strings.T("Order changed. Track numbers unchanged "
-                + "(tag inheritance is off for this folder)");
+                + "(track numbering is off for this folder)");
             return;
         }
 
-        if (!await Confirm(Strings.T("Renumber tracks"),
-                Strings.T("Should the {0} tracks be numbered from 1 in the new order?",
-                          order.Count)
-                + "\n\n" + Strings.T("Each file is backed up first."),
-                Strings.T("Renumber")))
-        {
-            await LoadTabAsync(tab);
-            return;
-        }
-
+        // Ohne Rückfrage: Wer eine Zeile zieht, hat die neue Reihenfolge
+        // gemeint. Ein Dialog nach jedem Zug wäre im Weg, und der Verlauf
+        // holt es zurück, falls es doch daneben ging.
         ReleaseIfAffected(order);
         SetBusy(true, Strings.T("Writing track numbers"));
         var svc = new ConversionService(
@@ -2905,12 +2966,11 @@ public sealed partial class MainWindow : Window
                 ? Strings.T("Every file already has this name.")
                 : Strings.T("{0} of {1} file(s) get a new name.", changing, tracks.Count);
 
+            // Alle, nicht die ersten acht: Wer hundert Dateien umbenennt,
+            // will genau die eine sehen können, bei der das Muster daneben
+            // greift. Der ScrollViewer darum herum macht es tragbar.
             preview.Text = string.Join(Environment.NewLine,
-                plan.Take(8).Select(p => p.Track.FileName + "  →  " + Path.GetFileName(p.Target)));
-
-            if (plan.Count > 8)
-                preview.Text += Environment.NewLine
-                              + Strings.T("… and {0} more", plan.Count - 8);
+                plan.Select(p => p.Track.FileName + "  →  " + Path.GetFileName(p.Target)));
         }
 
         pattern.TextChanged += (_, _) => Recalculate();
@@ -2928,9 +2988,10 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(summary);
         panel.Children.Add(new ScrollViewer
         {
-            MaxHeight = 190,
+            MaxHeight = 300,
             HorizontalScrollMode = ScrollMode.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = preview,
         });
 

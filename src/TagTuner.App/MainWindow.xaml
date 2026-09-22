@@ -457,14 +457,35 @@
                                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                 BorderThickness="1">
                             <StackPanel Spacing="9">
+                                <TextBlock Text="ALBUM MODE" FontSize="11" FontWeight="Bold"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                <ToggleSwitch x:Name="AlbumSwitch"
+                                              Header="This folder is one release"
+                                              OnContent="on" OffContent="off"
+                                              Toggled="OnFolderRuleChanged" />
+                                <TextBlock FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           Text="For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music." />
+
+                                <!-- Was der Modus angleicht. Ohne ihn bewirken
+                                     die Haken nichts, darum sind sie dann aus. -->
+                                <StackPanel Spacing="2" Margin="2,0,0,0">
+                                    <CheckBox x:Name="BaseTagsBox" Content="Base metadata"
+                                              MinHeight="28" Click="OnFolderRuleChanged" />
+                                    <CheckBox x:Name="CoverBox" Content="Cover"
+                                              MinHeight="28" Click="OnFolderRuleChanged" />
+                                    <CheckBox x:Name="NumberingBox" Content="Track numbering"
+                                              MinHeight="28" Click="OnFolderRuleChanged" />
+                                </StackPanel>
+
+                                <TextBlock x:Name="AlbumNote" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
                                 <TextBlock Text="ON DROP" FontSize="11" FontWeight="Bold"
+                                           Margin="0,4,0,0"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                 <ToggleSwitch x:Name="ConformSwitch"
                                               Header="Align format and sample rate"
-                                              OnContent="on" OffContent="off"
-                                              Toggled="OnFolderRuleChanged" />
-                                <ToggleSwitch x:Name="InheritSwitch"
-                                              Header="Inherit tags from the folder"
                                               OnContent="on" OffContent="off"
                                               Toggled="OnFolderRuleChanged" />
                                 <TextBlock x:Name="RuleNote" FontSize="11" TextWrapping="Wrap"

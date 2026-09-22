@@ -140,11 +140,11 @@ public static class SettingsDialog
 
         var inherit = new CheckBox
         {
-            Content = "Inherit tags from the folder",
-            IsChecked = settings.DefaultInheritTags,
+            Content = "Album mode",
+            IsChecked = settings.DefaultAlbumMode,
         };
-        inherit.Checked += (_, _) => settings.DefaultInheritTags = true;
-        inherit.Unchecked += (_, _) => settings.DefaultInheritTags = false;
+        inherit.Checked += (_, _) => settings.DefaultAlbumMode = true;
+        inherit.Unchecked += (_, _) => settings.DefaultAlbumMode = false;
 
         var ownRules = Hint("");
         void RefreshRules()

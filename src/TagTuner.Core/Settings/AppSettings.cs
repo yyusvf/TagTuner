@@ -113,13 +113,33 @@ public sealed class AppSettings
 
     // ── Globale Vorgabe für alle Ordner ohne eigene Regel ────────
     public bool DefaultAutoConform { get; set; } = true;
-    public bool DefaultInheritTags { get; set; } = true;
+    /// <summary>
+    /// Die Vorgabe des Album-Modus für Ordner ohne eigene Regel, samt seinen
+    /// Unterpunkten.
+    /// </summary>
+    public bool DefaultAlbumMode { get; set; } = true;
+    public bool DefaultBaseTags { get; set; } = true;
+    public bool DefaultCover { get; set; } = true;
+    public bool DefaultNumbering { get; set; } = true;
+
+    /// <summary>Alter Name. Nur zum Einlesen älterer Einstellungsdateien.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("DefaultInheritTags")]
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? LegacyDefaultInheritTags
+    {
+        get => null;
+        set { if (value is { } on) DefaultAlbumMode = on; }
+    }
 
     [JsonIgnore]
     public FolderRule GlobalRule => new()
     {
         AutoConform = DefaultAutoConform,
-        InheritTags = DefaultInheritTags,
+        AlbumMode = DefaultAlbumMode,
+        BaseTags = DefaultBaseTags,
+        Cover = DefaultCover,
+        Numbering = DefaultNumbering,
     };
 
     private static string RuleKey(string path) =>
