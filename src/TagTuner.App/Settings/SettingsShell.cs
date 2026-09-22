@@ -178,7 +178,7 @@ internal static class SettingsShell
         var layout = new Grid
         {
             Height = 660,
-            Width = 1040,
+            Width = 860,
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Auto },
