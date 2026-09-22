@@ -151,6 +151,7 @@ public static partial class Strings
         ["DISC"] = "DISK",
         ["Disc {0}"] = "Disk {0}",
         ["Disc and track"] = "Disk a stopa",
+        ["Disc number"] = "Číslo disku",
         ["Down"] = "Dolů",
         ["Download and install"] = "Stáhnout a nainstalovat",
         ["Downloading the update…"] = "Stahování aktualizace…",

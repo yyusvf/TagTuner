@@ -1334,6 +1334,7 @@ public sealed partial class MainWindow : Window
         static string Label(TrackSort key) => Strings.T(key switch
         {
             TrackSort.Track => "Track number",
+            TrackSort.Disc => "Disc number",
             TrackSort.Title => "Title",
             TrackSort.Artist => "Artist",
             TrackSort.Album => "Album",

@@ -151,6 +151,7 @@ public static partial class Strings
         ["DISC"] = "DİSK",
         ["Disc {0}"] = "Disk {0}",
         ["Disc and track"] = "Disk ve parça",
+        ["Disc number"] = "Disk numarası",
         ["Down"] = "Aşağı",
         ["Download and install"] = "İndir ve kur",
         ["Downloading the update…"] = "Güncelleme indiriliyor…",

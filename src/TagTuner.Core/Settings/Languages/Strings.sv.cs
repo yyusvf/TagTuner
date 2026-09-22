@@ -151,6 +151,7 @@ public static partial class Strings
         ["DISC"] = "SKIVA",
         ["Disc {0}"] = "Skiva {0}",
         ["Disc and track"] = "Skiva och spår",
+        ["Disc number"] = "Skivnummer",
         ["Down"] = "Ner",
         ["Download and install"] = "Ladda ner och installera",
         ["Downloading the update…"] = "Laddar ner uppdateringen…",

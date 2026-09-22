@@ -193,13 +193,22 @@ internal static class TrackColumns
                 else if (column.Id == "track")
                 {
                     // Genau so breit wie das Feld der Nummer darunter, damit
-                    // das # mittig über ihr steht.
-                    cell.Children.Add(new TextBlock
+                    // das # mittig über ihr steht. Beim Sortieren nach Disc
+                    // tritt an seine Stelle die kleine Scheibe.
+                    cell.Children.Add(new Grid
                     {
-                        Text = Strings.T(column.Header),
-                        Style = header,
                         Width = NumberWidth,
-                        TextAlignment = TextAlignment.Center,
+                        Tag = TrackGlyphTag,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = Strings.T(column.Header),
+                                Style = header,
+                                TextAlignment = TextAlignment.Center,
+                            },
+                            DiscIcon(dim, 11, Visibility.Collapsed),
+                        },
                     });
                 }
                 else if (column.Header.Length > 0)
@@ -478,18 +487,25 @@ internal static class TrackColumns
     /// <summary>Platz für den Sortierpfeil hinter dem #.</summary>
     private const double TrackMarkWidth = 10;
 
+    /// <summary>Erkennungszeichen des Felds mit # oder Scheibe im Kopf der Spalte #.</summary>
+    public const string TrackGlyphTag = "track-glyph";
+
     /// <summary>Eine kleine Scheibe: Ring mit Punkt in der Mitte.</summary>
-    private static FrameworkElement DiscIcon(Brush brush) => new Grid
+    private static FrameworkElement DiscIcon(
+        Brush brush, double size = 18, Visibility visibility = Visibility.Visible) => new Grid
     {
-        Width = 18,
-        Height = 18,
+        Width = size,
+        Height = size,
+        Visibility = visibility,
+        HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
         Children =
         {
-            new Microsoft.UI.Xaml.Shapes.Ellipse { Stroke = brush, StrokeThickness = 1.4 },
+            new Microsoft.UI.Xaml.Shapes.Ellipse { Stroke = brush, StrokeThickness = size < 14 ? 1.1 : 1.4 },
             new Microsoft.UI.Xaml.Shapes.Ellipse
             {
-                Width = 6, Height = 6, Stroke = brush, StrokeThickness = 1.4,
+                Width = size / 3, Height = size / 3, Stroke = brush,
+                StrokeThickness = size < 14 ? 1.1 : 1.4,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },

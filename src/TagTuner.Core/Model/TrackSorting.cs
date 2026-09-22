@@ -12,6 +12,12 @@ public enum TrackSort
     Format,
     SampleRate,
     Duration,
+
+    /// <summary>
+    /// Nach Disc, in jeder Disc nach Track aufsteigend. Steht hinten, damit
+    /// die Zahlenwerte der übrigen gleich bleiben.
+    /// </summary>
+    Disc,
 }
 
 public static class TrackSorting
@@ -40,6 +46,8 @@ public static class TrackSorting
             TrackSort.Album => Order(t => t.Album, text),
             TrackSort.Format => Order(t => t.Format, text),
             TrackSort.SampleRate => Order(t => t.SampleRate),
+            TrackSort.Disc => Order(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                                  .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track),
             _ => Order(t => t.Duration),
         };
 

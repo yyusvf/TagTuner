@@ -243,8 +243,10 @@ public sealed partial class TrackPane : UserControl
         var discs = Tab.Tracks.Select(t => t.Disc).Where(d => d > 0).Distinct().Count();
         if (discs < 2) return;
 
+        // Nach Disc sortiert bleiben die Lieder einer Disc beisammen, nur die
+        // Discs stehen andersherum; die Disc-Zeilen passen dann weiter.
         _sectioned = !Tab.Recursive
-                     && Tab.Sort == TrackSort.Natural
+                     && Tab.Sort is TrackSort.Natural or TrackSort.Disc
                      && (IsAlbumFolder?.Invoke(Tab.Path) ?? false);
         if (_sectioned) return;
 
@@ -948,8 +950,26 @@ public sealed partial class TrackPane : UserControl
     {
         var arrow = Tab?.SortDescending == true ? "\u2193" : "\u2191";
 
+        // Nach Disc sortiert wird auch über die Spalte #; ihr Pfeil gilt dann
+        // der Disc, und statt des # steht die Scheibe da.
+        var byDisc = Tab?.Sort == TrackSort.Disc;
+        var sort = byDisc ? TrackSort.Track : Tab?.Sort;
+
         foreach (var (mark, key) in Marks())
-            mark.Text = Tab?.Sort == key ? arrow : "";
+            mark.Text = sort == key ? arrow : "";
+
+        foreach (var child in HeaderRow.Children)
+        {
+            if (child is not StackPanel cell) continue;
+            foreach (var part in cell.Children)
+            {
+                if (part is Grid { Tag: TrackColumns.TrackGlyphTag } glyph && glyph.Children.Count == 2)
+                {
+                    glyph.Children[0].Visibility = byDisc ? Visibility.Collapsed : Visibility.Visible;
+                    glyph.Children[1].Visibility = byDisc ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+        }
     }
 
     private IEnumerable<(TextBlock Mark, TrackSort Key)> Marks() =>

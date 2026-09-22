@@ -151,6 +151,7 @@ public static partial class Strings
         ["DISC"] = "ДИСК",
         ["Disc {0}"] = "Диск {0}",
         ["Disc and track"] = "Диск и дорожка",
+        ["Disc number"] = "Номер диска",
         ["Down"] = "Вниз",
         ["Download and install"] = "Скачать и установить",
         ["Downloading the update…"] = "Загрузка обновления…",

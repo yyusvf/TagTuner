@@ -43,9 +43,31 @@ public sealed class FolderTab(string path)
     /// </summary>
     public void ToggleSort(TrackSort key)
     {
+        if (key == TrackSort.Track) { ToggleNumberSort(); return; }
+
         if (Sort != key) { Sort = key; SortDescending = false; }
         else if (!SortDescending) SortDescending = true;
         else { Sort = TrackSort.Natural; SortDescending = false; }
+    }
+
+    /// <summary>
+    /// Die Spalte # schaltet mit vier Klicks durch: Track auf, Track ab,
+    /// Disc auf, Disc ab, und der fünfte führt zurück zur
+    /// Playlist-Reihenfolge. Gibt es nur eine Disc, fallen die beiden
+    /// Disc-Stufen weg: Nach einer einzigen Disc zu sortieren ändert nichts.
+    /// </summary>
+    private void ToggleNumberSort()
+    {
+        var discs = Tracks.Select(t => t.Disc).Where(d => d > 0).Distinct().Count() > 1;
+
+        (Sort, SortDescending) = (Sort, SortDescending) switch
+        {
+            (TrackSort.Track, false) => (TrackSort.Track, true),
+            (TrackSort.Track, true) when discs => (TrackSort.Disc, false),
+            (TrackSort.Disc, false) => (TrackSort.Disc, true),
+            (TrackSort.Track or TrackSort.Disc, _) => (TrackSort.Natural, false),
+            _ => (TrackSort.Track, false),
+        };
     }
 
     public string Name

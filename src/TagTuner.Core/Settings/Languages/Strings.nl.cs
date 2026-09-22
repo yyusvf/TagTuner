@@ -151,6 +151,7 @@ public static partial class Strings
         ["DISC"] = "SCHIJF",
         ["Disc {0}"] = "Schijf {0}",
         ["Disc and track"] = "Schijf en track",
+        ["Disc number"] = "Schijfnummer",
         ["Down"] = "Omlaag",
         ["Download and install"] = "Downloaden en installeren",
         ["Downloading the update…"] = "Update wordt gedownload…",
