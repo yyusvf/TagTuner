@@ -28,6 +28,9 @@ internal static class BackupsPage
         public BackupItem Item { get; } = item;
         public AudioTrack? Track { get; set; }
         public bool Reading { get; set; }
+
+        /// <summary>Was sich seitdem an der Datei geändert hat, fertig zum Anzeigen. Null, solange noch gelesen wird.</summary>
+        public string? Changes { get; set; }
     }
 
     public static IEnumerable<FrameworkElement> Build(SettingsContext c)
@@ -115,7 +118,10 @@ internal static class BackupsPage
         void OnSelectNone(object sender, RoutedEventArgs e) => list.SelectedItems.Clear();
         selectAll.Checked += OnSelectAll;
         selectAll.Unchecked += OnSelectNone;
-        selectAll.Indeterminate += (_, _) => list.SelectedItems.Clear();
+
+        // Kein Handler für den halben Zustand: Den setzt nur der Code, wenn
+        // ein Teil gewählt ist. Er leerte vorher die Auswahl, und jeder
+        // Haken an einer Zeile verschwand im selben Moment wieder.
 
         list.SelectionChanged += (_, _) => UpdateButtons();
 
@@ -225,11 +231,11 @@ internal static class BackupsPage
             if (row.Track is null && !row.Reading)
             {
                 row.Reading = true;
-                Task.Run(() => AudioProbe.Read(row.Item.BackupPath)).ContinueWith(t =>
+                Task.Run(() => Inspect(row.Item)).ContinueWith(t =>
                 {
                     list.DispatcherQueue.TryEnqueue(() =>
                     {
-                        row.Track = t.Result;
+                        (row.Track, row.Changes) = t.Result;
                         if (ReferenceEquals(grid.DataContext, row)) Fill(parts, row);
                     });
                 });
@@ -241,6 +247,8 @@ internal static class BackupsPage
         yield return Group("Stored backups",
             Hint("Newest first. Restoring puts the file back where it came from; the "
                  + "version there now is backed up first, so the history can undo it."),
+            Hint("In colour: what changed since the backup, the backed up value first, then "
+                 + "the current one. That is what restoring turns back."),
             new Grid
             {
                 ColumnDefinitions =
@@ -254,6 +262,33 @@ internal static class BackupsPage
             status,
             empty,
             list);
+    }
+
+    /// <summary>
+    /// Liest die Sicherung und die Datei, die jetzt an ihrem Ort liegt, und
+    /// beschreibt den Unterschied. Genau den würde das Wiederherstellen
+    /// zurückdrehen.
+    /// </summary>
+    private static (AudioTrack? Track, string Changes) Inspect(BackupItem item)
+    {
+        var then = AudioProbe.Read(item.BackupPath);
+        if (then is null) return (null, "");
+        if (item.OriginalPath is not { } original) return (then, "");
+        if (!File.Exists(original)) return (then, Strings.T("The file no longer exists there."));
+
+        var now = AudioProbe.Read(original);
+        if (now is null) return (then, "");
+
+        var coverThen = then.HasCover ? AudioProbe.ReadCover(item.BackupPath)?.Data : null;
+        var coverNow = now.HasCover ? AudioProbe.ReadCover(original)?.Data : null;
+
+        var changes = BackupDiff.Compare(then, now, coverThen, coverNow);
+        if (changes.Count == 0) return (then, Strings.T("Same as the file now."));
+
+        return (then, string.Join("  ·  ", changes.Select(c => c.Field == "Cover"
+            ? Strings.T("Cover changed")
+            : Strings.T("{0}: {1} → {2}", Strings.T(c.Field),
+                        c.From.Length == 0 ? "–" : c.From, c.To.Length == 0 ? "–" : c.To))));
     }
 
     private static FrameworkElement WithColumn(FrameworkElement element, int column)
@@ -271,6 +306,9 @@ internal static class BackupsPage
     {
         /// <summary>Bei welcher Aktion die Sicherung entstand.</summary>
         public TextBlock? Action { get; init; }
+
+        /// <summary>Was sich seitdem geändert hat.</summary>
+        public TextBlock? Changes { get; init; }
     }
 
     /// <summary>
@@ -283,7 +321,7 @@ internal static class BackupsPage
         var dim = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
         var fill = (Brush)Application.Current.Resources["ControlFillColorDefaultBrush"];
 
-        grid.Height = 50;
+        grid.Height = 62;
         grid.ColumnSpacing = 10;
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
@@ -320,11 +358,17 @@ internal static class BackupsPage
 
         var where = new TextBlock { FontSize = 11.5, Foreground = dim, TextTrimming = TextTrimming.CharacterEllipsis };
         var action = new TextBlock { FontSize = 11, Foreground = dim, TextTrimming = TextTrimming.CharacterEllipsis };
+        var changes = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = (Brush)Application.Current.Resources["AccentBrush"],
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
         var origin = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 1,
-            Children = { where, action },
+            Children = { where, action, changes },
         };
 
         var when = new TextBlock { FontSize = 11.5, HorizontalAlignment = HorizontalAlignment.Right };
@@ -363,7 +407,11 @@ internal static class BackupsPage
         grid.Children.Add(buttons);
 
         // Die Beschreibung der Aktion hängt an der zweiten Zeile der Herkunft.
-        return new RowParts(cover, title, artist, where, when, size, restore, delete) { Action = action };
+        return new RowParts(cover, title, artist, where, when, size, restore, delete)
+        {
+            Action = action,
+            Changes = changes,
+        };
     }
 
     private static void Fill(RowParts parts, Row row)
@@ -380,6 +428,10 @@ internal static class BackupsPage
         ToolTipService.SetToolTip(parts.Where, item.OriginalPath ?? Strings.T("The original location is unknown."));
 
         parts.Action!.Text = item.Action ?? Strings.T("Not in the history");
+
+        // Die ganze Aufzählung im Tooltip: In der Zeile ist dafür oft zu wenig Platz.
+        parts.Changes!.Text = row.Changes ?? "";
+        ToolTipService.SetToolTip(parts.Changes, string.IsNullOrEmpty(row.Changes) ? null : row.Changes);
 
         parts.When.Text = Relative(item.Created);
         ToolTipService.SetToolTip(parts.When, item.Created.ToString("g"));
@@ -450,7 +502,7 @@ internal static class BackupsPage
         var style = new Style(typeof(ListViewItem));
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 0, 6, 0)));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 50.0));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 62.0));
         return style;
     }
 
