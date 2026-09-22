@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 using TagTuner.Core.Audio;
+using TagTuner.Core.Model;
 using TagTuner.Core.Safety;
 using TagTuner.Core.Settings;
 using TagTuner.Core.Shell;
@@ -26,6 +27,7 @@ internal static class SettingsCatalog
         new("Folders", "", Folders),
         new("Library", "", Library),
         new("Tags", "", Tags),
+        new("Track list", "", TrackList),
     ];
 
     private static readonly int[] Rates = [44100, 48000, 88200, 96000, 176400, 192000];
@@ -407,5 +409,91 @@ internal static class SettingsCatalog
             Field("Title → file name", rename),
             Hint(string.Join("  ", Core.Metadata.FileNaming.Placeholders)),
             example);
+    }
+    // ══ Trackliste ═══════════════════════════════════════════════
+
+    private static IEnumerable<FrameworkElement> TrackList(SettingsContext c)
+    {
+        TrackColumns.EnsureStates(c.Settings);
+        var states = c.Settings.TrackColumns;
+
+        var list = new ListView
+        {
+            SelectionMode = ListViewSelectionMode.Single,
+            MaxHeight = 320,
+            Margin = new Thickness(0, 2, 0, 2),
+        };
+
+        void Refresh()
+        {
+            var at = list.SelectedIndex;
+            list.ItemsSource = null;
+            list.ItemsSource = states.Select(Line).ToList();
+            list.SelectedIndex = Math.Clamp(at, -1, states.Count - 1);
+        }
+
+        // Ein Haken je Zeile. Die Beschriftung kommt aus dem Katalog, damit
+        // eine neue Spalte hier von selbst auftaucht.
+        CheckBox Line(TrackColumnState state)
+        {
+            var column = TrackColumn.ById(state.Id)!;
+            var label = column.Header.Length > 0
+                ? Strings.T(column.Header) : Strings.T("Cover");
+
+            var box = new CheckBox
+            {
+                Content = label,
+                IsChecked = state.Visible,
+                MinHeight = 28,
+            };
+
+            box.Checked += (_, _) => { state.Visible = true; c.Save(); c.Changed("columns"); };
+            box.Unchecked += (_, _) => { state.Visible = false; c.Save(); c.Changed("columns"); };
+            return box;
+        }
+
+        void Move(int by)
+        {
+            var at = list.SelectedIndex;
+            var to = at + by;
+            if (at < 0 || to < 0 || to >= states.Count) return;
+
+            (states[at], states[to]) = (states[to], states[at]);
+            c.Save();
+            Refresh();
+            list.SelectedIndex = to;
+            c.Changed("columns");
+        }
+
+        Refresh();
+
+        yield return Group("Columns",
+            Hint("The order here is the order in the list. Pick a row and move it."),
+            list,
+            Buttons(Action("Up", () => Move(-1)), Action("Down", () => Move(1))));
+
+        yield return Group("Title and artist",
+            Tick("Show the artist under the title in one column",
+                c.Settings.CombineTitleAndArtist,
+                on =>
+                {
+                    c.Settings.CombineTitleAndArtist = on;
+                    c.Save();
+                    c.Changed("columns");
+                }),
+            Hint("Off means two columns of their own. The artist column is then " +
+                 "moved and sized like any other."));
+
+        yield return Group("Sorting",
+            Tick("In playlist order, sort by disc first, then by track",
+                c.Settings.SortByDiscThenTrack,
+                on =>
+                {
+                    c.Settings.SortByDiscThenTrack = on;
+                    c.Save();
+                    c.Changed("sorting");
+                }),
+            Hint("Only for releases that span several discs. Without it the track " +
+                 "number alone decides."));
     }
 }

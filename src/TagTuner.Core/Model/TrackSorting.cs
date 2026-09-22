@@ -23,10 +23,11 @@ public static class TrackSorting
     /// mit gleichem Interpreten bei jedem Neueinlesen umher, weil die
     /// Ausgangsreihenfolge des Dateisystems nicht garantiert ist.
     /// </summary>
-    public static List<AudioTrack> Apply(IEnumerable<AudioTrack> tracks, TrackSort key, bool descending)
+    public static List<AudioTrack> Apply(
+        IEnumerable<AudioTrack> tracks, TrackSort key, bool descending, bool discFirst = true)
     {
         var list = tracks.ToList();
-        if (key == TrackSort.Natural) return FolderSort(list);
+        if (key == TrackSort.Natural) return FolderSort(list, discFirst);
 
         var text = StringComparer.CurrentCultureIgnoreCase;
 
@@ -55,9 +56,22 @@ public static class TrackSorting
     }
 
     /// <summary>Die Reihenfolge, in der ein Ordner als Playlist gemeint ist.</summary>
-    public static List<AudioTrack> FolderSort(IEnumerable<AudioTrack> tracks) =>
-        [.. tracks
-            .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-            .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-            .ThenBy(t => t.FileName, StringComparer.CurrentCultureIgnoreCase)];
+    /// <param name="discFirst">
+    /// Zählt die Disc-Nummer mit. Bei einer Veröffentlichung über mehrere
+    /// Datenträger gehört Disc 2 Track 1 hinter Disc 1 Track 12 und nicht
+    /// dazwischen. Wer die Disc nicht pflegt, schaltet es ab.
+    /// </param>
+    public static List<AudioTrack> FolderSort(
+        IEnumerable<AudioTrack> tracks, bool discFirst = true)
+    {
+        var text = StringComparer.CurrentCultureIgnoreCase;
+
+        // Ohne Nummer ans Ende, nicht an den Anfang.
+        var ordered = discFirst
+            ? tracks.OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+            : tracks.OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track);
+
+        return [.. ordered.ThenBy(t => t.FileName, text)];
+    }
 }

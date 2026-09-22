@@ -58,6 +58,74 @@ public sealed partial class TrackPane : UserControl
     private bool _suppress;
     private bool _droppedHere;
 
+    // ── Spalten ──────────────────────────────────────────────────
+
+    private readonly Dictionary<TrackSort, TextBlock> _sortMarks = [];
+    private List<TrackColumn> _columns = [];
+    private bool _combined = true;
+
+    /// <summary>
+    /// Übernimmt Auswahl, Reihenfolge und Breiten der Spalten. Baut die
+    /// Kopfzeile neu und wirft die vorhandenen Zeilen weg, damit sie beim
+    /// nächsten Zeichnen mit der neuen Aufteilung entstehen.
+    /// </summary>
+    public void ApplyColumns(AppSettings settings)
+    {
+        _columns = TrackColumns.Resolve(settings);
+        _combined = settings.CombineTitleAndArtist;
+
+        Columns.Set(TrackColumns.Widths(settings, _columns));
+
+        TrackColumns.BuildHeader(
+            HeaderRow, _columns, Columns, _sortMarks,
+            OnHeaderTapped,
+            (Style)Application.Current.Resources["ColumnGrip"],
+            OnGripPressed, OnGripMoved, OnGripReleased, OnGripExited);
+
+        UpdateSortMarks();
+
+        // Die Liste hält gebaute Zeilen für das Wiederverwenden bereit. Nach
+        // einer Änderung der Spalten passen die nicht mehr, und ohne diesen
+        // Stups behielte man die alte Aufteilung bis zum Neustart.
+        var items = List.ItemsSource;
+        List.ItemsSource = null;
+        List.ItemsSource = items;
+    }
+
+    /// <summary>
+    /// Füllt eine Zeile. Beim ersten Mal wird ihr Inhalt gebaut, danach nur
+    /// noch gesetzt: Beim Scrollen durch tausend Lieder dieselben vierzig
+    /// Zeilen wiederzuverwenden ist der Unterschied zwischen flüssig und
+    /// ruckelig.
+    /// </summary>
+    private void OnRowRealizing(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue) return;
+        if (args.Item is not AudioTrack track) return;
+        if (args.ItemContainer is not ListViewItem container) return;
+
+        // Die Vorlage der Liste ist ein einziges, leeres Grid. Hineingebaut
+        // wird im Code: ContentTemplateRoot lässt sich nicht setzen, und eine
+        // Vorlage mit den Spalten darin gäbe es zur Bauzeit noch nicht.
+        if (container.ContentTemplateRoot is not Grid row) return;
+
+        if (row.Tag as string != Stamp())
+        {
+            TrackColumns.BuildRow(row, _columns, Columns, _combined);
+            row.Tag = Stamp();
+        }
+
+        TrackColumns.FillRow(row, track, _combined);
+        args.Handled = true;
+    }
+
+    /// <summary>
+    /// Woran sich erkennen lässt, ob eine wiederverwendete Zeile noch zur
+    /// aktuellen Spaltenaufteilung passt.
+    /// </summary>
+    private string Stamp() =>
+        string.Join(",", _columns.Select(c => c.Id)) + (_combined ? "|1" : "|0");
+
     public TrackPane() => InitializeComponent();
 
     /// <summary>Hebt die Hälfte hervor, die gerade die Metadatenspalte speist.</summary>
@@ -308,15 +376,7 @@ public sealed partial class TrackPane : UserControl
     }
 
     private IEnumerable<(TextBlock Mark, TrackSort Key)> Marks() =>
-    [
-        (SortTrack, TrackSort.Track),
-        (SortTitle, TrackSort.Title),
-        (SortArtist, TrackSort.Artist),
-        (SortAlbum, TrackSort.Album),
-        (SortFormat, TrackSort.Format),
-        (SortSampleRate, TrackSort.SampleRate),
-        (SortDuration, TrackSort.Duration),
-    ];
+        _sortMarks.Select(p => (p.Value, p.Key));
 
     // ══ Kontextmenü ══════════════════════════════════════════════
 

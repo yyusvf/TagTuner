@@ -24,6 +24,34 @@ public static class AudioProbe
     }
 
     /// <summary>
+    /// Wie die Tags in der Datei stecken, für die Anzeige.
+    ///
+    /// TagLib meldet ein Bitfeld, weil eine MP3 gleichzeitig ID3v1 und ID3v2
+    /// tragen kann. Angezeigt wird die Art, nach der TagTuner schreibt, und
+    /// bei ID3v2 die Fassung, die tatsächlich in der Datei steht: Genau
+    /// daran hängt, ob der Explorer ein Cover anzeigt.
+    /// </summary>
+    private static string TagName(TagLib.File file)
+    {
+        var types = file.TagTypes;
+
+        if (types.HasFlag(TagLib.TagTypes.Id3v2))
+        {
+            var version = file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3
+                ? id3.Version : (byte)0;
+            return version > 0 ? $"ID3v2.{version}" : "ID3v2";
+        }
+
+        if (types.HasFlag(TagLib.TagTypes.Apple)) return "MP4";
+        if (types.HasFlag(TagLib.TagTypes.Xiph)) return "Vorbis";
+        if (types.HasFlag(TagLib.TagTypes.RiffInfo)) return "RIFF INFO";
+        if (types.HasFlag(TagLib.TagTypes.Ape)) return "APEv2";
+        if (types.HasFlag(TagLib.TagTypes.Id3v1)) return "ID3v1";
+
+        return "";
+    }
+
+    /// <summary>
     /// Liest eine Datei ein. Wirft nie: eine kaputte Datei soll den Ordner
     /// nicht unlesbar machen, sondern als Zeile mit fehlenden Werten erscheinen.
     /// </summary>
@@ -53,6 +81,14 @@ public static class AudioProbe
             track.Channels = file.Properties?.AudioChannels ?? 0;
             track.Bitrate = file.Properties?.AudioBitrate ?? 0;
             track.Duration = file.Properties?.Duration ?? TimeSpan.Zero;
+
+            // Der Kodierer, wie die Datei selbst ihn nennt. Mehrere Ströme
+            // gibt es bei Audiodateien praktisch nie; der erste genügt.
+            track.Codec = file.Properties?.Codecs?
+                .Select(c => c?.Description ?? "")
+                .FirstOrDefault(d => d.Length > 0) ?? "";
+
+            track.TagFormat = TagName(file);
 
             var tag = file.Tag;
             if (tag is not null)

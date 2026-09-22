@@ -85,17 +85,13 @@ public sealed partial class MainWindow : Window
             pane.CopyTagsRequested += OnCopyTags;
             pane.PasteTagsRequested += OnPasteTags;
             pane.NavigateRequested += (_, path) => NavigateActive(path);
-            pane.ColumnsResized += (_, _) =>
-            {
-                _settings.TrackColumnWidths = Columns.ToArray();
-                _settings.Save();
-            };
+            pane.ColumnsResized += (_, _) => RememberColumns();
         }
 
         MetaCol.Width = new GridLength(_settings.MetaWidth);
         TreeCol.Width = new GridLength(_settings.TreeWidth);
         SideCol.Width = new GridLength(_settings.SideWidth);
-        Columns.Restore(_settings.TrackColumnWidths);
+        ApplyColumns();
 
         FFormat.ItemsSource = AudioFormats.Targets;
         FRate.ItemsSource = Rates.Select(FormatRate).ToList();
@@ -145,7 +141,7 @@ public sealed partial class MainWindow : Window
             _settings.MetaWidth = MetaCol.ActualWidth;
             _settings.TreeWidth = TreeCol.ActualWidth;
             _settings.SideWidth = SideCol.ActualWidth;
-            _settings.TrackColumnWidths = Columns.ToArray();
+            RememberColumns();
             _settings.LastFolder = ActiveTab.Path;
             _settings.Volume = _player.Volume;
             _settings.Save();
@@ -1165,7 +1161,7 @@ public sealed partial class MainWindow : Window
 
 
         tab.Tracks.Clear();
-        foreach (var t in TrackSorting.Apply(tracks, tab.Sort, tab.SortDescending))
+        foreach (var t in TrackSorting.Apply(tracks, tab.Sort, tab.SortDescending, _settings.SortByDiscThenTrack))
             tab.Tracks.Add(t);
         tab.Analysis = FolderAnalysis.Of(tracks);
         tab.Target = tab.Analysis.ResolveTarget(_settings.DefaultFormat, _settings.DefaultSampleRate);
@@ -1205,7 +1201,7 @@ public sealed partial class MainWindow : Window
         // Zwischenzeitlich woandershin navigiert.
         if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase)) return;
 
-        var wanted = TrackSorting.Apply(fresh, tab.Sort, tab.SortDescending);
+        var wanted = TrackSorting.Apply(fresh, tab.Sort, tab.SortDescending, _settings.SortByDiscThenTrack);
         var wantedPaths = new HashSet<string>(
             wanted.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
 
@@ -1286,7 +1282,7 @@ public sealed partial class MainWindow : Window
 
         tab.ToggleSort(key);
 
-        var sorted = TrackSorting.Apply(tab.Tracks, tab.Sort, tab.SortDescending);
+        var sorted = TrackSorting.Apply(tab.Tracks, tab.Sort, tab.SortDescending, _settings.SortByDiscThenTrack);
         tab.Tracks.Clear();
         foreach (var t in sorted) tab.Tracks.Add(t);
 
@@ -2893,6 +2889,7 @@ public sealed partial class MainWindow : Window
         // meldet sich hier, damit nicht vorsichtshalber alles neu aufgebaut
         // wird — ein Baum mit tausend Ordnern merkt das.
         var libraryChanged = false;
+        var sortingChanged = false;
 
         var wanted = await SettingsDialog.ShowAsync(
             Root.XamlRoot,
@@ -2903,6 +2900,8 @@ public sealed partial class MainWindow : Window
                 if (what == "theme") ApplyTheme();
                 if (what is "library") libraryChanged = true;
                 if (what is "rules") UpdateRuleSwitches();
+                if (what is "columns") ApplyColumns();
+                if (what is "sorting") sortingChanged = true;
             });
 
         if (libraryChanged)
@@ -2919,6 +2918,11 @@ public sealed partial class MainWindow : Window
         UpdateAnalysisPanel();
         UpdateMetaPanel();
         UpdateFfmpegHint();
+
+        // Die Playlist-Reihenfolge hängt daran, ob die Disc mitzählt.
+        if (sortingChanged)
+            foreach (var tab in _tabs.Where(t => t.Sort == TrackSort.Natural))
+                Fire(MergeTabAsync(tab), Strings.T("Reading…"));
 
         // Zuletzt, weil die App sich dafür beendet.
         if (wanted is not null) await InstallUpdateAsync(wanted);
@@ -3266,5 +3270,23 @@ public sealed partial class MainWindow : Window
             "light" => ElementTheme.Light,
             _ => ElementTheme.Default,
         };
+    }
+    // ══ Spalten ══════════════════════════════════════════════════
+
+    /// <summary>Übernimmt die eingestellten Spalten in beide Hälften.</summary>
+    private void ApplyColumns()
+    {
+        PaneA.ApplyColumns(_settings);
+        PaneB.ApplyColumns(_settings);
+    }
+
+    /// <summary>
+    /// Schreibt die gezogenen Breiten zurück. Nur die Breiten: Auswahl und
+    /// Reihenfolge ändert man in den Einstellungen, und die schreiben selbst.
+    /// </summary>
+    private void RememberColumns()
+    {
+        TrackColumns.Remember(_settings, TrackColumns.Resolve(_settings), Columns.ToArray());
+        _settings.Save();
     }
 }

@@ -16,6 +16,15 @@ public sealed class AudioTrack
     public long Size { get; set; }
     public bool HasCover { get; set; }
 
+    /// <summary>Welche Tag-Art in der Datei steckt: „ID3v2.3", „Vorbis", „MP4".</summary>
+    public string TagFormat { get; set; } = "";
+
+    /// <summary>Der Kodierer, wie ihn die Datei selbst nennt: „MPEG Layer 3", „FLAC".</summary>
+    public string Codec { get; set; } = "";
+
+    public string BitrateLabel => Bitrate > 0 ? $"{Bitrate} kbps" : "";
+    public string YearLabel => Year == 0 ? "" : Year.ToString();
+
     // ── Tags ─────────────────────────────────────────────────────
     public string Title { get; set; } = "";
     public string Artist { get; set; } = "";

@@ -59,8 +59,23 @@ public sealed class AppSettings
     public double TreeWidth { get; set; } = 214;
     public double SideWidth { get; set; } = 248;
 
-    /// <summary>Breiten der Listenspalten: Titel, Interpret, Album, Format, Samplerate, Dauer.</summary>
-    public double[]? TrackColumnWidths { get; set; }
+    /// <summary>
+    /// Welche Spalten die Trackliste zeigt, in welcher Reihenfolge und wie
+    /// breit. Leer heißt: die Vorgabe aus <see cref="Model.TrackColumn.All"/>.
+    /// </summary>
+    public List<TrackColumnState> TrackColumns { get; set; } = [];
+
+    /// <summary>
+    /// Titel und Interpret in einer Spalte, der Interpret klein darunter.
+    /// Aus heißt: zwei eigene Spalten.
+    /// </summary>
+    public bool CombineTitleAndArtist { get; set; } = true;
+
+    /// <summary>
+    /// In der Playlist-Reihenfolge zuerst nach Disc, dann nach Track
+    /// sortieren. Nur für Veröffentlichungen mit mehreren Datenträgern.
+    /// </summary>
+    public bool SortByDiscThenTrack { get; set; } = true;
 
     // ── Bibliothek ───────────────────────────────────────────────
 
