@@ -165,8 +165,10 @@ internal static class TrackColumns
                 Spacing = 3,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = column.Look == ColumnLook.MonoRight
-                    ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+                // Die Nummer steht mittig, und das # genau darüber.
+                HorizontalAlignment = column.Id == "track" ? HorizontalAlignment.Center
+                    : column.Look == ColumnLook.MonoRight ? HorizontalAlignment.Right
+                    : HorizontalAlignment.Left,
             };
 
             if (column.Id == "title" && combined)
@@ -212,7 +214,8 @@ internal static class TrackColumns
             var index = i;
             cell.PointerPressed += (_, e) => onColumnPressed(index, e);
 
-            if (column.Look == ColumnLook.MonoRight) cell.Margin = new Thickness(0, 0, 12, 0);
+            if (column.Look == ColumnLook.MonoRight && column.Id != "track")
+                cell.Margin = new Thickness(0, 0, 12, 0);
 
             Grid.SetColumn(cell, i);
             host.Children.Add(cell);
@@ -353,7 +356,8 @@ internal static class TrackColumns
                     FontFamily = new FontFamily("Consolas"),
                     Foreground = dim,
                     VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Right,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
                 };
                 cell = number;
                 cell.Tag = new CellTag(column, null, number);

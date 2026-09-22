@@ -49,7 +49,7 @@
              Siehe TrackColumns.BuildHeader. Der durchsichtige Hintergrund
              lässt Zeigerbewegungen auch zwischen den Überschriften ankommen,
              sonst bräche das Ziehen einer Spalte an jeder Lücke ab. -->
-        <Grid Grid.Row="0" x:Name="HeaderRow" Padding="12,4,20,6" ColumnSpacing="10"
+        <Grid Grid.Row="0" x:Name="HeaderRow" Padding="4,4,20,6" ColumnSpacing="10"
               Background="Transparent"
               PointerMoved="OnHeaderMoved"
               PointerReleased="OnHeaderReleased"
@@ -78,7 +78,7 @@
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="12,0" />
+                        <Setter Property="Padding" Value="4,0,12,0" />
                         <Setter Property="MinHeight" Value="56" />
                         <Setter Property="CornerRadius" Value="5" />
                     </Style>
