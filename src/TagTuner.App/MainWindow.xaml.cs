@@ -1340,6 +1340,14 @@ public sealed partial class MainWindow : Window
             TrackSort.Album => "Album",
             TrackSort.Format => "Format",
             TrackSort.SampleRate => "Sample rate",
+            TrackSort.Year => "Year",
+            TrackSort.Genre => "Genre",
+            TrackSort.AlbumArtist => "Album artist",
+            TrackSort.Composer => "Composer",
+            TrackSort.Comment => "Comment",
+            TrackSort.Bitrate => "Bitrate",
+            TrackSort.TagFormat => "Tag format",
+            TrackSort.Codec => "Codec",
             _ => "Duration",
         });
     }

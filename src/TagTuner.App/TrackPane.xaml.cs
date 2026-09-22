@@ -951,8 +951,9 @@ public sealed partial class TrackPane : UserControl
         var arrow = Tab?.SortDescending == true ? "\u2193" : "\u2191";
 
         // Nach Disc sortiert wird auch über die Spalte #; ihr Pfeil gilt dann
-        // der Disc, und statt des # steht die Scheibe da.
-        var byDisc = Tab?.Sort == TrackSort.Disc;
+        // der Disc, und statt des # steht die Scheibe da. Ist die eigene
+        // Spalte DISC zu sehen, trägt die den Pfeil.
+        var byDisc = Tab?.Sort == TrackSort.Disc && !_sortMarks.ContainsKey(TrackSort.Disc);
         var sort = byDisc ? TrackSort.Track : Tab?.Sort;
 
         foreach (var (mark, key) in Marks())

@@ -18,6 +18,16 @@ public enum TrackSort
     /// die Zahlenwerte der übrigen gleich bleiben.
     /// </summary>
     Disc,
+
+    // Die Spalten, die standardmäßig aus sind.
+    Year,
+    Genre,
+    AlbumArtist,
+    Composer,
+    Comment,
+    Bitrate,
+    TagFormat,
+    Codec,
 }
 
 public static class TrackSorting
@@ -48,6 +58,14 @@ public static class TrackSorting
             TrackSort.SampleRate => Order(t => t.SampleRate),
             TrackSort.Disc => Order(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
                                   .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track),
+            TrackSort.Year => Order(t => t.Year == 0 ? uint.MaxValue : t.Year),
+            TrackSort.Genre => Order(t => Last(t.Genre), text),
+            TrackSort.AlbumArtist => Order(t => Last(t.AlbumArtist), text),
+            TrackSort.Composer => Order(t => Last(t.Composer), text),
+            TrackSort.Comment => Order(t => Last(t.Comment), text),
+            TrackSort.Bitrate => Order(t => t.Bitrate),
+            TrackSort.TagFormat => Order(t => Last(t.TagFormat), text),
+            TrackSort.Codec => Order(t => Last(t.Codec), text),
             _ => Order(t => t.Duration),
         };
 
@@ -61,6 +79,11 @@ public static class TrackSorting
 
         static string Fallback(string value, string other) =>
             string.IsNullOrWhiteSpace(value) ? other : value;
+
+        // In den selten gepflegten Feldern sind die meisten leer. Die sollen
+        // hinter den gefüllten stehen, nicht die ersten zwanzig Zeilen füllen.
+        static string Last(string value) =>
+            string.IsNullOrWhiteSpace(value) ? "\uffff" : value;
     }
 
     /// <summary>Die Reihenfolge, in der ein Ordner als Playlist gemeint ist.</summary>

@@ -44,15 +44,15 @@ public sealed record TrackColumn(
         new("duration",    "LENGTH",        nameof(AudioTrack.DurationLabel),   ColumnLook.MonoRight,  56, true,  TrackSort.Duration),
 
         // Ab hier standardmäßig aus: nützlich, aber nicht für jeden Ordner.
-        new("year",        "YEAR",          nameof(AudioTrack.YearLabel),       ColumnLook.Mono,       50, false),
-        new("disc",        "DISC",          nameof(AudioTrack.DiscLabel),       ColumnLook.MonoRight,  40, false),
-        new("genre",       "GENRE",         nameof(AudioTrack.Genre),           ColumnLook.Text,      110, false),
-        new("albumartist", "ALBUM ARTIST",  nameof(AudioTrack.AlbumArtist),     ColumnLook.Text,      150, false),
-        new("composer",    "COMPOSER",      nameof(AudioTrack.Composer),        ColumnLook.Text,      140, false),
-        new("comment",     "COMMENT",       nameof(AudioTrack.Comment),         ColumnLook.Text,      160, false),
-        new("bitrate",     "BITRATE",       nameof(AudioTrack.BitrateLabel),    ColumnLook.Mono,       74, false),
-        new("tag",         "TAG",           nameof(AudioTrack.TagFormat),       ColumnLook.Mono,       74, false),
-        new("codec",       "CODEC",         nameof(AudioTrack.Codec),           ColumnLook.Mono,      120, false),
+        new("year",        "YEAR",          nameof(AudioTrack.YearLabel),       ColumnLook.Mono,       50, false, TrackSort.Year),
+        new("disc",        "DISC",          nameof(AudioTrack.DiscLabel),       ColumnLook.MonoRight,  40, false, TrackSort.Disc),
+        new("genre",       "GENRE",         nameof(AudioTrack.Genre),           ColumnLook.Text,      110, false, TrackSort.Genre),
+        new("albumartist", "ALBUM ARTIST",  nameof(AudioTrack.AlbumArtist),     ColumnLook.Text,      150, false, TrackSort.AlbumArtist),
+        new("composer",    "COMPOSER",      nameof(AudioTrack.Composer),        ColumnLook.Text,      140, false, TrackSort.Composer),
+        new("comment",     "COMMENT",       nameof(AudioTrack.Comment),         ColumnLook.Text,      160, false, TrackSort.Comment),
+        new("bitrate",     "BITRATE",       nameof(AudioTrack.BitrateLabel),    ColumnLook.Mono,       74, false, TrackSort.Bitrate),
+        new("tag",         "TAG",           nameof(AudioTrack.TagFormat),       ColumnLook.Mono,       74, false, TrackSort.TagFormat),
+        new("codec",       "CODEC",         nameof(AudioTrack.Codec),           ColumnLook.Mono,      120, false, TrackSort.Codec),
     ];
 
     public static TrackColumn? ById(string id) =>
