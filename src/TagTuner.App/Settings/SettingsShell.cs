@@ -71,20 +71,24 @@ internal static class SettingsShell
         var sections = SettingsCatalog.Sections;
 
         // ── Inhalt rechts ────────────────────────────────────────
+        // Die Überschrift scrollt nicht mit: Sie teilt sich die obere Zeile
+        // mit dem Schließen-Knopf, der so in der Ecke sitzt und nicht über
+        // der Bildlaufleiste.
         var heading = new TextBlock
         {
             FontSize = 18,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 7),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(20, 0, 0, 0),
         };
 
         var body = new StackPanel { Spacing = 7 };
 
         var content = new ScrollViewer
         {
-            Padding = new Thickness(16, 12, 16, 12),
+            Padding = new Thickness(20, 2, 20, 16),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = new StackPanel { Children = { heading, body } },
+            Content = body,
         };
 
         // ── Leiste links ─────────────────────────────────────────
@@ -94,7 +98,7 @@ internal static class SettingsShell
         {
             Width = 172,
             SelectionMode = ListViewSelectionMode.Single,
-            Padding = new Thickness(6, 8, 6, 8),
+            Padding = new Thickness(6, 10, 6, 10),
             Background = null,
             ItemContainerStyle = RailItemStyle(),
         };
@@ -166,9 +170,9 @@ internal static class SettingsShell
             Width = 32,
             Height = 32,
             Padding = new Thickness(0),
-            Margin = new Thickness(0, 6, 6, 0),
+            Margin = new Thickness(0, 0, 8, 0),
             HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
+            VerticalAlignment = VerticalAlignment.Center,
             Background = null,
             BorderThickness = new Thickness(0),
         };
@@ -186,24 +190,43 @@ internal static class SettingsShell
             },
         };
 
+        var top = new Grid { Height = 52 };
+        top.Children.Add(heading);
+        top.Children.Add(close);
+
+        var main = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = GridLength.Auto },
+                new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
+            },
+        };
+        Grid.SetRow(content, 1);
+        main.Children.Add(top);
+        main.Children.Add(content);
+
         Grid.SetColumn(rail, 0);
         Grid.SetColumn(divider, 1);
-        Grid.SetColumn(content, 1);
-        Grid.SetColumn(close, 1);
+        Grid.SetColumn(main, 1);
         layout.Children.Add(rail);
         layout.Children.Add(divider);
-        layout.Children.Add(content);
-        layout.Children.Add(close);
+        layout.Children.Add(main);
 
         dialog = new ContentDialog
         {
             Content = layout,
             XamlRoot = root,
-
-            // Der Rahmen des Dialogs würde sonst einen Rand um die Leiste
-            // legen, und die soll bis an die Kante gehen.
-            Padding = new Thickness(0),
         };
+
+        // Die Vorlage legt 24 Pixel Rand um den Inhalt und darunter einen
+        // Knopfbalken in einer anderen Farbe, auch wenn es keine Knöpfe
+        // gibt. Das sah aus wie ein Kasten im Fenster. Ohne diese Ränder
+        // gehen Leiste und Inhalt bis an die Kanten, und das X sitzt in der
+        // Ecke.
+        dialog.Resources["ContentDialogPadding"] = new Thickness(0);
+        dialog.Resources["ContentDialogSeparatorThickness"] = new Thickness(0);
+        dialog.Resources["ContentDialogTitleMargin"] = new Thickness(0);
 
         // Ein ContentDialog klemmt seinen Inhalt auf rund 548 Pixel — diese
         // Werte stehen als Ressourcen in seiner Vorlage, nicht als
