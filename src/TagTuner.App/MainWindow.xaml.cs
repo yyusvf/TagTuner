@@ -82,6 +82,7 @@ public sealed partial class MainWindow : Window
             pane.DeleteRequested += OnPaneDeleteRequested;
             pane.PlayRequested += (_, track) => _player.Play(track);
             pane.SortRequested += OnPaneSortRequested;
+            pane.ScopeExitRequested += OnScopeExit;
             pane.CopyTagsRequested += OnCopyTags;
             pane.PasteTagsRequested += OnPasteTags;
             pane.NavigateRequested += (_, path) => NavigateActive(path);
@@ -719,8 +720,35 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Öffnet einen Ordner samt allem darunter — in einem eigenen Tab.</summary>
-    private void OpenRecursive(string path)
+    /// <summary>
+    /// Öffnet einen Ordner mit allem, was darunter liegt.
+    ///
+    /// Bei vielen Dateien vorher fragen: Ein rekursiver Scan über eine ganze
+    /// Bibliothek dauert, und niemand rechnet damit nach einem Klick im
+    /// Kontextmenü.
+    /// </summary>
+    private async void OpenRecursive(string path)
     {
+        StatusText.Text = Strings.T("Counting subfolders…");
+        var n = await Task.Run(() => FolderScanner.CountRecursive(path));
+        StatusText.Text = "";
+
+        if (n == 0)
+        {
+            await Inform(Strings.T("Nothing found"),
+                         Strings.T("There are no audio files below this folder."));
+            return;
+        }
+
+        if (n > 400 && !await Confirm(Strings.T("Include subfolders"),
+                Strings.T("{0} files will be read. That takes a moment.",
+                          n >= 5000 ? n + "+" : n.ToString())
+                + "\n\n"
+                + Strings.T("In this view, dropping and reordering are off. It is meant "
+                            + "for looking, for aligning and for editing by hand."),
+                Strings.T("Read")))
+            return;
+
         var existing = _tabs.FindIndex(t =>
             string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase));
 
@@ -728,7 +756,7 @@ public sealed partial class MainWindow : Window
         {
             _tabs[existing].Recursive = true;
             ActivateTab(existing);
-            _ = LoadTabAsync(_tabs[existing]);
+            Fire(LoadTabAsync(_tabs[existing]), Strings.T("Reading…"));
             return;
         }
 
@@ -1978,9 +2006,6 @@ public sealed partial class MainWindow : Window
 
         UpdateRuleSwitches();
 
-        RecurseBtn.Content = Strings.T(ActiveTab.Recursive
-            ? "Show this folder only" : "Include subfolders");
-
         var off = analysis.Outliers(target).Count();
         AlignBtn.IsEnabled = off > 0;
         AlignBtn.Content = off > 0 ? Strings.T("Align folder ({0})", off)
@@ -2054,44 +2079,6 @@ public sealed partial class MainWindow : Window
         _settings.ClearRule(ActiveTab.Path);
         UpdateRuleSwitches();
         StatusText.Text = Strings.T("\"{0}\" follows the global setting again", ActiveTab.Name);
-    }
-
-    /// <summary>
-    /// Zwischen „nur dieser Ordner" und „mit allem darunter" umschalten.
-    /// Bei vielen Dateien vorher fragen — ein rekursiver Scan über eine ganze
-    /// Bibliothek dauert, und niemand rechnet damit nach einem Klick.
-    /// </summary>
-    private async void OnToggleRecursive(object sender, RoutedEventArgs e)
-    {
-        var tab = ActiveTab;
-
-        if (!tab.Recursive)
-        {
-            RecurseBtn.IsEnabled = false;
-            StatusText.Text = Strings.T("Counting subfolders…");
-            var n = await Task.Run(() => FolderScanner.CountRecursive(tab.Path));
-            RecurseBtn.IsEnabled = true;
-            StatusText.Text = "";
-
-            if (n == 0)
-            {
-                await Inform(Strings.T("Nothing found"),
-                             Strings.T("There are no audio files below this folder."));
-                return;
-            }
-
-            if (n > 400 && !await Confirm(Strings.T("Include subfolders"),
-                    Strings.T("{0} files will be read. That takes a moment.",
-                              n >= 5000 ? n + "+" : n.ToString())
-                    + "\n\n"
-                    + Strings.T("In this view, dropping and reordering are off. It is meant "
-                                + "for looking, for aligning and for editing by hand."),
-                    Strings.T("Read")))
-                return;
-        }
-
-        tab.Recursive = !tab.Recursive;
-        await LoadTabAsync(tab);
     }
 
     // ══ Schreiben ════════════════════════════════════════════════
@@ -3103,12 +3090,123 @@ public sealed partial class MainWindow : Window
         await ReportAsync(files.Count, errors, []);
     }
 
-    /// <summary>Ein Bild als Cover für jede Datei des Ordners.</summary>
+    /// <summary>
+    /// Ein Bild als Cover für jede Datei des Ordners.
+    ///
+    /// Zuerst zur Auswahl, was im Ordner schon liegt: In den allermeisten
+    /// Fällen trägt eine der Dateien bereits das richtige Cover, und dann ist
+    /// der Weg über den Dateiauswahl-Dialog ein Umweg über eine Datei, die es
+    /// vielleicht gar nicht mehr gibt.
+    /// </summary>
     private void OnCoverForAll(object sender, RoutedEventArgs e)
     {
         var targets = ActiveTab.Tracks.ToList();
         if (targets.Count == 0) return;
-        Run(() => SetFromFileAsync(targets));
+        Run(() => CoverForAllAsync(targets));
+    }
+
+    private async Task CoverForAllAsync(List<AudioTrack> targets)
+    {
+        var found = await Task.Run(() => DistinctCovers(targets));
+
+        var gallery = new WrapPanel { HorizontalSpacing = 8, VerticalSpacing = 8 };
+        AudioProbe.Cover? picked = null;
+        ContentDialog? host = null;
+
+        foreach (var cover in found)
+        {
+            var picture = new Image { Stretch = Stretch.UniformToFill, Width = 96, Height = 96 };
+            try
+            {
+                var bitmap = new BitmapImage { DecodePixelWidth = 192 };
+                using var stream = new MemoryStream(cover.Data);
+                bitmap.SetSource(stream.AsRandomAccessStream());
+                picture.Source = bitmap;
+            }
+            catch { continue; }
+
+            var choice = new Button
+            {
+                Padding = new Thickness(3),
+                CornerRadius = new CornerRadius(5),
+                Content = picture,
+            };
+            ToolTipService.SetToolTip(choice,
+                Strings.T("{0} ({1} KB)", ImageInfo.ShortName(cover.MimeType),
+                          $"{cover.Data.Length / 1024.0:0.#}"));
+
+            choice.Click += (_, _) => { picked = cover; host?.Hide(); };
+            gallery.Children.Add(choice);
+        }
+
+        var panel = new StackPanel { Spacing = 12, Width = 430 };
+        panel.Children.Add(new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextFillColorSecondaryBrush"),
+            Text = found.Count == 0
+                ? Strings.T("No file in this folder has a cover yet.")
+                : Strings.T("Pick one of the covers already in this folder, or choose a file."),
+        });
+
+        if (found.Count > 0)
+            panel.Children.Add(new ScrollViewer { MaxHeight = 320, Content = gallery });
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.T("Set cover for {0}…", targets.Count),
+            Content = panel,
+            PrimaryButtonText = Strings.T("Choose a file…"),
+            CloseButtonText = Strings.T("Cancel"),
+            DefaultButton = found.Count == 0
+                ? ContentDialogButton.Primary : ContentDialogButton.Close,
+            XamlRoot = Root.XamlRoot,
+        };
+        host = dialog;
+
+        var answer = await dialog.ShowAsync();
+
+        // Ein Klick auf ein Bild schließt über Hide(), das None liefert.
+        if (picked is { Data.Length: > 0 } chosen)
+        {
+            await ApplyImageAsync(targets, chosen.Data, Strings.T("Set cover"), keepExact: true);
+            return;
+        }
+
+        if (answer == ContentDialogResult.Primary) await SetFromFileAsync(targets);
+    }
+
+    /// <summary>
+    /// Die verschiedenen Cover eines Ordners.
+    ///
+    /// Verglichen wird über die Bytes, nicht über das Bild: Zwei Dateien mit
+    /// demselben Cover sollen einmal erscheinen, und ein Vergleich Bild für
+    /// Bild wäre bei zwanzig Titeln zwanzigmal dekodieren.
+    /// </summary>
+    private static List<AudioProbe.Cover> DistinctCovers(IReadOnlyList<AudioTrack> tracks)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var found = new List<AudioProbe.Cover>();
+
+        // Ein Album hat selten mehr als eine Handvoll verschiedener Bilder,
+        // und ein rekursiver Ordner kann tausende Dateien haben.
+        foreach (var track in tracks.Where(t => t.HasCover).Take(300))
+        {
+            AudioProbe.Cover? cover = null;
+            try { cover = AudioProbe.ReadCover(track.Path); } catch { }
+            if (cover is not { Data.Length: > 0 }) continue;
+
+            var mark = cover.Data.Length + ":" + Convert.ToHexString(
+                System.Security.Cryptography.MD5.HashData(cover.Data));
+
+            if (!seen.Add(mark)) continue;
+            found.Add(cover);
+
+            if (found.Count >= 24) break;
+        }
+
+        return found;
     }
     // ══ Tags übertragen ══════════════════════════════════════════
 
@@ -3288,5 +3386,174 @@ public sealed partial class MainWindow : Window
     {
         TrackColumns.Remember(_settings, TrackColumns.Resolve(_settings), Columns.ToArray());
         _settings.Save();
+    }
+    // ══ Unterordner verlassen ════════════════════════════════════
+
+    /// <summary>
+    /// Zurück in den einzelnen Ordner. Der Weg dorthin führt über das
+    /// Abzeichen in der Kopfzeile der Hälfte; der Knopf in der Seitenspalte
+    /// stand dafür im Weg, obwohl man ihn fast nie braucht.
+    /// </summary>
+    private void OnScopeExit(object? sender, TrackPane pane)
+    {
+        if (pane.Tab is not { Recursive: true } tab) return;
+
+        tab.Recursive = false;
+        Fire(LoadTabAsync(tab), Strings.T("Reading…"));
+    }
+
+    // ══ Kontextmenü in der Suche ═════════════════════════════════
+
+    /// <summary>
+    /// Rechtsklick auf einen Treffer. Lieder und Ordner bekommen je das
+    /// Menü, das man von ihnen kennt — vorher passierte hier gar nichts,
+    /// und man musste den Treffer erst öffnen, um irgendetwas zu tun.
+    /// </summary>
+    private void OnSearchHitRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not SearchHit hit) return;
+
+        SearchList.SelectedItem = hit;
+
+        var menu = new MenuFlyout();
+
+        if (hit.Kind == HitKind.Folder)
+        {
+            menu.Items.Add(Item("\uE8A7", Strings.T("Open in a new tab"), () => OpenTab(hit.Path)));
+            menu.Items.Add(Item("\uE721", Strings.T("Search subfolders"), () => OpenRecursive(hit.Path)));
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(Item("\uE8DA", Strings.T("Open in Explorer"), () => Reveal(hit.Path)));
+        }
+        else
+        {
+            var folder = Path.GetDirectoryName(hit.Path);
+
+            menu.Items.Add(Item("\uE768", Strings.T("Play"), () =>
+            {
+                if (AudioProbe.Read(hit.Path) is { } track) _player.Play(track);
+            }));
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(Item("\uE8A7", Strings.T("Go to folder"), () =>
+            {
+                // Mit der Datei ausgewählt, sonst sucht man sie im Ordner
+                // noch einmal.
+                if (folder is null) return;
+                NavigateActive(folder);
+                Fire(LoadTabAsync(ActiveTab, hit.Path), Strings.T("Reading…"));
+            }));
+            menu.Items.Add(Item("\uE8DA", Strings.T("Show in Explorer"), () => Reveal(hit.Path)));
+            menu.Items.Add(Item("\uE8C8", Strings.T("Copy path"), () =>
+            {
+                var package = new DataPackage();
+                package.SetText(hit.Path);
+                Clipboard.SetContent(package);
+            }));
+        }
+
+        menu.ShowAt((UIElement)sender, e.GetPosition((UIElement)sender));
+        e.Handled = true;
+
+        static MenuFlyoutItem Item(string glyph, string text, Action run)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = text,
+                Icon = new FontIcon { Glyph = glyph },
+            };
+            item.Click += (_, _) => run();
+            return item;
+        }
+    }
+    // ══ Suchen im Ordner ═════════════════════════════════════════
+
+    /// <summary>
+    /// Die Treffer der laufenden Suche, in der Reihenfolge der Liste, und wo
+    /// man gerade steht.
+    /// </summary>
+    private List<AudioTrack> _found = [];
+    private int _at = -1;
+
+    private void OnFindShortcut(
+        KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        FindBar.Visibility = Visibility.Visible;
+        FindBox.Focus(FocusState.Programmatic);
+        FindBox.SelectAll();
+        args.Handled = true;
+    }
+
+    private void OnFindClose(object sender, RoutedEventArgs e)
+    {
+        FindBar.Visibility = Visibility.Collapsed;
+        FindBox.Text = "";
+        _found = [];
+        _at = -1;
+        ActivePane.Mark([]);
+    }
+
+    private void OnFindChanged(object sender, TextChangedEventArgs e)
+    {
+        var needle = FindBox.Text.Trim();
+        _found = needle.Length == 0 ? [] : Matches(needle);
+        _at = _found.Count > 0 ? 0 : -1;
+
+        ActivePane.Mark(_found.Select(t => t.Path));
+        ShowFindCount();
+
+        // Beim Tippen gleich zum ersten Treffer, wie im Browser.
+        if (_at >= 0) ActivePane.Reveal(_found[_at]);
+    }
+
+    /// <summary>
+    /// Was auf die Eingabe passt. Gesucht wird in dem, was in der Zeile
+    /// steht: Titel, Interpret, Album und der Dateiname.
+    /// </summary>
+    private List<AudioTrack> Matches(string needle) =>
+    [
+        .. ActiveTab.Tracks.Where(t =>
+            Has(t.Title) || Has(t.Artist) || Has(t.Album) || Has(t.FileName)),
+    ];
+
+    private bool Has(string value) =>
+        value.Contains(FindBox.Text.Trim(), StringComparison.CurrentCultureIgnoreCase);
+
+    private void ShowFindCount() =>
+        FindCount.Text = FindBox.Text.Trim().Length == 0 ? ""
+            : _found.Count == 0 ? Strings.T("none")
+            : $"{_at + 1}/{_found.Count}";
+
+    private void OnFindNext(object sender, RoutedEventArgs e) => Step(1);
+    private void OnFindPrevious(object sender, RoutedEventArgs e) => Step(-1);
+
+    /// <summary>Einen Treffer weiter, rundherum wie im Browser.</summary>
+    private void Step(int by)
+    {
+        if (_found.Count == 0) return;
+
+        _at = (_at + by + _found.Count) % _found.Count;
+        ActivePane.Reveal(_found[_at]);
+        ShowFindCount();
+    }
+
+    private void OnFindKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Escape:
+                OnFindClose(sender, e);
+                e.Handled = true;
+                break;
+
+            case Windows.System.VirtualKey.Enter:
+                // Mit Umschalt rückwärts, genau wie im Browser.
+                Step(Shift() ? -1 : 1);
+                e.Handled = true;
+                break;
+        }
+
+        static bool Shift() =>
+            Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
     }
 }

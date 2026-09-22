@@ -79,7 +79,15 @@ public static class TrackArt
         {
             byte[]? data = null;
             await Gate.WaitAsync().ConfigureAwait(false);
-            try { data = AudioProbe.ReadCover(path)?.Data; }
+            try
+            {
+                // Auch ein Ordner darf hier stehen: Die Trefferliste der
+                // Suche zeigt Lieder und Ordner nebeneinander, und für beide
+                // soll ein Bild erscheinen statt eines Platzhalters.
+                data = Directory.Exists(path)
+                    ? Core.Folders.FolderCover.Read(path)
+                    : AudioProbe.ReadCover(path)?.Data;
+            }
             catch { }
             finally { Gate.Release(); }
 

@@ -13,6 +13,10 @@
 
     <Grid x:Name="Root" RowDefinitions="48,*,46">
 
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindShortcut" />
+        </Grid.KeyboardAccelerators>
+
         <!-- ══ Titelleiste ══════════════════════════════════════════
              Pfad und Tabs teilen sich den Platz: Die Tabs nehmen, was sie
              brauchen, der Pfad gibt nach. Die Fenstertasten bleiben nativ. -->
@@ -368,6 +372,7 @@
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <ListView Grid.Row="1" x:Name="SearchList" Margin="4,0,4,8"
                               SelectionMode="Single"
+                              RightTapped="OnSearchHitRightTapped"
                               ItemClick="OnSearchHitClicked" IsItemClickEnabled="True">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
@@ -384,9 +389,16 @@
                                             Background="{ThemeResource ControlFillColorDefaultBrush}"
                                             BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                             BorderThickness="1">
-                                        <FontIcon FontSize="13"
-                                                  Glyph="{x:Bind Glyph}"
-                                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <Grid>
+                                            <FontIcon FontSize="13"
+                                                      Glyph="{x:Bind Glyph}"
+                                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+                                            <!-- Liegt ein Cover vor, deckt es
+                                                 das Symbol zu. -->
+                                            <Image local:TrackArt.Path="{x:Bind Path}"
+                                                   Stretch="UniformToFill" />
+                                        </Grid>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                         <TextBlock Text="{x:Bind Name}" FontSize="13"
@@ -413,6 +425,42 @@
             <!-- ── Trackliste, optional geteilt ──────────────────── -->
             <Grid Grid.Column="4" x:Name="PaneHost" RowDefinitions="*,Auto,Auto">
                 <local:TrackPane Grid.Row="0" x:Name="PaneA" />
+
+                <!-- Suchleiste, oben rechts ueber der Liste: sie liegt
+                     darueber statt daneben, damit sie beim Oeffnen nichts
+                     verschiebt. -->
+                <Border Grid.Row="0" x:Name="FindBar" Visibility="Collapsed"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,46,22,0" Padding="7,5" CornerRadius="6"
+                        BorderThickness="1"
+                        Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="5"
+                                VerticalAlignment="Center">
+                        <TextBox x:Name="FindBox" Width="188" FontSize="12.5"
+                                 PlaceholderText="Find in this folder…"
+                                 TextChanged="OnFindChanged"
+                                 KeyDown="OnFindKeyDown" />
+                        <TextBlock x:Name="FindCount" FontSize="11.5" MinWidth="46"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <Button x:Name="FindPrev" Content="&#xE74A;" Click="OnFindPrevious"
+                                FontFamily="Segoe Fluent Icons" FontSize="11"
+                                Width="28" Height="28" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="Previous match" />
+                        <Button x:Name="FindNext" Content="&#xE74B;" Click="OnFindNext"
+                                FontFamily="Segoe Fluent Icons" FontSize="11"
+                                Width="28" Height="28" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="Next match" />
+                        <Button Content="&#xE711;" Click="OnFindClose"
+                                FontFamily="Segoe Fluent Icons" FontSize="11"
+                                Width="28" Height="28" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="Close" />
+                    </StackPanel>
+                </Border>
                 <Border Grid.Row="1" x:Name="Splitter" Height="5" Visibility="Collapsed"
                         Background="{ThemeResource ControlFillColorDefaultBrush}"
                         BorderThickness="0,1,0,1"
@@ -442,8 +490,6 @@
                         <StackPanel Spacing="6">
                             <Button x:Name="AlignBtn" Content="Align folder"
                                     HorizontalAlignment="Stretch" Click="OnAlign" />
-                            <Button x:Name="RecurseBtn" Content="Include subfolders"
-                                    HorizontalAlignment="Stretch" Click="OnToggleRecursive" />
                             <Button x:Name="RenameBtn" Content="Rename…"
                                     HorizontalAlignment="Stretch" Click="OnRenameFiles" />
                             <Button x:Name="CoverAllBtn" Content="Set cover for all…"

@@ -4,6 +4,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.DataTransfer.DragDrop;
 using Windows.Foundation;
@@ -47,6 +48,9 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     public bool TagsCopied { get; set; }
     public event EventHandler<TrackSort>? SortRequested;
+
+    /// <summary>Zurück aus der Sicht mit Unterordnern in den einzelnen Ordner.</summary>
+    public event EventHandler<TrackPane>? ScopeExitRequested;
 
     /// <summary>
     /// Der laufende Zug innerhalb der App. Das Datenpaket der Liste trägt beim
@@ -116,7 +120,49 @@ public sealed partial class TrackPane : UserControl
         }
 
         TrackColumns.FillRow(row, track, _combined);
+        Paint(container, track);
         args.Handled = true;
+    }
+
+    // ── Hervorheben ──────────────────────────────────────────────
+
+    private HashSet<string> _marked = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Hebt Zeilen hervor, etwa die Treffer der Suche im Ordner.
+    ///
+    /// Die Liste gibt ihre Zeilen beim Scrollen weiter, darum wird die
+    /// Markierung beim Zeichnen jeder Zeile neu gesetzt und nicht nur einmal
+    /// auf das, was gerade zu sehen ist.
+    /// </summary>
+    public void Mark(IEnumerable<string> paths)
+    {
+        _marked = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in List.Items)
+        {
+            if (item is not AudioTrack track) continue;
+            if (List.ContainerFromItem(item) is ListViewItem container)
+                Paint(container, track);
+        }
+    }
+
+    private void Paint(ListViewItem container, AudioTrack track)
+    {
+        container.Background = _marked.Contains(track.Path)
+            ? (Brush)Application.Current.Resources["AccentDimBrush"]
+            : null;
+    }
+
+    /// <summary>Holt eine Zeile ins Bild und wählt sie aus.</summary>
+    public void Reveal(AudioTrack track)
+    {
+        List.ScrollIntoView(track);
+        _suppress = true;
+        List.SelectedItems.Clear();
+        List.SelectedItems.Add(track);
+        _suppress = false;
+        SelectionChanged?.Invoke(this, this);
     }
 
     /// <summary>
@@ -357,6 +403,13 @@ public sealed partial class TrackPane : UserControl
     private void HideLine() => DropLine.Visibility = Visibility.Collapsed;
 
     // ══ Sortierung ═══════════════════════════════════════════════
+
+    private void OnScopeBadgeTapped(object sender, TappedRoutedEventArgs e)
+    {
+        Activated?.Invoke(this, this);
+        ScopeExitRequested?.Invoke(this, this);
+        e.Handled = true;
+    }
 
     private void OnHeaderTapped(object sender, TappedRoutedEventArgs e)
     {

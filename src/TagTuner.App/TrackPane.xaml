@@ -14,9 +14,14 @@
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
             <TextBlock Grid.Column="0" x:Name="FolderName" FontWeight="Bold" FontSize="17"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <!-- Anklickbar: Es ist der Weg zurueck in den einzelnen Ordner.
+                 Ein eigener Knopf in der Seitenspalte stand dafuer im Weg,
+                 obwohl man ihn fast nie braucht. -->
             <Border Grid.Column="1" x:Name="ScopeBadge" CornerRadius="9" Padding="7,1"
                     VerticalAlignment="Center" Visibility="Collapsed"
-                    Background="{StaticResource WarnDimBrush}">
+                    Background="{StaticResource WarnDimBrush}"
+                    Tapped="OnScopeBadgeTapped"
+                    ToolTipService.ToolTip="Show this folder only">
                 <TextBlock Text="with subfolders" FontSize="10"
                            Foreground="{StaticResource WarnBrush}" />
             </Border>
