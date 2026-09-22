@@ -92,55 +92,40 @@ internal static class SettingsShell
         };
 
         // ── Leiste links ─────────────────────────────────────────
-        // Ohne eigenen Hintergrund: Leiste und Inhalt sind eine Fläche, und
-        // eine Linie dazwischen genügt als Trennung.
-        var rail = new ListView
+        // Eigene Zeilen statt einer ListView: Deren Auswahl zeichnet die
+        // Windows-Vorlage selbst, als eckigen Kasten, und lässt sich dort nur
+        // über Ressourcen umstellen, die nicht verlässlich greifen. So ist
+        // die Rundung garantiert und der farbige Strich an der gewählten
+        // Zeile auch. Ohne eigenen Hintergrund: Leiste und Inhalt sind eine
+        // Fläche, und eine Linie dazwischen genügt als Trennung.
+        var rail = new StackPanel
         {
             Width = 172,
-            SelectionMode = ListViewSelectionMode.Single,
-            Padding = new Thickness(6, 10, 6, 10),
-            Background = null,
-            ItemContainerStyle = RailItemStyle(),
+            Spacing = 3,
+            Padding = new Thickness(8, 10, 8, 10),
         };
 
-        // Die Vorlage der Zeilen nimmt ihre Ecken aus einer Ressource, nicht
-        // aus CornerRadius. Ohne das bleibt die Auswahl ein eckiger Kasten.
-        // Dazu der kleine farbige Strich links an der gewählten Zeile, wie
-        // in den Windows-Einstellungen.
-        rail.Resources["ListViewItemCornerRadius"] = new CornerRadius(6);
-        rail.Resources["ListViewItemSelectionIndicatorVisualEnabled"] = true;
-        rail.Resources["ListViewItemSelectionIndicatorCornerRadius"] = new CornerRadius(1.5);
+        var rows = new List<(Grid Row, Border Mark)>();
+        var selected = -1;
 
-        foreach (var section in sections)
+        void Paint(int index, bool hover)
         {
-            rail.Items.Add(new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 11,
-                Children =
-                {
-                    new FontIcon
-                    {
-                        Glyph = section.Glyph,
-                        FontSize = 15,
-                        Opacity = 0.85,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
-                    new TextBlock
-                    {
-                        Text = Strings.T(section.Title),
-                        FontSize = 13.5,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        TextTrimming = TextTrimming.CharacterEllipsis,
-                    },
-                },
-            });
+            var (row, mark) = rows[index];
+            var isSelected = index == selected;
+            mark.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
+            row.Background = isSelected
+                ? Res("SubtleFillColorSecondaryBrush")
+                : hover ? Res("SubtleFillColorTertiaryBrush")
+                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
 
-        rail.SelectionChanged += (_, _) =>
+        void Select(int at)
         {
-            var at = rail.SelectedIndex;
-            if (at < 0 || at >= sections.Count) return;
+            if (at < 0 || at >= sections.Count || at == selected) return;
+            var before = selected;
+            selected = at;
+            if (before >= 0) Paint(before, hover: false);
+            Paint(at, hover: false);
 
             heading.Text = Strings.T(sections[at].Title);
             body.Children.Clear();
@@ -158,7 +143,67 @@ internal static class SettingsShell
             }
 
             content.ChangeView(null, 0, null, disableAnimation: true);
-        };
+        }
+
+        for (var i = 0; i < sections.Count; i++)
+        {
+            var index = i;
+            var section = sections[i];
+
+            var mark = new Border
+            {
+                Width = 3,
+                Height = 16,
+                CornerRadius = new CornerRadius(1.5),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = Res("AccentFillColorDefaultBrush"),
+                Visibility = Visibility.Collapsed,
+            };
+
+            var row = new Grid
+            {
+                Height = 36,
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                Children =
+                {
+                    mark,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 11,
+                        Margin = new Thickness(12, 0, 8, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children =
+                        {
+                            new FontIcon
+                            {
+                                Glyph = section.Glyph,
+                                FontSize = 15,
+                                Opacity = 0.85,
+                                VerticalAlignment = VerticalAlignment.Center,
+                            },
+                            new TextBlock
+                            {
+                                Text = Strings.T(section.Title),
+                                FontSize = 13.5,
+                                VerticalAlignment = VerticalAlignment.Center,
+                                TextTrimming = TextTrimming.CharacterEllipsis,
+                            },
+                        },
+                    },
+                },
+            };
+
+            row.PointerEntered += (_, _) => Paint(index, hover: true);
+            row.PointerExited += (_, _) => Paint(index, hover: false);
+            row.PointerCanceled += (_, _) => Paint(index, hover: false);
+            row.Tapped += (_, _) => Select(index);
+
+            rows.Add((row, mark));
+            rail.Children.Add(row);
+        }
 
         var divider = new Border
         {
@@ -255,7 +300,7 @@ internal static class SettingsShell
             e.Handled = true;
         };
 
-        rail.SelectedIndex = 0;
+        Select(0);
 
         await dialog.ShowAsync();
 
@@ -263,18 +308,5 @@ internal static class SettingsShell
         return context.WantsInstall;
     }
 
-    /// <summary>Zeilen in der Leiste: schmal, abgerundet, ohne viel Luft.</summary>
-    private static Style RailItemStyle()
-    {
-        var style = new Style(typeof(ListViewItem));
-        style.Setters.Add(new Setter(FrameworkElement.HorizontalAlignmentProperty,
-                                     HorizontalAlignment.Stretch));
-        style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,
-                                     HorizontalAlignment.Stretch));
-        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 0, 10, 0)));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 36.0));
-        style.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(5)));
-        style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 2, 0, 2)));
-        return style;
-    }
+    private static Brush Res(string key) => (Brush)Application.Current.Resources[key];
 }
