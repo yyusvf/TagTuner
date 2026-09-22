@@ -2659,6 +2659,11 @@ public sealed partial class MainWindow : Window
 
         var order = tab.Tracks.ToList();
 
+        // Mit Disc-Zeilen zählt jede Disc von 1, und ein Lied, das in eine
+        // andere Disc gezogen wurde, bekommt deren Nummer.
+        var sections = pane.ReorderedSections;
+        if (sections is not null) order = sections.Select(x => x.Track).ToList();
+
         if (!_settings.RuleFor(tab.Path).WritesNumbers)
         {
             StatusText.Text = Strings.T("Order changed. Track numbers unchanged "
@@ -2675,11 +2680,27 @@ public sealed partial class MainWindow : Window
             new FfmpegRunner("ffmpeg"), new BackupStore(_settings.ResolvedBackupFolder));
         var files = new List<HistoryFile>();
 
+        var perDisc = new Dictionary<uint, uint>();
+
         for (var i = 0; i < order.Count; i++)
         {
-            var wanted = (uint)(i + 1);
-            if (order[i].Track == wanted) continue;
-            var outcome = await Task.Run(() => svc.WriteTagsOnly(order[i], new TagEdit { Track = wanted }));
+            uint wanted;
+            uint? disc = null;
+
+            if (sections is not null)
+            {
+                var d = sections[i].Disc;
+                wanted = perDisc[d] = perDisc.GetValueOrDefault(d) + 1;
+                if (order[i].Disc != d) disc = d;
+            }
+            else
+            {
+                wanted = (uint)(i + 1);
+            }
+
+            if (order[i].Track == wanted && disc is null) continue;
+            var edit = new TagEdit { Track = wanted, Disc = disc };
+            var outcome = await Task.Run(() => svc.WriteTagsOnly(order[i], edit));
             if (outcome.Success && outcome.History is not null) files.Add(outcome.History);
             ShowProgress(true, (i + 1) * 100.0 / order.Count);
         }

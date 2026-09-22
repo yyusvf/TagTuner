@@ -302,11 +302,7 @@ internal static class TrackColumns
         grid.ColumnDefinitions.Clear();
         grid.RowDefinitions.Clear();
         grid.ColumnSpacing = 10;
-        grid.Height = double.NaN;
-
-        // Oben die Zeile für die Disc, sonst eingeklappt; darunter die Werte.
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(56) });
+        grid.Height = 56;
 
         var dim = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
         var second = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
@@ -318,34 +314,6 @@ internal static class TrackColumns
             Bind(grid.ColumnDefinitions[i], widths, i);
         }
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        // Wie bei Spotify: Die Disc steht einmal als eigene Zeile über ihrem
-        // ersten Lied, statt klein in der Nummernspalte. Sie gehört zur Zeile
-        // dieses Lieds, damit Auswahl, Ziehen und Umsortieren weiter nur
-        // Lieder kennen.
-        var discText = new TextBlock
-        {
-            FontSize = 13,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = second,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var discHeader = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 12,
-            Padding = new Thickness(2, 14, 0, 6),
-            Visibility = Visibility.Collapsed,
-            Tag = DiscHeaderTag,
-
-            // Durchsichtig statt leer: Sonst nimmt nur der Text Klicks an,
-            // und ein Klick daneben landete beim Lied darunter.
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Children = { DiscIcon(second), discText },
-        };
-        Grid.SetRow(discHeader, 0);
-        Grid.SetColumnSpan(discHeader, columns.Count + 1);
-        grid.Children.Add(discHeader);
 
         for (var i = 0; i < columns.Count; i++)
         {
@@ -444,13 +412,52 @@ internal static class TrackColumns
             }
 
             Grid.SetColumn(cell, i);
-            Grid.SetRow(cell, 1);
             grid.Children.Add(cell);
         }
     }
 
-    /// <summary>Erkennungszeichen der Disc-Zeile unter den Kindern einer Zeile.</summary>
-    public const string DiscHeaderTag = "disc-header";
+    /// <summary>Woran eine wiederverwendete Zeile erkennt, dass sie eine Disc-Zeile ist.</summary>
+    public const string DiscRowTag = "disc";
+
+    /// <summary>
+    /// Die Zeile einer Disc, wie bei Spotify: eine kleine Scheibe und
+    /// „Disc 2", über die ganze Breite.
+    /// </summary>
+    public static void BuildDiscRow(Grid grid)
+    {
+        grid.Children.Clear();
+        grid.ColumnDefinitions.Clear();
+        grid.RowDefinitions.Clear();
+        grid.Height = 46;
+
+        var second = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+        grid.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Padding = new Thickness(6, 8, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                DiscIcon(second),
+                new TextBlock
+                {
+                    FontSize = 13,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = second,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            },
+        });
+        grid.Tag = DiscRowTag;
+    }
+
+    public static void FillDiscRow(Grid grid, uint disc)
+    {
+        if (grid.Children is [StackPanel { Children: [_, TextBlock text] }])
+            text.Text = Strings.T("Disc {0}", disc);
+    }
 
     /// <summary>Das Feld der Tracknummer, breit genug für drei Ziffern.</summary>
     private const double NumberWidth = 22;
@@ -478,25 +485,17 @@ internal static class TrackColumns
 
     /// <summary>Setzt die Werte einer schon gebauten Zeile auf einen Track.</summary>
     /// <param name="trackText">
-    /// Die Disc-Zeile über dem Lied, leer wenn es keine bekommt, und was in
-    /// der Track-Zelle steht. Das hängt am Ordner und an seiner Reihenfolge,
-    /// darum rechnet es die Liste aus und nicht diese Klasse.
+    /// Was in der Track-Zelle steht. Das hängt am Ordner und an seiner
+    /// Reihenfolge, darum rechnet es die Liste aus und nicht diese Klasse.
     /// </param>
     public static void FillRow(
         Grid row, AudioTrack track, bool combined,
-        Func<AudioTrack, (string Mark, string Number)>? trackText = null)
+        Func<AudioTrack, string>? trackText = null)
     {
-        var (mark, number) = trackText?.Invoke(track) ?? ("", track.TrackLabel);
+        var number = trackText?.Invoke(track) ?? track.TrackLabel;
 
         foreach (var child in row.Children)
         {
-            if (child is StackPanel { Tag: DiscHeaderTag } header)
-            {
-                header.Visibility = mark.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-                if (header.Children[1] is TextBlock discText) discText.Text = mark;
-                continue;
-            }
-
             if (child is not FrameworkElement { Tag: CellTag tag }) continue;
 
             if (tag.Picture is { } picture)

@@ -13,6 +13,16 @@ using TagTuner.Core.Settings;
 
 namespace TagTuner.App;
 
+/// <summary>
+/// Die Zeile einer Disc in der Liste. Eine Klasse statt eines Records: Die
+/// Liste erkennt ihre Einträge am Objekt, und zwei Zeilen „Disc 1" wären als
+/// Record dasselbe.
+/// </summary>
+public sealed class DiscHeader(uint disc)
+{
+    public uint Disc { get; } = disc;
+}
+
 /// <summary>Dateien aus dem Explorer, auf einer Hälfte abgelegt.</summary>
 public sealed record FilesDroppedArgs(TrackPane Pane, IReadOnlyList<string> Paths, int Index);
 
@@ -83,8 +93,31 @@ public sealed partial class TrackPane : UserControl
     /// berechnet, weil es an der Reihenfolge hängt: „die erste Datei jeder
     /// Disc" ist nach einem Umsortieren eine andere.
     /// </summary>
-    private Dictionary<string, (string Mark, string Number)> _trackText =
-        new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> _trackText = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Ob die Liste gerade Disc-Zeilen zeigt. Dann zeigt sie nicht die Lieder
+    /// des Ordners selbst, sondern <see cref="_view"/>: dieselben Lieder mit
+    /// den Disc-Zeilen dazwischen.
+    /// </summary>
+    private bool _sectioned;
+
+    private readonly System.Collections.ObjectModel.ObservableCollection<object> _view = [];
+
+    /// <summary>
+    /// Die Disc-Zeilen, wiederverwendet: Eine neue Zeile bei jedem Abgleich
+    /// hieße, dass die Liste sie jedes Mal herausnimmt und neu einsetzt.
+    /// </summary>
+    private readonly Dictionary<uint, DiscHeader> _headers = [];
+
+    private bool _syncQueued;
+
+    /// <summary>
+    /// Nach einem Umsortieren mit Disc-Zeilen: jedes Lied mit der Disc, unter
+    /// der es jetzt steht. Wer ein Lied in eine andere Disc zieht, meint,
+    /// dass es dorthin gehört. Ohne Disc-Zeilen leer.
+    /// </summary>
+    public IReadOnlyList<(AudioTrack Track, uint Disc)>? ReorderedSections { get; private set; }
 
     /// <summary>
     /// Übernimmt Auswahl, Reihenfolge und Breiten der Spalten. Baut die
@@ -128,7 +161,6 @@ public sealed partial class TrackPane : UserControl
     private void OnRowRealizing(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue) return;
-        if (args.Item is not AudioTrack track) return;
         if (args.ItemContainer is not ListViewItem container) return;
 
         // Die Vorlage der Liste ist ein einziges, leeres Grid. Hineingebaut
@@ -136,10 +168,25 @@ public sealed partial class TrackPane : UserControl
         // Vorlage mit den Spalten darin gäbe es zur Bauzeit noch nicht.
         if (container.ContentTemplateRoot is not Grid row) return;
 
+        if (args.Item is DiscHeader header)
+        {
+            // Zeilen werden zwischen Liedern und Discs weitergereicht; die
+            // Mindesthöhe eines Lieds passt nicht zu einer Disc-Zeile.
+            container.MinHeight = 0;
+            container.Background = null;
+            if (row.Tag as string != TrackColumns.DiscRowTag) TrackColumns.BuildDiscRow(row);
+            row.DataContext = header;
+            TrackColumns.FillDiscRow(row, header.Disc);
+            args.Handled = true;
+            return;
+        }
+
+        if (args.Item is not AudioTrack track) return;
+        container.MinHeight = 56;
+
         if (row.Tag as string != Stamp())
         {
             TrackColumns.BuildRow(row, _columns, Columns, _combined);
-            WireDiscHeader(row);
             row.Tag = Stamp();
         }
 
@@ -174,93 +221,131 @@ public sealed partial class TrackPane : UserControl
 
     // ── Disc und Track ───────────────────────────────────────────
 
-    private (string Mark, string Number) TrackTextFor(AudioTrack track) =>
-        _trackText.TryGetValue(track.Path, out var text) ? text : ("", track.TrackLabel);
+    private string TrackTextFor(AudioTrack track) =>
+        _trackText.TryGetValue(track.Path, out var text) ? text : track.TrackLabel;
 
     /// <summary>
-    /// Rechnet aus, was in jeder Track-Zelle steht.
+    /// Rechnet aus, wie Disc und Track erscheinen.
     ///
-    /// Im Album mit mehreren Discs und in Playlist-Reihenfolge bekommt das
-    /// erste Lied jeder Disc eine eigene Zeile darüber, wie bei Spotify. Sonst,
-    /// wenn überhaupt mehrere Discs vorkommen, kompakt als „2-04". Bei einer
+    /// Im Album mit mehreren Discs und in Playlist-Reihenfolge bekommt jede
+    /// Disc eine eigene Zeile, wie bei Spotify. Sonst, wenn überhaupt mehrere
+    /// Discs vorkommen, steht sie kompakt als „2-04" in der Nummer. Bei einer
     /// einzigen Disc bleibt es bei der Nummer: Eine „1" vor jedem Lied sagt
     /// nichts.
     /// </summary>
     private void ComputeTrackText()
     {
         _trackText = new(StringComparer.OrdinalIgnoreCase);
+        _sectioned = false;
         if (Tab is null || _settings is not { CombineDiscAndTrack: true }) return;
 
         var discs = Tab.Tracks.Select(t => t.Disc).Where(d => d > 0).Distinct().Count();
         if (discs < 2) return;
 
-        var album = !Tab.Recursive
-                    && Tab.Sort == TrackSort.Natural
-                    && (IsAlbumFolder?.Invoke(Tab.Path) ?? false);
+        _sectioned = !Tab.Recursive
+                     && Tab.Sort == TrackSort.Natural
+                     && (IsAlbumFolder?.Invoke(Tab.Path) ?? false);
+        if (_sectioned) return;
 
-        uint? previous = null;
         foreach (var track in Tab.Tracks)
         {
-            if (album)
-            {
-                var first = track.Disc > 0 && track.Disc != previous;
-                _trackText[track.Path] = (first ? Strings.T("Disc {0}", track.Disc) : "", track.TrackLabel);
-            }
-            else
-            {
-                _trackText[track.Path] = ("",
-                    track.Disc > 0 && track.Track > 0 ? $"{track.Disc}-{track.Track:00}"
-                                                      : track.TrackLabel);
-            }
-            previous = track.Disc;
+            _trackText[track.Path] =
+                track.Disc > 0 && track.Track > 0 ? $"{track.Disc}-{track.Track:00}" : track.TrackLabel;
         }
     }
 
     /// <summary>
-    /// Die Disc-Zeile gehört zur Zeile ihres ersten Lieds, soll aber nicht
-    /// dieses Lied wählen, sondern die ganze Disc. Darum fängt sie Drücken
-    /// und Loslassen selbst ab, bevor die Liste es als Klick auf die Zeile
-    /// nimmt. Mit Strg kommt die Disc zur Auswahl dazu.
+    /// Stellt die Liste auf das ein, was sie zeigen soll: die Lieder selbst,
+    /// oder die Lieder mit Disc-Zeilen. Gleicht dabei nur ab, was sich
+    /// geändert hat, damit Auswahl und Bildlauf stehen bleiben.
     /// </summary>
-    private void WireDiscHeader(Grid row)
-    {
-        foreach (var child in row.Children)
-        {
-            if (child is not StackPanel { Tag: TrackColumns.DiscHeaderTag } header) continue;
-
-            header.PointerPressed += (_, e) => e.Handled = true;
-            header.Tapped += (_, e) => e.Handled = true;
-            header.DoubleTapped += (_, e) => e.Handled = true;
-            header.RightTapped += (_, e) => e.Handled = true;
-            header.PointerReleased += (_, e) =>
-            {
-                e.Handled = true;
-                if (row.DataContext is not AudioTrack first) return;
-
-                var add = e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control);
-                SelectDisc(first.Disc, add);
-            };
-        }
-    }
-
-    /// <summary>Wählt alle Lieder einer Disc.</summary>
-    private void SelectDisc(uint disc, bool add)
+    private void UpdateView()
     {
         if (Tab is null) return;
 
-        _suppress = true;
-        if (!add) List.SelectedItems.Clear();
+        if (!_sectioned)
+        {
+            if (!ReferenceEquals(List.ItemsSource, Tab.Tracks)) List.ItemsSource = Tab.Tracks;
+            _view.Clear();
+            return;
+        }
+
+        var wanted = new List<object>(Tab.Tracks.Count + 4);
+        var used = new HashSet<DiscHeader>();
+        uint? previous = null;
+
         foreach (var track in Tab.Tracks)
         {
-            if (track.Disc == disc && !List.SelectedItems.Contains(track))
-                List.SelectedItems.Add(track);
+            if (track.Disc > 0 && track.Disc != previous)
+            {
+                // Kommt eine Disc ein zweites Mal vor, braucht sie eine eigene
+                // Zeile: Dasselbe Objekt zweimal verträgt die Liste nicht.
+                if (!_headers.TryGetValue(track.Disc, out var header) || !used.Add(header))
+                {
+                    header = new DiscHeader(track.Disc);
+                    if (!_headers.ContainsKey(track.Disc)) _headers[track.Disc] = header;
+                    used.Add(header);
+                }
+                wanted.Add(header);
+            }
+            wanted.Add(track);
+            previous = track.Disc;
         }
-        _suppress = false;
 
-        Tab.SelectedPaths.Clear();
-        Tab.SelectedPaths.AddRange(Selected().Select(t => t.Path));
-        List.Focus(FocusState.Pointer);
-        SelectionChanged?.Invoke(this, this);
+        Sync(_view, wanted);
+        if (!ReferenceEquals(List.ItemsSource, _view)) List.ItemsSource = _view;
+    }
+
+    /// <summary>Bringt eine Liste mit möglichst wenigen Schritten auf den Stand einer anderen.</summary>
+    private static void Sync(System.Collections.ObjectModel.ObservableCollection<object> target, List<object> wanted)
+    {
+        var keep = new HashSet<object>(wanted, ReferenceEqualityComparer.Instance);
+        for (var i = target.Count - 1; i >= 0; i--)
+        {
+            if (!keep.Contains(target[i])) target.RemoveAt(i);
+        }
+
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (i < target.Count && ReferenceEquals(target[i], wanted[i])) continue;
+
+            var at = -1;
+            for (var j = i + 1; j < target.Count; j++)
+            {
+                if (ReferenceEquals(target[j], wanted[i])) { at = j; break; }
+            }
+
+            if (at < 0) target.Insert(i, wanted[i]);
+            else target.Move(at, i);
+        }
+    }
+
+    /// <summary>
+    /// Die Lieder des Ordners haben sich geändert, etwa nach dem Einlesen.
+    /// Der Abgleich wartet, bis alle Änderungen durch sind: Beim Einlesen
+    /// kommt jedes Lied einzeln, und jedes Mal neu abzugleichen wäre Arbeit
+    /// für nichts.
+    /// </summary>
+    private void OnTracksChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (!_sectioned || _syncQueued) return;
+        _syncQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _syncQueued = false;
+            ComputeTrackText();
+            UpdateView();
+            RefillRealized();
+        });
+    }
+
+    /// <summary>Die Lieder unter einer Disc-Zeile, bis zur nächsten.</summary>
+    private IEnumerable<AudioTrack> SectionOf(DiscHeader header)
+    {
+        var at = _view.IndexOf(header);
+        if (at < 0) yield break;
+        for (var i = at + 1; i < _view.Count && _view[i] is AudioTrack track; i++)
+            yield return track;
     }
 
     /// <summary>
@@ -496,7 +581,12 @@ public sealed partial class TrackPane : UserControl
 
     public void Bind(FolderTab tab)
     {
+        if (Tab is not null) Tab.Tracks.CollectionChanged -= OnTracksChanged;
         Tab = tab;
+        tab.Tracks.CollectionChanged += OnTracksChanged;
+
+        _view.Clear();
+        _headers.Clear();
         List.ItemsSource = tab.Tracks;
         Refresh();
     }
@@ -524,6 +614,7 @@ public sealed partial class TrackPane : UserControl
 
         UpdateSortMarks();
         ComputeTrackText();
+        UpdateView();
         RefillRealized();
 
         // Auswahl nach einem Neueinlesen wiederherstellen — sonst verliert
@@ -540,6 +631,26 @@ public sealed partial class TrackPane : UserControl
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppress || Tab is null) return;
+
+        // Eine Disc-Zeile ist selbst nichts zum Auswählen. Ein Klick auf sie
+        // wählt ihre Lieder (mit Strg zusätzlich); bei „alle auswählen" oder
+        // einem Bereich mit Umschalt fällt sie einfach wieder heraus.
+        var headers = e.AddedItems.OfType<DiscHeader>().ToList();
+        if (headers.Count > 0)
+        {
+            var single = e.AddedItems.Count == 1;
+            _suppress = true;
+            foreach (var header in headers) List.SelectedItems.Remove(header);
+            if (single)
+            {
+                foreach (var track in SectionOf(headers[0]))
+                {
+                    if (!List.SelectedItems.Contains(track)) List.SelectedItems.Add(track);
+                }
+            }
+            _suppress = false;
+        }
+
         Tab.SelectedPaths.Clear();
         Tab.SelectedPaths.AddRange(Selected().Select(t => t.Path));
         SelectionChanged?.Invoke(this, this);
@@ -577,6 +688,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnDragStarting(object sender, DragItemsStartingEventArgs e)
     {
+        if (e.Items.Any(i => i is DiscHeader)) { e.Cancel = true; return; }
         _drag = (this, e.Items.OfType<AudioTrack>().ToList());
         _droppedHere = false;
     }
@@ -591,6 +703,33 @@ public sealed partial class TrackPane : UserControl
         // Reihenfolge nichts geändert hat.
         if (landedElsewhere) return;
         if (args.DropResult != DataPackageOperation.Move) return;
+
+        ReorderedSections = null;
+        if (_sectioned && Tab is not null)
+        {
+            // Die Liste hat nur die Anzeige umgestellt. Die Reihenfolge der
+            // Lieder im Ordner folgt ihr, und jedes Lied merkt sich die Disc,
+            // unter der es gelandet ist. Über der ersten Disc-Zeile zählt es
+            // zur ersten Disc.
+            var sections = new List<(AudioTrack, uint)>();
+            var disc = _view.OfType<DiscHeader>().FirstOrDefault()?.Disc ?? 0;
+            foreach (var item in _view)
+            {
+                if (item is DiscHeader header) disc = header.Disc;
+                else if (item is AudioTrack track) sections.Add((track, disc));
+            }
+
+            _syncQueued = true;   // kein Abgleich mitten im Umstellen
+            for (var i = 0; i < sections.Count; i++)
+            {
+                var at = Tab.Tracks.IndexOf(sections[i].Item1);
+                if (at >= 0 && at != i) Tab.Tracks.Move(at, i);
+            }
+            _syncQueued = false;
+
+            ReorderedSections = sections;
+        }
+
         ReorderCompleted?.Invoke(this, this);
     }
 
@@ -685,25 +824,47 @@ public sealed partial class TrackPane : UserControl
     /// wird an den tatsächlich erzeugten Zeilen, damit gescrollte Listen
     /// stimmen; unterhalb der letzten Zeile landet der Zug am Ende.
     /// </summary>
+    /// <remarks>
+    /// Gezählt wird in Liedern, nicht in Zeilen: Disc-Zeilen sind nichts,
+    /// wovor etwas eingefügt wird.
+    /// </remarks>
     private int IndexAt(Point p)
     {
-        var count = Tab?.Tracks.Count ?? 0;
-        for (var i = 0; i < count; i++)
+        var tracks = 0;
+        for (var i = 0; i < List.Items.Count; i++)
         {
-            if (List.ContainerFromIndex(i) is not ListViewItem row) continue;
-            var top = row.TransformToVisual(List).TransformPoint(new Point(0, 0)).Y;
-            if (p.Y < top + row.ActualHeight / 2) return i;
+            if (List.Items[i] is not AudioTrack) continue;
+            if (List.ContainerFromIndex(i) is ListViewItem row)
+            {
+                var top = row.TransformToVisual(List).TransformPoint(new Point(0, 0)).Y;
+                if (p.Y < top + row.ActualHeight / 2) return tracks;
+            }
+            tracks++;
         }
-        return count;
+        return tracks;
+    }
+
+    /// <summary>Die Zeile, in der das Lied an dieser Stelle steht.</summary>
+    private int RowOfTrack(int index)
+    {
+        var tracks = 0;
+        for (var i = 0; i < List.Items.Count; i++)
+        {
+            if (List.Items[i] is not AudioTrack) continue;
+            if (tracks == index) return i;
+            tracks++;
+        }
+        return -1;
     }
 
     private void ShowLine(int index)
     {
+        var count = Tab?.Tracks.Count ?? 0;
         double y;
-        if (List.ContainerFromIndex(Math.Min(index, (Tab?.Tracks.Count ?? 1) - 1)) is ListViewItem row)
+        if (count > 0 && List.ContainerFromIndex(RowOfTrack(Math.Min(index, count - 1))) is ListViewItem row)
         {
             var top = row.TransformToVisual(List).TransformPoint(new Point(0, 0)).Y;
-            y = index >= (Tab?.Tracks.Count ?? 0) ? top + row.ActualHeight : top;
+            y = index >= count ? top + row.ActualHeight : top;
         }
         else
         {
