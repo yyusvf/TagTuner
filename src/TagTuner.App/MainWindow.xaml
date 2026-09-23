@@ -83,7 +83,7 @@
                                      Background="Transparent"
                                      Foreground="{StaticResource AccentBrush}" />
                     </Border>
-                    <TextBlock x:Name="ProgressLabel" FontSize="11" FontFamily="Consolas"
+                    <TextBlock x:Name="ProgressLabel" FontSize="11" FontFamily="{StaticResource DataFont}"
                                MinWidth="30" VerticalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
@@ -139,7 +139,7 @@
             <!-- ── Metadaten ─────────────────────────────────────── -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Row="0" x:Name="MetaHead" Text="METADATA"
-                           Margin="14,10,14,6" FontSize="11" FontWeight="Bold"
+                           Margin="14,10,14,6" Style="{StaticResource SectionLabel}"
                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
 
                 <ScrollViewer Grid.Row="1" Padding="14,0,14,12">
@@ -157,7 +157,7 @@
                             </Border>
                             <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Top">
                                 <TextBlock x:Name="CoverMime" FontSize="11"
-                                           FontFamily="Consolas"
+                                           FontFamily="{StaticResource DataFont}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <TextBlock x:Name="CoverInfo" FontSize="11"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -166,57 +166,47 @@
                         </Grid>
 
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Title" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Title" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FTitle" />
                         </StackPanel>
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Artist" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Artist" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FArtist" />
                         </StackPanel>
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Album" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Album" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FAlbum" />
                         </StackPanel>
 
                         <Grid ColumnDefinitions="*,0.8*,0.8*,1.3*" ColumnSpacing="7">
                             <StackPanel Grid.Column="0" Spacing="3">
-                                <TextBlock Text="Year" FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Year" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="FYear" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Spacing="3">
-                                <TextBlock Text="Track" FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Track" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="FTrack" />
                             </StackPanel>
                             <StackPanel Grid.Column="2" Spacing="3">
-                                <TextBlock Text="Disc" FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Disc" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="FDisc" />
                             </StackPanel>
                             <StackPanel Grid.Column="3" Spacing="3">
-                                <TextBlock Text="Genre" FontSize="11"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Genre" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="FGenre" />
                             </StackPanel>
                         </Grid>
 
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Album artist" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Album artist" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FAlbumArtist" />
                         </StackPanel>
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Composer" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Composer" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FComposer" />
                         </StackPanel>
                         <StackPanel Spacing="3">
-                            <TextBlock Text="Comment" FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Comment" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="FComment" />
                         </StackPanel>
                         <!-- Audio: technisch, kein Tag — darum abgesetzt -->
@@ -226,7 +216,7 @@
                                 BorderThickness="1">
                             <StackPanel Spacing="8">
                                 <StackPanel Orientation="Horizontal" Spacing="7">
-                                    <TextBlock Text="AUDIO" FontSize="11" FontWeight="Bold"
+                                    <TextBlock Text="AUDIO" Style="{StaticResource SectionLabel}"
                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                     <Border CornerRadius="9" Padding="6,0"
                                             Background="{StaticResource WarnDimBrush}">
@@ -236,13 +226,11 @@
                                 </StackPanel>
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                     <StackPanel Grid.Column="0" Spacing="3">
-                                        <TextBlock Text="File format" FontSize="11"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="File format" Style="{StaticResource FieldLabel}" />
                                         <ComboBox x:Name="FFormat" HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="3">
-                                        <TextBlock Text="Sample rate" FontSize="11"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="Sample rate" Style="{StaticResource FieldLabel}" />
                                         <ComboBox x:Name="FRate" HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                 </Grid>
@@ -284,7 +272,7 @@
             <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,8,6,4">
                     <TextBlock Grid.Column="0" Text="LIBRARY" VerticalAlignment="Center"
-                               FontSize="11" FontWeight="Bold"
+                               Style="{StaticResource SectionLabel}"
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <Button Grid.Column="1" x:Name="AddRootBtn" Content="&#xE710;"
                             FontFamily="Segoe Fluent Icons" FontSize="11"
@@ -489,7 +477,7 @@
             <!-- ── Ordner-Analyse ────────────────────────────────── -->
             <Grid Grid.Column="6" RowDefinitions="Auto,*">
                 <TextBlock Grid.Row="0" Text="FOLDER ANALYSIS" Margin="14,10,14,6"
-                           FontSize="11" FontWeight="Bold"
+                           Style="{StaticResource SectionLabel}"
                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                 <ScrollViewer Grid.Row="1" Padding="14,0,14,14">
                     <StackPanel Spacing="12">
@@ -513,7 +501,7 @@
                                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                 BorderThickness="1">
                             <StackPanel Spacing="9">
-                                <TextBlock Text="ALBUM MODE" FontSize="11" FontWeight="Bold"
+                                <TextBlock Text="ALBUM MODE" Style="{StaticResource SectionLabel}"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                 <ToggleSwitch x:Name="AlbumSwitch"
                                               Header="This folder is one release"
@@ -549,7 +537,7 @@
                                         Content="Apply to existing files…"
                                         Click="OnApplyAlbumToExisting" />
 
-                                <TextBlock Text="ON DROP" FontSize="11" FontWeight="Bold"
+                                <TextBlock Text="ON DROP" Style="{StaticResource SectionLabel}"
                                            Margin="0,4,0,0"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                 <ToggleSwitch x:Name="ConformSwitch"
@@ -602,7 +590,7 @@
                 <StackPanel VerticalAlignment="Center" Spacing="0" MaxWidth="210">
                     <TextBlock x:Name="NowPlaying" FontSize="11.5"
                                TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="NowTime" FontSize="10.5" FontFamily="Consolas"
+                    <TextBlock x:Name="NowTime" FontSize="10.5" FontFamily="{StaticResource DataFont}"
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                 </StackPanel>
             </StackPanel>

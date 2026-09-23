@@ -42,7 +42,7 @@ public sealed partial class MainWindow
         var preview = new TextBlock
         {
             FontSize = 11.5,
-            FontFamily = new FontFamily("Consolas"),
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
             TextWrapping = TextWrapping.NoWrap,
             Foreground = Res("TextFillColorSecondaryBrush"),
         };

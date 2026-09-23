@@ -983,7 +983,7 @@ public sealed partial class MainWindow : Window
                     {
                         Text = text,
                         FontSize = 11,
-                        FontFamily = new FontFamily("Consolas"),
+                        FontFamily = new FontFamily("Cascadia Mono, Consolas"),
                         Foreground = Res(onTarget ? "OkBrush" : "WarnBrush"),
                     },
                 });

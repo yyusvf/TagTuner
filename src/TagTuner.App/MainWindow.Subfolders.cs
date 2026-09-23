@@ -185,10 +185,8 @@ public sealed partial class MainWindow
                             new TextBlock
                             {
                                 Text = Strings.T("SUBFOLDERS"),
-                                FontSize = 11,
-                                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                                Style = (Style)Application.Current.Resources["SectionLabel"],
                                 VerticalAlignment = VerticalAlignment.Center,
-                                Foreground = Res("TextFillColorTertiaryBrush"),
                             },
                             _count,
                         },

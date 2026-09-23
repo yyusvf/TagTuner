@@ -431,7 +431,7 @@ internal static class BackupsPage
         {
             FontSize = 11,
             Foreground = dim,
-            FontFamily = new FontFamily("Consolas"),
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         var stamp = new StackPanel

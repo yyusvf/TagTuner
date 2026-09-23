@@ -61,9 +61,7 @@ internal static class SettingsUi
         panel.Children.Add(new TextBlock
         {
             Text = Strings.T(title).ToUpperInvariant(),
-            FontSize = 11,
-            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-            Opacity = 0.6,
+            Style = (Style)Application.Current.Resources["SectionLabel"],
         });
 
         // null ist erlaubt: So kann eine Seite einen Teil weglassen, ohne

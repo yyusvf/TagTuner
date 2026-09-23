@@ -76,7 +76,8 @@ internal static class SettingsShell
         // der Bildlaufleiste.
         var heading = new TextBlock
         {
-            FontSize = 18,
+            FontSize = 21,
+            FontFamily = (FontFamily)Application.Current.Resources["LabelFont"],
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(20, 0, 0, 0),

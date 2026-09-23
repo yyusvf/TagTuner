@@ -360,7 +360,7 @@ internal static class TrackColumns
                 var number = new TextBlock
                 {
                     FontSize = 12,
-                    FontFamily = new FontFamily("Consolas"),
+                    FontFamily = new FontFamily("Cascadia Mono, Consolas"),
                     Foreground = dim,
                     VerticalAlignment = VerticalAlignment.Center,
 
@@ -404,13 +404,13 @@ internal static class TrackColumns
                 switch (column.Look)
                 {
                     case ColumnLook.Mono:
-                        text.FontFamily = new FontFamily("Consolas");
+                        text.FontFamily = new FontFamily("Cascadia Mono, Consolas");
                         text.FontSize = 11;
                         text.Foreground = dim;
                         break;
 
                     case ColumnLook.MonoRight:
-                        text.FontFamily = new FontFamily("Consolas");
+                        text.FontFamily = new FontFamily("Cascadia Mono, Consolas");
                         text.FontSize = column.Id == "track" ? 12 : 11.5;
                         text.Foreground = dim;
                         text.HorizontalAlignment = HorizontalAlignment.Right;
@@ -465,8 +465,10 @@ internal static class TrackColumns
                 DiscIcon(second),
                 new TextBlock
                 {
-                    FontSize = 13,
+                    FontSize = 14,
+                    FontFamily = (FontFamily)Application.Current.Resources["LabelFont"],
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    CharacterSpacing = 30,
                     Foreground = second,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
