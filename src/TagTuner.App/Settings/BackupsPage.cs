@@ -46,32 +46,40 @@ internal static class BackupsPage
         var rows = new ObservableCollection<Row>();
 
         // ── Einstellungen ────────────────────────────────────────
-        var info = Hint("");
         var deleteAllBtn = new Button { Content = Strings.T("Delete all backups") };
+        var openBtn = Action("Open backup folder", () =>
+        {
+            // Anlegen, falls es ihn noch nicht gibt: Sonst öffnet der
+            // Explorer stattdessen „Dokumente", und man sucht an der
+            // falschen Stelle.
+            var folder = c.Settings.ResolvedBackupFolder;
+            try { System.IO.Directory.CreateDirectory(folder); } catch { }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{folder}\"",
+                UseShellExecute = true,
+            });
+        });
 
-        yield return Group("Backups",
-            Field("Delete automatically", Choice(
+        yield return Heading("Backups");
+        yield return Row("\uE916", "Delete automatically",
+            "Runs on start. Older backups are removed, and the history entries that belong to them " +
+            "can no longer be undone afterwards.",
+            Choice(
                 [("Never", "never"), ("After 7 days", "7"), ("After 30 days", "30")],
                 c.Settings.BackupRetention,
-                value => { c.Settings.BackupRetention = value; c.Save(); })),
-            Hint("Runs on start. Older backups are removed, and the history entries " +
-                 "that belong to them can no longer be undone afterwards."),
-            info,
-            Buttons(deleteAllBtn, Action("Open backup folder", () =>
-            {
-                // Anlegen, falls es ihn noch nicht gibt: Sonst öffnet der
-                // Explorer stattdessen „Dokumente", und man sucht an der
-                // falschen Stelle.
-                var folder = c.Settings.ResolvedBackupFolder;
-                try { System.IO.Directory.CreateDirectory(folder); } catch { }
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"\"{folder}\"",
-                    UseShellExecute = true,
-                });
-            })),
-            Hint(c.Settings.ResolvedBackupFolder));
+                value => { c.Settings.BackupRetention = value; c.Save(); }));
+
+        var folderRow = Row("\uE8B7", "Backup folder", c.Settings.ResolvedBackupFolder,
+            Buttons(openBtn, deleteAllBtn));
+        yield return folderRow;
+
+        // Was die Liste über die Größe sagt, steht hier mit dem Pfad.
+        var info = new TextBlock();
+        info.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) =>
+            Describe(folderRow, c.Settings.ResolvedBackupFolder
+                                + (info.Text.Length > 0 ? Environment.NewLine + info.Text : "")));
 
         // ── Liste ────────────────────────────────────────────────
         var list = new ListView
@@ -295,7 +303,8 @@ internal static class BackupsPage
 
         Refresh();
 
-        yield return Group("Stored backups",
+        yield return Heading("Stored backups");
+        yield return Panel(
             Hint("Newest first. Restoring puts the file back where it came from; the "
                  + "version there now is backed up first, so the history can undo it."),
             Hint("In colour: what changed since the backup, the backed up value first, then "

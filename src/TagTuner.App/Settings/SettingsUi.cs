@@ -232,6 +232,10 @@ internal static class SettingsUi
         {
             control.VerticalAlignment = VerticalAlignment.Center;
             control.HorizontalAlignment = HorizontalAlignment.Right;
+
+            // Auswahl und Eingabe brauchen Platz für ihren Text; sonst
+            // schrumpfen sie auf die Breite des Pfeils.
+            if (control is ComboBox or TextBox && control.MinWidth == 0) control.MinWidth = 220;
             Grid.SetColumn(control, 2);
             grid.Children.Add(control);
         }
@@ -248,6 +252,39 @@ internal static class SettingsUi
             // Die Erklärung, damit eine Seite sie nachträglich ändern kann,
             // etwa nach dem Ein- und Ausschalten.
             Tag = detail,
+        };
+    }
+
+    /// <summary>
+    /// Eine Zeile, die zu der darüber gehört, etwa ein Unterpunkt des
+    /// Album-Modus: eingerückt und ohne eigenes Icon.
+    /// </summary>
+    public static Border SubRow(string title, string? description, FrameworkElement? control)
+    {
+        var row = Row("", title, description, control);
+        row.Margin = new Thickness(38, -4, 0, 0);
+        return row;
+    }
+
+    /// <summary>
+    /// Eine Fläche im Stil der Zeilen für das, was keine Zeile ist: Listen,
+    /// Knopfreihen, längere Angaben.
+    /// </summary>
+    public static Border Panel(params FrameworkElement?[] content)
+    {
+        var stack = new StackPanel { Spacing = 8 };
+        foreach (var item in content)
+            if (item is not null) stack.Children.Add(item);
+
+        return new Border
+        {
+            Padding = new Thickness(16, 12, 16, 12),
+            Margin = new Thickness(0, -4, 0, 0),
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1),
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Child = stack,
         };
     }
 

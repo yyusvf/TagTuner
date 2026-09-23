@@ -291,97 +291,111 @@ internal static class SettingsCatalog
 
     private static IEnumerable<FrameworkElement> Folders(SettingsContext c)
     {
-        yield return Group("Default profile",
-            Row(Field("File format", Pick(AudioFormats.Targets, c.Settings.DefaultFormat,
-                    at => { c.Settings.DefaultFormat = AudioFormats.Targets[at]; c.Save(); })),
-                Field("Sample rate", Pick(Rates.Select(RateLabel),
-                    RateLabel(c.Settings.DefaultSampleRate),
-                    at => { c.Settings.DefaultSampleRate = Rates[at]; c.Save(); }))),
-            Hint("Only applies when a folder is empty or mixed. " +
-                 "Uniform folders decide their own target."));
+        yield return Heading("Default profile");
+        yield return Row("\uE8D6", "File format",
+            "Only applies when a folder is empty or mixed. Uniform folders decide their own target.",
+            Pick(AudioFormats.Targets, c.Settings.DefaultFormat,
+                at => { c.Settings.DefaultFormat = AudioFormats.Targets[at]; c.Save(); }));
+        yield return Row("\uE9E9", "Sample rate", null,
+            Pick(Rates.Select(RateLabel), RateLabel(c.Settings.DefaultSampleRate),
+                at => { c.Settings.DefaultSampleRate = Rates[at]; c.Save(); }));
 
         // ── Album-Modus ──────────────────────────────────────────
-        var baseTags = Tick("Base metadata", c.Settings.DefaultBaseTags,
-            on => { c.Settings.DefaultBaseTags = on; c.Save(); });
-        var cover = Tick("Cover", c.Settings.DefaultCover,
-            on => { c.Settings.DefaultCover = on; c.Save(); });
-        var numbering = Tick("Track numbering", c.Settings.DefaultNumbering,
-            on => { c.Settings.DefaultNumbering = on; c.Save(); });
+        yield return Heading("Album mode");
 
-        var fileNames = Tick("File names follow the track numbers", c.Settings.DefaultRenameFiles,
-            on => { c.Settings.DefaultRenameFiles = on; c.Save(); });
+        var baseTags = Switch(c.Settings.DefaultBaseTags);
+        baseTags.Toggled += (_, _) => { c.Settings.DefaultBaseTags = baseTags.IsOn; c.Save(); };
+        var cover = Switch(c.Settings.DefaultCover);
+        cover.Toggled += (_, _) => { c.Settings.DefaultCover = cover.IsOn; c.Save(); };
+        var numbering = Switch(c.Settings.DefaultNumbering);
+        var fileNames = Switch(c.Settings.DefaultRenameFiles);
+        fileNames.Toggled += (_, _) => { c.Settings.DefaultRenameFiles = fileNames.IsOn; c.Save(); };
 
-        void Enable(bool on) =>
-            baseTags.IsEnabled = cover.IsEnabled = numbering.IsEnabled = fileNames.IsEnabled = on;
-        Enable(c.Settings.DefaultAlbumMode);
-
-        var albumMode = Tick("Album mode", c.Settings.DefaultAlbumMode, on =>
+        void Enable()
         {
-            c.Settings.DefaultAlbumMode = on;
+            var on = c.Settings.DefaultAlbumMode;
+            baseTags.IsEnabled = cover.IsEnabled = numbering.IsEnabled = on;
+            fileNames.IsEnabled = on && c.Settings.DefaultNumbering;
+        }
+        numbering.Toggled += (_, _) => { c.Settings.DefaultNumbering = numbering.IsOn; c.Save(); Enable(); };
+
+        var albumMode = Switch(c.Settings.DefaultAlbumMode);
+        albumMode.Toggled += (_, _) =>
+        {
+            c.Settings.DefaultAlbumMode = albumMode.IsOn;
             c.Save();
-            Enable(on);
-        });
+            Enable();
+        };
+        Enable();
 
-        var subTicks = new StackPanel { Spacing = 0, Margin = new Thickness(18, 0, 0, 0) };
-        subTicks.Children.Add(baseTags);
-        subTicks.Children.Add(cover);
-        subTicks.Children.Add(numbering);
-        subTicks.Children.Add(fileNames);
-
-        yield return Group("Album mode",
-            albumMode,
-            Hint("For folders that are one release: an album, an EP, a single. It makes " +
-                 "metadata uniform, so leave it off for folders where you collect mixed " +
-                 "music. This is the default for folders without their own setting."),
-            subTicks);
+        yield return Row("\uE93C", "Album mode",
+            "For folders that are one release: an album, an EP, a single. It makes metadata uniform, " +
+            "so leave it off for folders where you collect mixed music. This is the default for " +
+            "folders without their own setting.",
+            albumMode);
+        yield return SubRow("Base metadata", null, baseTags);
+        yield return SubRow("Cover", null, cover);
+        yield return SubRow("Track numbering", null, numbering);
+        yield return SubRow("File names follow the track numbers", null, fileNames);
 
         // ── Beim Ablegen ─────────────────────────────────────────
-        var ownRules = Hint("");
-        void RefreshRules()
+        yield return Heading("On drop");
+
+        var conform = Switch(c.Settings.DefaultAutoConform);
+        conform.Toggled += (_, _) => { c.Settings.DefaultAutoConform = conform.IsOn; c.Save(); };
+        yield return Row("\uE8AB", "Align format and sample rate",
+            "Applies to every folder. The folder analysis on the right can set this differently for " +
+            "a single folder; that setting wins and stays even when you change something here.",
+            conform);
+
+        string OwnRules()
         {
             var n = c.Settings.FolderRules.Count;
-            ownRules.Text = n == 0
+            return n == 0
                 ? Strings.T("No folder deviates from this.")
                 : Strings.T(n == 1
                     ? "{0} folder has its own setting and is not affected."
                     : "{0} folders have their own setting and are not affected.", n);
         }
-        RefreshRules();
 
-        var clearRules = Action("Reset per-folder settings", () =>
+        var clearRules = new Button { Content = Strings.T("Reset"), IsEnabled = c.Settings.FolderRules.Count > 0 };
+        var rulesRow = Row("\uE8B7", "Per-folder settings", OwnRules(), clearRules);
+        clearRules.Click += (_, _) =>
         {
             c.Settings.FolderRules.Clear();
             c.Save();
-            RefreshRules();
+            Describe(rulesRow, OwnRules());
+            clearRules.IsEnabled = false;
             c.Changed("rules");
-        });
-
-        yield return Group("On drop",
-            Tick("Align format and sample rate", c.Settings.DefaultAutoConform,
-                on => { c.Settings.DefaultAutoConform = on; c.Save(); }),
-            Hint("Applies to every folder. The folder analysis on the right can set " +
-                 "this differently for a single folder; that setting wins and stays " +
-                 "even when you change something here."),
-            ownRules,
-            clearRules);
+        };
+        yield return rulesRow;
     }
 
     // ══ Bibliothek ═══════════════════════════════════════════════
 
     private static IEnumerable<FrameworkElement> Library(SettingsContext c)
     {
-        yield return Group("Library",
-            Tick("Only show folders containing audio", c.Settings.OnlyAudioFolders,
-                on => { c.Settings.OnlyAudioFolders = on; c.Save(); c.Changed("library"); }),
-            Hint("Hides folders with no music anywhere below them. Expanding takes a " +
-                 "little longer because every subfolder has to be checked."));
+        yield return Heading("Library");
+
+        var onlyAudio = Switch(c.Settings.OnlyAudioFolders);
+        onlyAudio.Toggled += (_, _) =>
+        {
+            c.Settings.OnlyAudioFolders = onlyAudio.IsOn;
+            c.Save();
+            c.Changed("library");
+        };
+        yield return Row("\uE71C", "Only show folders containing audio",
+            "Hides folders with no music anywhere below them. Expanding takes a little longer " +
+            "because every subfolder has to be checked.",
+            onlyAudio);
 
         // ── Eigene Wurzeln ───────────────────────────────────────
+        yield return Heading("Your folders");
+
         var list = new ListView
         {
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 190,
-            Margin = new Thickness(0, 2, 0, 2),
         };
 
         void RefreshRoots()
@@ -439,80 +453,74 @@ internal static class SettingsCatalog
             c.Changed("library");
         }
 
-        yield return Group("Your folders",
+        yield return Row("\uE8F1", "Folders in the library",
+            "Music, Downloads, your user folder and the drives are always there and are found fresh " +
+            "on every start. Only folders you added yourself are listed here.",
+            addBtn);
+        yield return Panel(
             list,
-            Buttons(addBtn, removeBtn,
-                    Action("Up", () => Move(-1)), Action("Down", () => Move(1))),
-            Hint("Music, Downloads, your user folder and the drives are always there " +
-                 "and are found fresh on every start. Only folders you added yourself " +
-                 "are listed here."));
+            Buttons(removeBtn, Action("Up", () => Move(-1)), Action("Down", () => Move(1))));
 
         // ── Ausgeblendete ────────────────────────────────────────
-        var hidden = Hint("");
-        var restore = Action("Show hidden again", () =>
+        yield return Heading("Hidden folders");
+
+        string Hidden() => c.Settings.HiddenRoots.Count == 0
+            ? Strings.T("Nothing is hidden.")
+            : string.Join(Environment.NewLine, c.Settings.HiddenRoots);
+
+        var restore = new Button
+        {
+            Content = Strings.T("Show hidden again"),
+            IsEnabled = c.Settings.HiddenRoots.Count > 0,
+        };
+        var hiddenRow = Row("\uE7B3", "Hidden folders", Hidden(), restore);
+        restore.Click += (_, _) =>
         {
             c.Settings.HiddenRoots.Clear();
             c.Save();
-            hidden.Text = Strings.T("The hidden folders are back");
+            Describe(hiddenRow, Strings.T("The hidden folders are back"));
+            restore.IsEnabled = false;
             c.Changed("library");
-        });
-
-        void RefreshHidden()
-        {
-            var n = c.Settings.HiddenRoots.Count;
-            hidden.Text = n == 0
-                ? Strings.T("Nothing is hidden.")
-                : string.Join(Environment.NewLine, c.Settings.HiddenRoots);
-            restore.IsEnabled = n > 0;
-        }
-        RefreshHidden();
-
-        yield return Group("Hidden folders",
-            hidden,
-            restore,
-            Hint("Music, Downloads and the drives cannot be removed, only hidden. " +
-                 "They do not come from a list that could be edited."));
+        };
+        yield return hiddenRow;
     }
 
     // ══ Tags ═════════════════════════════════════════════════════
 
     private static IEnumerable<FrameworkElement> Tags(SettingsContext c)
     {
-        yield return Group("Tags",
-            Field("Paste tags", Choice(
+        yield return Heading("Tags");
+        yield return Row("\uE77F", "Paste tags",
+            "Copying takes artist, album, album artist, year, disc, genre, composer, comment and the " +
+            "cover. Title and track number are different in every file, so they only come along " +
+            "with \"everything\".",
+            Choice(
                 [("Everything except title and track number", "format"), ("Everything", "all")],
                 c.Settings.TagPasteMode,
-                value => { c.Settings.TagPasteMode = value; c.Save(); })),
-            Hint("Copying takes artist, album, album artist, year, disc, genre, " +
-                 "composer, comment and the cover. Title and track number are " +
-                 "different in every file, so they only come along with \"everything\"."));
+                value => { c.Settings.TagPasteMode = value; c.Save(); }));
 
-        var rename = new TextBox
-        {
-            Text = c.Settings.RenamePattern,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-        var example = Hint("");
+        // ── Umbenennen ───────────────────────────────────────────
+        yield return Heading("Naming scheme");
 
-        void RefreshExample() =>
-            example.Text = Strings.T("Result: ") + rename.Text
+        var rename = new TextBox { Text = c.Settings.RenamePattern, MinWidth = 260 };
+        var placeholders = string.Join("  ", Core.Metadata.FileNaming.Placeholders);
+
+        string Example() =>
+            placeholders + Environment.NewLine + Strings.T("Result: ") + rename.Text
                 .Replace("{track}", "04").Replace("{title}", "Nebelfeld")
                 .Replace("{artist}", "Kollektiv Halle").Replace("{album}", "Nachtfahrt")
                 .Replace("{disc}", "1").Replace("{year}", "2025") + ".flac";
 
+        var renameRow = Row("\uE8AC", "Title → file name", Example(), rename);
         rename.TextChanged += (_, _) =>
         {
             c.Settings.RenamePattern = rename.Text;
             c.Save();
-            RefreshExample();
+            Describe(renameRow, Example());
         };
-        RefreshExample();
-
-        yield return Group("Naming scheme",
-            Field("Title → file name", rename),
-            Hint(string.Join("  ", Core.Metadata.FileNaming.Placeholders)),
-            example);
+        yield return renameRow;
     }
+
     // ══ Trackliste ═══════════════════════════════════════════════
 
     private static IEnumerable<FrameworkElement> TrackList(SettingsContext c)
@@ -524,7 +532,6 @@ internal static class SettingsCatalog
         {
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 320,
-            Margin = new Thickness(0, 2, 0, 2),
         };
 
         void Refresh()
@@ -570,46 +577,37 @@ internal static class SettingsCatalog
 
         Refresh();
 
-        yield return Group("Columns",
-            Hint("The order here is the order in the list. Pick a row and move it."),
-            list,
+        yield return Heading("Columns");
+        yield return Row("\uE8FD", "Columns",
+            "The order here is the order in the list. Pick a row and move it.",
             Buttons(Action("Up", () => Move(-1)), Action("Down", () => Move(1))));
+        yield return Panel(list);
 
-        yield return Group("Title and artist",
-            Tick("Show the artist under the title in one column",
-                c.Settings.CombineTitleAndArtist,
-                on =>
-                {
-                    c.Settings.CombineTitleAndArtist = on;
-                    c.Save();
-                    c.Changed("columns");
-                }),
-            Hint("Off means two columns of their own. The artist column is then " +
-                 "moved and sized like any other."));
+        // ── Darstellung ──────────────────────────────────────────
+        yield return Heading("Display");
 
-        yield return Group("Disc and track",
-            Tick("Show disc and track number in one column",
-                c.Settings.CombineDiscAndTrack,
-                on =>
-                {
-                    c.Settings.CombineDiscAndTrack = on;
-                    c.Save();
-                    c.Changed("columns");
-                }),
-            Hint("In an album with several discs the disc number appears once, at " +
-                 "the first track of each disc. Elsewhere it stands in front of the " +
-                 "number, like 2-04. With a single disc only the number is shown."));
+        ToggleSwitch Bound(bool on, Action<bool> apply, string changed)
+        {
+            var toggle = Switch(on);
+            toggle.Toggled += (_, _) => { apply(toggle.IsOn); c.Save(); c.Changed(changed); };
+            return toggle;
+        }
 
-        yield return Group("Sorting",
-            Tick("In playlist order, sort by disc first, then by track",
-                c.Settings.SortByDiscThenTrack,
-                on =>
-                {
-                    c.Settings.SortByDiscThenTrack = on;
-                    c.Save();
-                    c.Changed("sorting");
-                }),
-            Hint("Only for releases that span several discs. Without it the track " +
-                 "number alone decides."));
+        yield return Row("\uE77B", "Show the artist under the title in one column",
+            "Off means two columns of their own. The artist column is then moved and sized like " +
+            "any other.",
+            Bound(c.Settings.CombineTitleAndArtist, on => c.Settings.CombineTitleAndArtist = on, "columns"));
+
+        yield return Row("\uE93C", "Show disc and track number in one column",
+            "In an album with several discs the disc number appears once, at the first track of " +
+            "each disc. Elsewhere it stands in front of the number, like 2-04. With a single disc " +
+            "only the number is shown.",
+            Bound(c.Settings.CombineDiscAndTrack, on => c.Settings.CombineDiscAndTrack = on, "columns"));
+
+        // ── Sortierung ───────────────────────────────────────────
+        yield return Heading("Sorting");
+        yield return Row("\uE8CB", "In playlist order, sort by disc first, then by track",
+            "Only for releases that span several discs. Without it the track number alone decides.",
+            Bound(c.Settings.SortByDiscThenTrack, on => c.Settings.SortByDiscThenTrack = on, "sorting"));
     }
 }
