@@ -174,7 +174,11 @@ internal static class SettingsCatalog
         var numbering = Tick("Track numbering", c.Settings.DefaultNumbering,
             on => { c.Settings.DefaultNumbering = on; c.Save(); });
 
-        void Enable(bool on) => baseTags.IsEnabled = cover.IsEnabled = numbering.IsEnabled = on;
+        var fileNames = Tick("File names follow the track numbers", c.Settings.DefaultRenameFiles,
+            on => { c.Settings.DefaultRenameFiles = on; c.Save(); });
+
+        void Enable(bool on) =>
+            baseTags.IsEnabled = cover.IsEnabled = numbering.IsEnabled = fileNames.IsEnabled = on;
         Enable(c.Settings.DefaultAlbumMode);
 
         var albumMode = Tick("Album mode", c.Settings.DefaultAlbumMode, on =>
@@ -188,6 +192,7 @@ internal static class SettingsCatalog
         subTicks.Children.Add(baseTags);
         subTicks.Children.Add(cover);
         subTicks.Children.Add(numbering);
+        subTicks.Children.Add(fileNames);
 
         yield return Group("Album mode",
             albumMode,

@@ -89,6 +89,7 @@ public sealed partial class MainWindow : Window
         _activePane = PaneA;
         foreach (var pane in new[] { PaneA, PaneB }) WirePane(pane);
         InitSubfolders();
+        InitUndo();
 
         MetaCol.Width = new GridLength(_settings.MetaWidth);
         TreeCol.Width = new GridLength(_settings.TreeWidth);
@@ -1017,6 +1018,8 @@ public sealed partial class MainWindow : Window
         BaseTagsBox.IsChecked = rule.BaseTags;
         CoverBox.IsChecked = rule.Cover;
         NumberingBox.IsChecked = rule.Numbering;
+        FileNamesBox.IsChecked = rule.RenameFiles;
+        FileNamesBox.IsEnabled = rule.AlbumMode && rule.Numbering && !ActiveTab.Recursive;
 
         // Die Unterpunkte beschreiben, was der Album-Modus tut. Ist er aus,
         // tun sie nichts, und ein bedienbarer Haken würde etwas anderes
@@ -1032,6 +1035,10 @@ public sealed partial class MainWindow : Window
             ? Strings.T("Tags, cover and track numbers stay untouched here.")
             : Strings.T("Applies when files are dropped in and when the order changes.");
 
+        var problems = rule.AlbumMode && !ActiveTab.Recursive ? DescribeNumbering(ActiveTab.Tracks) : "";
+        AlbumCheck.Text = problems;
+        AlbumCheck.Visibility = problems.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         var own = _settings.HasOwnRule(ActiveTab.Path);
         ResetRuleBtn.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1046,6 +1053,37 @@ public sealed partial class MainWindow : Window
 
     private bool _suppressRules;
 
+    /// <summary>
+    /// Was an der Nummerierung auffällt, als Zeilen wie „Track 7 fehlt".
+    /// Leer, wenn alles stimmt.
+    /// </summary>
+    private static string DescribeNumbering(IReadOnlyList<AudioTrack> tracks)
+    {
+        var check = TrackNumberCheck.Check(tracks);
+        var lines = new List<string>();
+
+        foreach (var disc in check.Discs)
+        {
+            var parts = new List<string>();
+            if (disc.Missing.Count == 1)
+                parts.Add(Strings.T("track {0} missing", disc.Missing[0]));
+            else if (disc.Missing.Count > 1)
+                parts.Add(Strings.T("tracks {0} missing", TrackNumberCheck.Ranges(disc.Missing)));
+
+            foreach (var (track, count) in disc.Doubled)
+                parts.Add(Strings.T("track {0} appears {1}×", track, count));
+
+            var text = string.Join(", ", parts);
+            lines.Add(disc.Disc > 0 ? Strings.T("Disc {0}: {1}", disc.Disc, text) : text);
+        }
+
+        if (check.Unnumbered > 0)
+            lines.Add(Strings.T("{0} file(s) without a track number", check.Unnumbered));
+
+        // Der erste Buchstabe groß, auch wenn die Zeile mit „track" beginnt.
+        return string.Join(Environment.NewLine, lines.Select(l => l.Length > 0 ? char.ToUpper(l[0]) + l[1..] : l));
+    }
+
     private void OnFolderRuleChanged(object sender, RoutedEventArgs e)
     {
         if (_suppressRules) return;
@@ -1059,6 +1097,7 @@ public sealed partial class MainWindow : Window
             BaseTags = BaseTagsBox.IsChecked == true,
             Cover = CoverBox.IsChecked == true,
             Numbering = NumberingBox.IsChecked == true,
+            RenameFiles = FileNamesBox.IsChecked == true,
         });
         UpdateRuleSwitches();
         PaneFor(ActiveTab)?.Refresh();
@@ -1069,7 +1108,8 @@ public sealed partial class MainWindow : Window
         var after = _settings.RuleFor(ActiveTab.Path);
         if ((!before.WritesBaseTags && after.WritesBaseTags)
             || (!before.WritesCover && after.WritesCover)
-            || (!before.WritesNumbers && after.WritesNumbers))
+            || (!before.WritesNumbers && after.WritesNumbers)
+            || (!before.WritesFileNames && after.WritesFileNames))
         {
             _ = ApplyAlbumToExistingAsync(ActiveTab, offered: true);
         }

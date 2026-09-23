@@ -75,6 +75,9 @@ public sealed class HistoryStore
         catch { }
     }
 
+    /// <summary>Ein neuer Eintrag ist dazugekommen.</summary>
+    public event Action<HistoryEntry>? Added;
+
     public HistoryEntry Add(string kind, string description, IEnumerable<HistoryFile> files)
     {
         var entry = new HistoryEntry
@@ -86,6 +89,7 @@ public sealed class HistoryStore
         _entries.Insert(0, entry);
         if (_entries.Count > MaxEntries) _entries.RemoveRange(MaxEntries, _entries.Count - MaxEntries);
         Save();
+        Added?.Invoke(entry);
         return entry;
     }
 

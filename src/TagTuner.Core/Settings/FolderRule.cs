@@ -35,6 +35,12 @@ public sealed class FolderRule
     /// </summary>
     public bool Numbering { get; set; } = true;
 
+    /// <summary>
+    /// Die Nummer vorn im Dateinamen folgt der Track-Nummer. Aus, bis man es
+    /// will: Umbenennen greift tiefer ein als ein Tag.
+    /// </summary>
+    public bool RenameFiles { get; set; }
+
     /// <summary>Hineingezogene Dateien werden auf Format und Samplerate des Ordners gebracht.</summary>
     public bool AutoConform { get; set; } = true;
 
@@ -61,6 +67,7 @@ public sealed class FolderRule
         && BaseTags == other.BaseTags
         && Cover == other.Cover
         && Numbering == other.Numbering
+        && RenameFiles == other.RenameFiles
         && AutoConform == other.AutoConform;
 
     public FolderRule Copy() => new()
@@ -69,6 +76,7 @@ public sealed class FolderRule
         BaseTags = BaseTags,
         Cover = Cover,
         Numbering = Numbering,
+        RenameFiles = RenameFiles,
         AutoConform = AutoConform,
     };
 
@@ -79,4 +87,5 @@ public sealed class FolderRule
     [JsonIgnore] public bool WritesBaseTags => AlbumMode && BaseTags;
     [JsonIgnore] public bool WritesCover => AlbumMode && Cover;
     [JsonIgnore] public bool WritesNumbers => AlbumMode && Numbering;
+    [JsonIgnore] public bool WritesFileNames => AlbumMode && Numbering && RenameFiles;
 }

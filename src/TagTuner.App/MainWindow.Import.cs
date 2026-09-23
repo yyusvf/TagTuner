@@ -289,6 +289,7 @@ public sealed partial class MainWindow
         SetBusy(false, null);
         await MergeTabAsync(tab);
         if (removeFrom is not null) await MergeTabAsync(removeFrom);
+        await RenameToNumbersAsync(tab);
         await ReportAsync(done, errors, notes);
     }
 
@@ -463,5 +464,6 @@ public sealed partial class MainWindow
         SetBusy(false, null);
         await MergeTabAsync(tab);
         StatusText.Text = Strings.T("{0} track number(s) written", files.Count);
+        await RenameToNumbersAsync(tab);
     }
 }

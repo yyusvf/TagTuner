@@ -17,6 +17,7 @@
 
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindShortcut" />
+            <KeyboardAccelerator Modifiers="Control" Key="Z" Invoked="OnUndoShortcut" />
         </Grid.KeyboardAccelerators>
 
         <!-- ══ Titelleiste ══════════════════════════════════════════
@@ -531,10 +532,19 @@
                                               MinHeight="28" Click="OnFolderRuleChanged" />
                                     <CheckBox x:Name="NumberingBox" Content="Track numbering"
                                               MinHeight="28" Click="OnFolderRuleChanged" />
+                                    <!-- Eingerückt: gehört zur Nummerierung und wirkt nur mit ihr. -->
+                                    <CheckBox x:Name="FileNamesBox" Content="File names follow"
+                                              Margin="24,0,0,0"
+                                              MinHeight="28" Click="OnFolderRuleChanged" />
                                 </StackPanel>
 
                                 <TextBlock x:Name="AlbumNote" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                <!-- Lücken und doppelte Nummern, nur im Album-Modus:
+                                     In einem Sammelordner ist beides normal. -->
+                                <TextBlock x:Name="AlbumCheck" FontSize="11" TextWrapping="Wrap"
+                                           Visibility="Collapsed"
+                                           Foreground="{StaticResource WarnBrush}" />
                                 <Button x:Name="AlbumApplyBtn" HorizontalAlignment="Stretch"
                                         Content="Apply to existing files…"
                                         Click="OnApplyAlbumToExisting" />
@@ -605,11 +615,19 @@
 
             <!-- Letzte Spalte, rechtsbündig: so sitzt der Text wirklich in der
                  Ecke statt mit den Abständen leerer Spalten davor. -->
-            <TextBlock Grid.Column="3" x:Name="StatusText" VerticalAlignment="Center"
-                       HorizontalAlignment="Right" TextAlignment="Right"
-                       MaxWidth="620"
-                       FontSize="11.5" TextTrimming="CharacterEllipsis"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center"
+                           TextAlignment="Right"
+                           MaxWidth="620"
+                           FontSize="11.5" TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <!-- Nach einem Schreibvorgang: der kurze Weg zurück, ohne den
+                     Verlauf zu öffnen. Dasselbe wie Strg+Z. -->
+                <HyperlinkButton x:Name="UndoLink" Content="Undo" FontSize="11.5"
+                                 Padding="6,2" Visibility="Collapsed"
+                                 Click="OnUndoLast" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

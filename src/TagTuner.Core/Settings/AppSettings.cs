@@ -140,6 +140,7 @@ public sealed class AppSettings
     public bool DefaultBaseTags { get; set; } = true;
     public bool DefaultCover { get; set; } = true;
     public bool DefaultNumbering { get; set; } = true;
+    public bool DefaultRenameFiles { get; set; }
 
     /// <summary>Alter Name. Nur zum Einlesen älterer Einstellungsdateien.</summary>
     [System.Text.Json.Serialization.JsonPropertyName("DefaultInheritTags")]
@@ -159,6 +160,7 @@ public sealed class AppSettings
         BaseTags = DefaultBaseTags,
         Cover = DefaultCover,
         Numbering = DefaultNumbering,
+        RenameFiles = DefaultRenameFiles,
     };
 
     private static string RuleKey(string path) =>

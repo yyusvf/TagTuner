@@ -47,7 +47,10 @@ public sealed partial class MainWindow
 
         var plan = AlbumPlanner.Plan(ordered, rule, inherited, needsCover, cover is not null);
 
-        if (plan.Count == 0)
+        // Die Dateinamen nach den Nummern, die nach dem Anwenden gelten.
+        var renames = rule.WritesFileNames ? PlannedRenames(tab, ordered, plan) : [];
+
+        if (plan.Count == 0 && renames.Count == 0)
         {
             if (!offered)
                 await Inform(Strings.T("Album mode"),
@@ -55,7 +58,7 @@ public sealed partial class MainWindow
             return;
         }
 
-        if (!await ConfirmAlbumPlan(tab, plan, ordered, cover)) return;
+        if (!await ConfirmAlbumPlan(tab, plan, ordered, cover, renames)) return;
 
         ReleaseIfAffected(plan.Select(c => c.Track));
         SetBusy(true, Strings.T("Applying album mode"));
@@ -95,6 +98,7 @@ public sealed partial class MainWindow
         InvalidateIndex();
         SetBusy(false, null);
         await MergeTabAsync(tab);
+        await RenameToNumbersAsync(tab);
         await ReportAsync(done, errors, notes);
     }
 
@@ -146,7 +150,8 @@ public sealed partial class MainWindow
     /// geschrieben.
     /// </summary>
     private async Task<bool> ConfirmAlbumPlan(
-        FolderTab tab, List<AlbumChange> plan, IReadOnlyList<AudioTrack> ordered, AudioProbe.Cover? cover)
+        FolderTab tab, List<AlbumChange> plan, IReadOnlyList<AudioTrack> ordered, AudioProbe.Cover? cover,
+        IReadOnlyList<(string From, string To)> renames)
     {
         var byPath = plan.ToDictionary(c => c.Track.Path, StringComparer.OrdinalIgnoreCase);
 
@@ -224,7 +229,8 @@ public sealed partial class MainWindow
                     {
                         TextWrapping = TextWrapping.Wrap,
                         Text = Strings.T("{0} of {1} files change. Every file is backed up "
-                                         + "first; the history can undo it.", plan.Count, ordered.Count),
+                                         + "first; the history can undo it.",
+                                         Math.Max(plan.Count, renames.Count), ordered.Count),
                     },
                     new TextBlock
                     {
@@ -232,6 +238,15 @@ public sealed partial class MainWindow
                         TextWrapping = TextWrapping.Wrap,
                         Foreground = Res("TextFillColorTertiaryBrush"),
                         Text = Strings.T("This is how the folder looks afterwards. Changed values are in colour."),
+                    },
+                    new TextBlock
+                    {
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Visibility = renames.Count > 0 ? Visibility.Visible : Visibility.Collapsed,
+                        Text = renames.Count == 0 ? "" : Strings.T(
+                            "{0} file name(s) follow the numbers, for example \"{1}\" becomes \"{2}\".",
+                            renames.Count, renames[0].From, renames[0].To),
                     },
                     new Border
                     {
@@ -260,5 +275,82 @@ public sealed partial class MainWindow
         {
             foreach (var key in previewKeys) TrackArt.ForgetPreview(key);
         }
+    }
+
+    /// <summary>
+    /// Welche Dateien umbenannt würden, nachdem der Plan geschrieben ist:
+    /// gerechnet mit den Nummern von danach, nicht von jetzt.
+    /// </summary>
+    private static List<(string From, string To)> PlannedRenames(
+        FolderTab tab, IReadOnlyList<AudioTrack> ordered, List<AlbumChange> plan)
+    {
+        var byPath = plan.ToDictionary(c => c.Track.Path, StringComparer.OrdinalIgnoreCase);
+        var after = ordered.Select(t =>
+        {
+            if (!byPath.TryGetValue(t.Path, out var change) || change.Edit.Track is not { } n) return t;
+            var copy = t.Copy();
+            copy.Track = n;
+            return copy;
+        }).ToList();
+
+        var existing = SafeFiles(tab.Path);
+        return FileNumbering.Plan(after, existing).Plan
+            .Select(p => (p.Track.FileName, Path.GetFileName(p.Target)))
+            .ToList();
+    }
+
+    private static List<string> SafeFiles(string folder)
+    {
+        try { return Directory.EnumerateFiles(folder).ToList(); }
+        catch { return []; }
+    }
+
+    /// <summary>
+    /// Bringt die Nummer vorn in den Dateinamen auf die Track-Nummer, wenn der
+    /// Ordner das will. Läuft nach allem, was Nummern schreibt, und legt einen
+    /// eigenen Eintrag im Verlauf an.
+    /// </summary>
+    private async Task RenameToNumbersAsync(FolderTab tab)
+    {
+        if (tab.Recursive || !_settings.RuleFor(tab.Path).WritesFileNames) return;
+
+        var (plan, skipped) = FileNumbering.Plan(tab.Tracks.ToList(), SafeFiles(tab.Path));
+        if (plan.Count == 0)
+        {
+            if (skipped.Count > 0)
+                StatusText.Text = Strings.T("{0} file name(s) left as they are, the new name is taken.", skipped.Count);
+            return;
+        }
+
+        ReleaseIfAffected(plan.Select(p => p.Track));
+        var backups = new BackupStore(_settings.ResolvedBackupFolder);
+        var files = new List<HistoryFile>();
+        var errors = new List<string>();
+
+        foreach (var (track, target) in plan)
+        {
+            try
+            {
+                // Wie beim Umbenennen nach Tags: erst sichern, dann umbenennen.
+                // Der Verlauf legt die Sicherung zurück und räumt den neuen Namen weg.
+                var backup = backups.Create(track.Path);
+                File.Move(track.Path, target);
+                files.Add(new HistoryFile { Original = track.Path, BackupPath = backup, OutputPath = target });
+            }
+            catch (Exception ex) { errors.Add($"{track.FileName}: {ex.Message}"); }
+        }
+
+        if (files.Count > 0)
+            _history.Add("rename", Strings.T("{0} file name(s) numbered in \"{1}\"", files.Count, tab.Name), files);
+
+        TrackArt.Reload();
+        InvalidateIndex();
+        await MergeTabAsync(tab);
+
+        StatusText.Text = errors.Count > 0
+            ? Strings.T("{0} renamed, {1} failed: {2}", files.Count, errors.Count, string.Join("; ", errors))
+            : skipped.Count > 0
+                ? Strings.T("{0} file name(s) numbered, {1} left because the name is taken.", files.Count, skipped.Count)
+                : Strings.T("{0} file name(s) numbered in \"{1}\"", files.Count, tab.Name);
     }
 }
