@@ -205,7 +205,7 @@ public static partial class Strings
         ["Folders"] = "Carpetas",
         ["Follow the system"] = "Seguir al sistema",
         ["Follows the global setting from the settings."] = "Sigue el ajuste global de la configuración.",
-        ["Follows Windows and changes with it."] = "Sigue a Windows y cambia con él.",
+        ["Follows Windows and changes with it. A change applies fully after a restart."] = "Sigue a Windows y cambia con él. Un cambio se aplica por completo tras reiniciar.",
         ["For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music."] = "Para un álbum, un EP o un sencillo: un lanzamiento con metadatos uniformes. El modo sobrescribe para dejar la carpeta coherente, así que déjalo apagado en carpetas donde reúnes música variada.",
         ["For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting."] = "Para carpetas que son un lanzamiento propio: un álbum, un EP, un sencillo. El modo uniforma los metadatos, así que déjalo apagado en carpetas de música variada. Este es el valor por defecto para carpetas sin ajuste propio.",
         ["Format"] = "Formato",

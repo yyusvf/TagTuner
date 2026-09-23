@@ -139,7 +139,7 @@
  "Folder target": "Mapdoel",
  "Folders": "Mappen",
  "Follow the system": "Systeemstandaard",
- "Follows Windows and changes with it.": "Volgt Windows en wisselt mee.",
+ "Follows Windows and changes with it. A change applies fully after a restart.": "Volgt Windows en wisselt mee. Een wijziging geldt volledig na een herstart.",
  "Follows the global setting from the settings.": "Volgt de globale instelling uit de instellingen.",
  "For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.": "Voor een album, een ep of een single: één uitgave met uniforme metagegevens. De modus overschrijft om de map consistent te maken, dus laat hem uit bij mappen waarin je gemengde muziek verzamelt.",
  "For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting.": "Voor mappen die één uitgave zijn: een album, een ep, een single. De modus maakt metagegevens uniform, laat hem dus uit bij mappen met gemengde muziek. Dit is de standaard voor mappen zonder eigen instelling.",

@@ -205,7 +205,7 @@ public static partial class Strings
         ["Folders"] = "Klasörler",
         ["Follow the system"] = "Sistemi izle",
         ["Follows the global setting from the settings."] = "Ayarlardaki genel ayarı izler.",
-        ["Follows Windows and changes with it."] = "Windows'u izler ve onunla birlikte değişir.",
+        ["Follows Windows and changes with it. A change applies fully after a restart."] = "Windows'u izler ve onunla değişir. Değişiklik yeniden başlatınca tamamen geçerli olur.",
         ["For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music."] = "Bir albüm, EP ya da single için: tek tip üstveriye sahip tek bir yayın. Bu mod klasörü tutarlı kılmak için üzerine yazar, bu yüzden karışık müzik topladığın klasörlerde kapalı bırak.",
         ["For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting."] = "Tek bir yayın olan klasörler için: bir albüm, bir EP, bir single. Mod üstveriyi tek tipleştirir, bu yüzden karışık müzik klasörlerinde kapalı bırak. Bu, kendi ayarı olmayan klasörler için varsayılandır.",
         ["Format"] = "Biçim",

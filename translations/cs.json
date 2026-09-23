@@ -139,7 +139,7 @@
  "Folder target": "Cíl složky",
  "Folders": "Složky",
  "Follow the system": "Podle systému",
- "Follows Windows and changes with it.": "Řídí se Windows a mění se s ním.",
+ "Follows Windows and changes with it. A change applies fully after a restart.": "Řídí se Windows a mění se s nimi. Změna se plně projeví po restartu.",
  "Follows the global setting from the settings.": "Řídí se globálním nastavením z nastavení.",
  "For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.": "Pro album, EP nebo singl: jedno vydání s jednotnými metadaty. Režim přepisuje, aby byla složka jednotná, takže u složek, kam sbíráš různou hudbu, ho nech vypnutý.",
  "For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting.": "Pro složky, které jsou samostatné vydání: album, EP, singl. Režim sjednocuje metadata, takže u složek se smíšenou hudbou ho nech vypnutý. Toto je výchozí nastavení pro složky bez vlastního.",

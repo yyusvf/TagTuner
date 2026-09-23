@@ -139,7 +139,7 @@
  "Folder target": "Alvo da pasta",
  "Folders": "Pastas",
  "Follow the system": "Seguir o sistema",
- "Follows Windows and changes with it.": "Segue o Windows e muda junto.",
+ "Follows Windows and changes with it. A change applies fully after a restart.": "Segue o Windows e muda junto. Uma mudança vale por completo após reiniciar.",
  "Follows the global setting from the settings.": "Segue a configuração global das configurações.",
  "For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.": "Para um álbum, um EP ou um single: um lançamento com metadados uniformes. O modo sobrescreve para deixar a pasta coerente, então deixe-o desligado em pastas onde você junta músicas variadas.",
  "For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting.": "Para pastas que são um lançamento próprio: um álbum, um EP, um single. O modo uniformiza os metadados, então deixe-o desligado em pastas de músicas variadas. Este é o padrão para pastas sem ajuste próprio.",

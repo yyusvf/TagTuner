@@ -465,10 +465,8 @@ internal static class TrackColumns
                 DiscIcon(second),
                 new TextBlock
                 {
-                    FontSize = 14,
-                    FontFamily = (FontFamily)Application.Current.Resources["LabelFont"],
+                    FontSize = 13,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                    CharacterSpacing = 30,
                     Foreground = second,
                     VerticalAlignment = VerticalAlignment.Center,
                 },

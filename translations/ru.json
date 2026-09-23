@@ -139,7 +139,7 @@
  "Folder target": "Цель папки",
  "Folders": "Папки",
  "Follow the system": "Как в системе",
- "Follows Windows and changes with it.": "Следует за Windows и меняется вместе с ней.",
+ "Follows Windows and changes with it. A change applies fully after a restart.": "Следует за Windows и меняется вместе с ней. Изменение полностью применится после перезапуска.",
  "Follows the global setting from the settings.": "Следует общей настройке из параметров.",
  "For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.": "Для альбома, EP или сингла: один релиз с однородными метаданными. Режим перезаписывает, чтобы привести папку к единому виду, поэтому для папок со сборной солянкой оставьте его выключенным.",
  "For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting.": "Для папок, которые являются отдельным релизом: альбом, EP, сингл. Режим приводит метаданные к единому виду, поэтому для папок со сборной музыкой оставьте его выключенным. Это значение по умолчанию для папок без собственной настройки.",

@@ -13,7 +13,19 @@ public partial class App : Application
     /// <summary>Datei oder Ordner, mit dem die App gestartet wurde.</summary>
     public static LaunchTarget Launch { get; private set; } = new(null, null);
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        // Das Thema gilt für die ganze App, nicht nur fürs Fenster: Farben,
+        // die der Code selbst holt, und alle Dialoge richten sich nach der
+        // App. Stand es nur am Fenster, blieben im hellen Thema Texte weiß
+        // und die Einstellungen dunkel. Setzen lässt es sich nur hier, vor
+        // dem ersten Fenster.
+        var theme = AppSettings.Load().Theme;
+        if (theme == "light") RequestedTheme = ApplicationTheme.Light;
+        else if (theme == "dark") RequestedTheme = ApplicationTheme.Dark;
+
+        InitializeComponent();
+    }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {

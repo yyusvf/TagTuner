@@ -53,8 +53,7 @@ public static class HistoryDialog
                 new TextBlock
                 {
                     Text = Strings.T("History"),
-                    FontSize = 21,
-                    FontFamily = (FontFamily)Application.Current.Resources["LabelFont"],
+                    FontSize = 18,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(20, 0, 0, 0),
@@ -276,6 +275,10 @@ public static class HistoryDialog
             layout.Children.Add(part);
 
         dialog = new ContentDialog { Content = layout, XamlRoot = root };
+
+        // Ein Dialog liegt über dem Fenster, nicht darin, und erbt dessen
+        // Thema nicht. Ohne das blieb er dunkel, wenn das Fenster hell war.
+        if (root.Content is FrameworkElement host) dialog.RequestedTheme = host.ActualTheme;
 
         // Wie die Einstellungen: ohne den Rand und den leeren Knopfbalken der
         // Vorlage, und ohne ihre Klemme auf rund 548 Pixel.

@@ -86,6 +86,9 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(new Windows.Graphics.SizeInt32(
             (int)_settings.WindowWidth, (int)_settings.WindowHeight));
 
+        // Folgt die App Windows und Windows wechselt, wechseln die Tasten mit.
+        Root.ActualThemeChanged += (_, _) => ColorCaptionButtons();
+
         _activePane = PaneA;
         foreach (var pane in new[] { PaneA, PaneB }) WirePane(pane);
         InitSubfolders();
@@ -1443,9 +1446,11 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Hell oder dunkel, oder was Windows gerade sagt.
     ///
-    /// Am Wurzelelement statt an der Anwendung: Application.RequestedTheme
-    /// lässt sich nur vor dem ersten Fenster setzen, danach wirft es. So
-    /// wechselt die Darstellung sofort, ohne Neustart.
+    /// Beim Start setzt App das Thema für die ganze Anwendung. Hier nur das
+    /// Fenster, damit ein Wechsel in den Einstellungen sofort zu sehen ist;
+    /// vollständig, mit allen Listen und Dialogen, gilt er nach einem
+    /// Neustart. Application.RequestedTheme lässt sich danach nicht mehr
+    /// setzen.
     /// </summary>
     private void ApplyTheme()
     {
@@ -1455,6 +1460,34 @@ public sealed partial class MainWindow : Window
             "light" => ElementTheme.Light,
             _ => ElementTheme.Default,
         };
+        ColorCaptionButtons();
+    }
+
+    /// <summary>
+    /// Die Fenstertasten oben rechts zeichnet Windows selbst, und zwar nach
+    /// dem Thema von Windows, nicht dem der App. Im hellen Thema der App
+    /// bei dunklem Windows waren sie weiß auf hell und nicht zu sehen.
+    /// </summary>
+    private void ColorCaptionButtons()
+    {
+        var light = Root.ActualTheme == ElementTheme.Light;
+        var bar = AppWindow.TitleBar;
+        var fg = light ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
+
+        bar.ButtonForegroundColor = fg;
+        bar.ButtonHoverForegroundColor = fg;
+        bar.ButtonPressedForegroundColor = fg;
+        bar.ButtonInactiveForegroundColor = light
+            ? Windows.UI.Color.FromArgb(0x80, 0, 0, 0)
+            : Windows.UI.Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF);
+        bar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        bar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        bar.ButtonHoverBackgroundColor = light
+            ? Windows.UI.Color.FromArgb(0x18, 0, 0, 0)
+            : Windows.UI.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF);
+        bar.ButtonPressedBackgroundColor = light
+            ? Windows.UI.Color.FromArgb(0x28, 0, 0, 0)
+            : Windows.UI.Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF);
     }
     // ══ Spalten ══════════════════════════════════════════════════
 

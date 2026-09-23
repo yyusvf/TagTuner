@@ -139,7 +139,7 @@
  "Folder target": "Ціль теки",
  "Folders": "Теки",
  "Follow the system": "Як у системі",
- "Follows Windows and changes with it.": "Слідує за Windows і змінюється разом із нею.",
+ "Follows Windows and changes with it. A change applies fully after a restart.": "Слідує за Windows і змінюється разом із нею. Зміна повністю діятиме після перезапуску.",
  "Follows the global setting from the settings.": "Дотримується загального налаштування з параметрів.",
  "For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.": "Для альбому, EP чи синглу: один реліз з однорідними метаданими. Режим перезаписує, щоб привести теку до єдиного вигляду, тож для тек зі збірною музикою лишіть його вимкненим.",
  "For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting.": "Для тек, які є окремим релізом: альбом, EP, сингл. Режим приводить метадані до єдиного вигляду, тож для тек зі збірною музикою лишіть його вимкненим. Це значення за замовчуванням для тек без власного налаштування.",

@@ -76,8 +76,7 @@ internal static class SettingsShell
         // der Bildlaufleiste.
         var heading = new TextBlock
         {
-            FontSize = 21,
-            FontFamily = (FontFamily)Application.Current.Resources["LabelFont"],
+            FontSize = 18,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(20, 0, 0, 0),
@@ -290,6 +289,10 @@ internal static class SettingsShell
             Content = layout,
             XamlRoot = root,
         };
+
+        // Ein Dialog liegt über dem Fenster, nicht darin, und erbt dessen
+        // Thema nicht. Ohne das blieb er dunkel, wenn das Fenster hell war.
+        if (root.Content is FrameworkElement host) dialog.RequestedTheme = host.ActualTheme;
 
         // Die Vorlage legt 24 Pixel Rand um den Inhalt und darunter einen
         // Knopfbalken in einer anderen Farbe, auch wenn es keine Knöpfe

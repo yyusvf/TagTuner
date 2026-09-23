@@ -205,7 +205,7 @@ public static partial class Strings
         ["Folders"] = "Mappar",
         ["Follow the system"] = "Följ systemet",
         ["Follows the global setting from the settings."] = "Följer den globala inställningen från inställningarna.",
-        ["Follows Windows and changes with it."] = "Följer Windows och ändras med det.",
+        ["Follows Windows and changes with it. A change applies fully after a restart."] = "Följer Windows och byter med det. En ändring gäller helt efter en omstart.",
         ["For an album, an EP or a single: one release with uniform metadata. It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music."] = "För ett album, en ep eller en singel: en utgåva med enhetliga metadata. Läget skriver över för att göra mappen enhetlig, så lämna det avstängt för mappar där du samlar blandad musik.",
         ["For folders that are one release: an album, an EP, a single. It makes metadata uniform, so leave it off for folders where you collect mixed music. This is the default for folders without their own setting."] = "För mappar som är en egen utgåva: ett album, en ep, en singel. Läget gör metadata enhetliga, så lämna det avstängt för mappar med blandad musik. Detta är standard för mappar utan egen inställning.",
         ["Format"] = "Format",

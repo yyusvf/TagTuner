@@ -67,7 +67,7 @@ internal static class SettingsCatalog
                 [("Follow the system", "system"), ("Dark", "dark"), ("Light", "light")],
                 c.Settings.Theme,
                 value => { c.Settings.Theme = value; c.Save(); c.Changed("theme"); })),
-            Hint("Follows Windows and changes with it."));
+            Hint("Follows Windows and changes with it. A change applies fully after a restart."));
 
         // ── Aktualisierung ───────────────────────────────────────
         var updateState = Hint(c.Settings.SkippedVersion is { Length: > 0 } skipped
