@@ -3,4 +3,7 @@
     <Project Path="src/TagTuner.App/TagTuner.App.csproj" />
     <Project Path="src/TagTuner.Core/TagTuner.Core.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TagTuner.Tests/TagTuner.Tests.csproj" />
+  </Folder>
 </Solution>

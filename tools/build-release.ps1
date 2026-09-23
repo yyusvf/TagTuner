@@ -26,6 +26,13 @@ foreach ($dir in @($publish, $dist)) {
     New-Item -ItemType Directory -Path $dir | Out-Null
 }
 
+# ── Tests ───────────────────────────────────────────────────────
+# Ein Release mit einem roten Test gibt es nicht. Sie laufen in einem
+# Temp-Ordner und fassen weder Musik noch Verlauf des Nutzers an.
+Write-Host 'Tests laufen...'
+dotnet test (Join-Path $root 'tests\TagTuner.Tests') -c Release --nologo -v q
+if ($LASTEXITCODE -ne 0) { throw 'Tests sind fehlgeschlagen, kein Release' }
+
 # ── Bauen ───────────────────────────────────────────────────────
 Write-Host 'Veroeffentlichung wird gebaut...'
 dotnet publish (Join-Path $root 'src\TagTuner.App') `
