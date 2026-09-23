@@ -1,6 +1,6 @@
 {
  " (more available)": " (dahası var)",
- "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" downloads and installs without asking.": "\"Asla\" her bağlantıyı engeller. \"Sor\" yeni bir şey olduğunda haber verir. \"Otomatik\" sormadan indirir ve kurar.",
+ "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" checks on every start, installs without asking and restarts TagTuner.": "\"Asla\" her bağlantıyı engeller. \"Sor\" yeni bir şey olduğunda haber verir. \"Otomatik\" her açılışta arar, sormadan kurar ve TagTuner'ı yeniden başlatır.",
  "\"{0}\" added to the library": "\"{0}\" kitaplığa eklendi",
  "\"{0}\" cannot be undone, its backup is gone.": "\"{0}\" geri alınamaz, yedeği yok.",
  "\"{0}\" follows the global setting again": "\"{0}\" yeniden genel ayarı izliyor",
@@ -162,6 +162,7 @@
  "Inherited from the folder: {0}": "Klasörden devralındı: {0}",
  "Inserted from track {0} on; the ones after it move up.": "{0}. parçadan itibaren eklendi; sonrakiler kayar.",
  "Install": "Kur",
+ "Installing version {0}, TagTuner restarts in a moment…": "{0} sürümü kuruluyor, TagTuner birazdan yeniden başlayacak…",
  "JPEG quality": "JPEG kalitesi",
  "LENGTH": "SÜRE",
  "LIBRARY": "KİTAPLIK",

@@ -1220,8 +1220,9 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task CheckForUpdatesAsync()
     {
-        // Nicht ins Startbild hineinplatzen.
-        await Task.Delay(TimeSpan.FromSeconds(4));
+        // Nicht ins Startbild hineinplatzen. Bei „Automatisch" gibt es
+        // nichts, in das hineingeplatzt würde: Es wird gleich installiert.
+        if (_settings.UpdateBehavior != "auto") await Task.Delay(TimeSpan.FromSeconds(4));
 
         var found = await UpdateService.CheckOnStartAsync(_settings, AppInfo.Version);
         if (found is not { HasUpdate: true, SetupUrl: not null }) return;
@@ -1271,8 +1272,9 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Lädt das Setup und startet es. Die App beendet sich danach, weil der
-    /// Installer die laufende Datei sonst nicht ersetzen kann.
+    /// Lädt das Setup und startet es still: kein Assistent, keine Fragen.
+    /// Die App beendet sich danach, weil der Installer die laufende Datei
+    /// sonst nicht ersetzen kann, und das Setup startet sie wieder.
     /// </summary>
     private async Task InstallUpdateAsync(UpdateCheck found)
     {
@@ -1287,9 +1289,13 @@ public sealed partial class MainWindow : Window
                 found.SetupUrl,
                 new Progress<int>(p => ShowProgress(true, p)));
 
+            StatusText.Text = Strings.T("Installing version {0}, TagTuner restarts in a moment…",
+                                        found.Version ?? "?");
+
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = setup,
+                Arguments = UpdateService.SilentArguments,
                 UseShellExecute = true,
             });
 

@@ -95,6 +95,15 @@ internal static class SettingsCatalog
             if (found is { HasUpdate: true, SetupUrl: not null })
             {
                 offered = found;
+
+                // Bei „Automatisch" nicht erst nach einem zweiten Klick
+                // fragen: Die Einstellung sagt schon, was gewollt ist.
+                if (c.Settings.UpdateBehavior == "auto")
+                {
+                    c.WantsInstall = found;
+                    c.Close();
+                    return;
+                }
                 installBtn.Visibility = Visibility.Visible;
             }
         };
@@ -105,7 +114,7 @@ internal static class SettingsCatalog
                 c.Settings.UpdateBehavior,
                 value => { c.Settings.UpdateBehavior = value; c.Save(); })),
             Hint("\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
-                 "\"Automatically\" downloads and installs without asking."),
+                 "\"Automatically\" checks on every start, installs without asking and restarts TagTuner."),
             updateState,
             Buttons(checkBtn, installBtn));
 

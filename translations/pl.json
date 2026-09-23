@@ -1,6 +1,6 @@
 {
  " (more available)": " (jest więcej)",
- "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" downloads and installs without asking.": "„Nigdy” blokuje każde połączenie. „Pytaj” zgłasza się, gdy pojawi się coś nowego. „Automatycznie” pobiera i instaluje bez pytania.",
+ "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" checks on every start, installs without asking and restarts TagTuner.": "„Nigdy\" blokuje każde połączenie. „Pytaj\" odzywa się, gdy jest coś nowego. „Automatycznie\" sprawdza przy każdym starcie, instaluje bez pytania i uruchamia TagTuner ponownie.",
  "\"{0}\" added to the library": "Dodano „{0}” do biblioteki",
  "\"{0}\" cannot be undone, its backup is gone.": "„{0}\" nie da się cofnąć, kopii zapasowej już nie ma.",
  "\"{0}\" follows the global setting again": "„{0}” znów podąża za ustawieniem globalnym",
@@ -162,6 +162,7 @@
  "Inherited from the folder: {0}": "Przejęte z folderu: {0}",
  "Inserted from track {0} on; the ones after it move up.": "Wstawiono od ścieżki {0}; kolejne przesuwają się dalej.",
  "Install": "Zainstaluj",
+ "Installing version {0}, TagTuner restarts in a moment…": "Instalowanie wersji {0}, TagTuner zaraz uruchomi się ponownie…",
  "JPEG quality": "Jakość JPEG",
  "LENGTH": "DŁUGOŚĆ",
  "LIBRARY": "BIBLIOTEKA",

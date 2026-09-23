@@ -1,6 +1,6 @@
 {
  " (more available)": " (є ще)",
- "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" downloads and installs without asking.": "«Ніколи» забороняє будь-яке з'єднання. «Запитувати» повідомляє, коли з'являється щось нове. «Автоматично» завантажує та встановлює без запитань.",
+ "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" checks on every start, installs without asking and restarts TagTuner.": "«Ніколи» забороняє будь-яке з'єднання. «Питати» повідомляє, коли є щось нове. «Автоматично» перевіряє під час кожного запуску, встановлює без запитань і перезапускає TagTuner.",
  "\"{0}\" added to the library": "«{0}» додано до бібліотеки",
  "\"{0}\" cannot be undone, its backup is gone.": "«{0}» не можна скасувати, резервної копії більше немає.",
  "\"{0}\" follows the global setting again": "«{0}» знову дотримується загального налаштування",
@@ -162,6 +162,7 @@
  "Inherited from the folder: {0}": "Перейнято з теки: {0}",
  "Inserted from track {0} on; the ones after it move up.": "Вставлено починаючи з доріжки {0}; наступні зсуваються.",
  "Install": "Встановити",
+ "Installing version {0}, TagTuner restarts in a moment…": "Встановлюється версія {0}, TagTuner зараз перезапуститься…",
  "JPEG quality": "Якість JPEG",
  "LENGTH": "ДОВЖИНА",
  "LIBRARY": "БІБЛІОТЕКА",

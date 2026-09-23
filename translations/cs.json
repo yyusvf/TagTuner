@@ -1,6 +1,6 @@
 {
  " (more available)": " (je toho víc)",
- "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" downloads and installs without asking.": "„Nikdy“ zabrání jakémukoli spojení. „Zeptat se“ se ozve, když je něco nového. „Automaticky“ stáhne a nainstaluje bez ptaní.",
+ "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. \"Automatically\" checks on every start, installs without asking and restarts TagTuner.": "„Nikdy\" zakáže jakékoli připojení. „Zeptat se\" ozve se, když je něco nového. „Automaticky\" hledá při každém spuštění, instaluje bez ptaní a TagTuner restartuje.",
  "\"{0}\" added to the library": "„{0}“ přidáno do knihovny",
  "\"{0}\" cannot be undone, its backup is gone.": "„{0}\" nejde vrátit, záloha už neexistuje.",
  "\"{0}\" follows the global setting again": "„{0}“ se opět řídí globálním nastavením",
@@ -162,6 +162,7 @@
  "Inherited from the folder: {0}": "Převzato ze složky: {0}",
  "Inserted from track {0} on; the ones after it move up.": "Vloženo od stopy {0}; následující se posunou.",
  "Install": "Nainstalovat",
+ "Installing version {0}, TagTuner restarts in a moment…": "Instaluje se verze {0}, TagTuner se za chvíli restartuje…",
  "JPEG quality": "Kvalita JPEG",
  "LENGTH": "DÉLKA",
  "LIBRARY": "KNIHOVNA",

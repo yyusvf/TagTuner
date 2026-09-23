@@ -37,6 +37,16 @@ public static class UpdateService
 
     private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
+    /// <summary>
+    /// Wie die App das heruntergeladene Setup startet: ohne Assistent und
+    /// ohne Rückfragen. Ordner, Sprache und Desktop-Symbol übernimmt das
+    /// Setup von der bisherigen Installation; RELAUNCH sagt ihm, TagTuner
+    /// danach wieder zu starten, was es bei einer stillen Installation
+    /// sonst nicht tut.
+    /// </summary>
+    public const string SilentArguments =
+        "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SP- /RELAUNCH=1";
+
     /// <summary>Fragt GitHub nach der neuesten Veröffentlichung.</summary>
     public static async Task<UpdateCheck> CheckAsync(
         string currentVersion, CancellationToken ct = default)
@@ -91,7 +101,11 @@ public static class UpdateService
     {
         if (settings.UpdateBehavior == "never") return null;
 
-        if (DateTime.TryParse(settings.LastUpdateCheck, out var last)
+        // Nur beim Fragen höchstens einmal am Tag: Sonst stünde nach jedem
+        // Start dieselbe Frage da. Wer „Automatisch" gewählt hat, will die
+        // neue Version, sobald es sie gibt, und merkt von der Suche nichts.
+        if (settings.UpdateBehavior != "auto"
+            && DateTime.TryParse(settings.LastUpdateCheck, out var last)
             && DateTime.Now - last < CheckInterval)
             return null;
 

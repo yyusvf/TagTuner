@@ -74,6 +74,16 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Die Selbstaktualisierung installiert still und gibt /RELAUNCH=1 mit. Eine
+; stille Installation startet sonst nichts; hier soll TagTuner danach wieder
+; laufen, wie vor dem Update.
+Filename: "{app}\{#AppExeName}"; Flags: nowait; Check: IsSelfUpdate
+
+[Code]
+function IsSelfUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
