@@ -70,7 +70,6 @@ public sealed partial class TrackPane : UserControl
     private static (TrackPane Pane, List<AudioTrack> Tracks)? _drag;
 
     private bool _suppress;
-    private bool _droppedHere;
 
     /// <summary>Die Einträge beim Beginn eines Zugs, um danach zu sehen, ob sich die Reihenfolge geändert hat.</summary>
     private List<object>? _orderBefore;
@@ -760,7 +759,6 @@ public sealed partial class TrackPane : UserControl
         if (e.Items.Any(i => i is DiscHeader)) { e.Cancel = true; return; }
         _drag = (this, e.Items.OfType<AudioTrack>().ToList());
         _orderBefore = List.Items.ToList();
-        _droppedHere = false;
     }
 
     private void OnReorderCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
@@ -855,7 +853,7 @@ public sealed partial class TrackPane : UserControl
 
         if (_drag is { } d)
         {
-            if (d.Pane == this) { _droppedHere = true; return; }   // eigenes Umsortieren
+            if (d.Pane == this) return;   // eigenes Umsortieren, das macht die Liste
 
             var copy = e.Modifiers.HasFlag(DragDropModifiers.Control);
             e.AcceptedOperation = copy ? DataPackageOperation.Copy : DataPackageOperation.Move;

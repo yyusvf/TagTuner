@@ -105,6 +105,18 @@ internal static class SettingsShell
             Padding = new Thickness(8, 10, 8, 10),
         };
 
+        // Die Zeilen sind keine Steuerelemente und nehmen keinen Fokus an.
+        // Darum hält eine Hülle ihn, damit Pfeil hoch und runter die
+        // Kategorie wechseln, wie es eine Liste tun würde.
+        var railHost = new ContentControl
+        {
+            Content = rail,
+            IsTabStop = true,
+            UseSystemFocusVisuals = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
+
         var rows = new List<(Grid Row, Border Mark)>();
         var selected = -1;
 
@@ -199,7 +211,13 @@ internal static class SettingsShell
             row.PointerEntered += (_, _) => Paint(index, hover: true);
             row.PointerExited += (_, _) => Paint(index, hover: false);
             row.PointerCanceled += (_, _) => Paint(index, hover: false);
-            row.Tapped += (_, _) => Select(index);
+            row.Tapped += (_, _) =>
+            {
+                Select(index);
+
+                // Danach gehen die Pfeiltasten an die Leiste.
+                railHost.Focus(FocusState.Pointer);
+            };
 
             rows.Add((row, mark));
             rail.Children.Add(row);
@@ -259,10 +277,10 @@ internal static class SettingsShell
         main.Children.Add(top);
         main.Children.Add(content);
 
-        Grid.SetColumn(rail, 0);
+        Grid.SetColumn(railHost, 0);
         Grid.SetColumn(divider, 1);
         Grid.SetColumn(main, 1);
-        layout.Children.Add(rail);
+        layout.Children.Add(railHost);
         layout.Children.Add(divider);
         layout.Children.Add(main);
 
@@ -297,6 +315,21 @@ internal static class SettingsShell
         {
             if (e.Key != Windows.System.VirtualKey.Escape) return;
             dialog?.Hide();
+            e.Handled = true;
+        };
+
+        railHost.KeyDown += (_, e) =>
+        {
+            var to = e.Key switch
+            {
+                Windows.System.VirtualKey.Up => selected - 1,
+                Windows.System.VirtualKey.Down => selected + 1,
+                Windows.System.VirtualKey.Home => 0,
+                Windows.System.VirtualKey.End => sections.Count - 1,
+                _ => -1,
+            };
+            if (to < 0 || to >= sections.Count) return;
+            Select(to);
             e.Handled = true;
         };
 
