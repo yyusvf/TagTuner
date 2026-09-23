@@ -78,6 +78,11 @@ public sealed partial class MainWindow : Window
         // mittig in der 48 Pixel hohen Leiste — sie stehen dann versetzt.
         // „Tall" gibt den Systemtasten dieselbe Hoehe, dann fluchten sie.
         AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Tall;
+
+        // Das Symbol der .exe gilt nicht für das Fenster. Ohne das hier fehlt
+        // es in der Vorschau über der Taskleiste und bei Alt+Tab.
+        var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "TagTuner.ico");
+        if (File.Exists(icon)) AppWindow.SetIcon(icon);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(
             (int)_settings.WindowWidth, (int)_settings.WindowHeight));
 
