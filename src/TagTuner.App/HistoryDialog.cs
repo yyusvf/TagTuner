@@ -276,10 +276,6 @@ public static class HistoryDialog
 
         dialog = new ContentDialog { Content = layout, XamlRoot = root };
 
-        // Ein Dialog liegt über dem Fenster, nicht darin, und erbt dessen
-        // Thema nicht. Ohne das blieb er dunkel, wenn das Fenster hell war.
-        if (root.Content is FrameworkElement host) dialog.RequestedTheme = host.ActualTheme;
-
         // Wie die Einstellungen: ohne den Rand und den leeren Knopfbalken der
         // Vorlage, und ohne ihre Klemme auf rund 548 Pixel.
         dialog.Resources["ContentDialogPadding"] = new Thickness(0);

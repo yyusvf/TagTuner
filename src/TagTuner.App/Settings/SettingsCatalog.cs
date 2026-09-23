@@ -61,14 +61,6 @@ internal static class SettingsCatalog
             language,
             Hint("Takes effect after a restart."));
 
-        // ── Darstellung ──────────────────────────────────────────
-        yield return Group("Appearance",
-            Field("Theme", Choice(
-                [("Follow the system", "system"), ("Dark", "dark"), ("Light", "light")],
-                c.Settings.Theme,
-                value => { c.Settings.Theme = value; c.Save(); c.Changed("theme"); })),
-            Hint("Follows Windows and changes with it. A change applies fully after a restart."));
-
         // ── Aktualisierung ───────────────────────────────────────
         var updateState = Hint(c.Settings.SkippedVersion is { Length: > 0 } skipped
             ? Strings.T("Version {0} was skipped.", skipped) : "");

@@ -42,11 +42,6 @@ public sealed class AppSettings
     /// </summary>
     public string Language { get; set; } = "";
 
-    /// <summary>
-    /// „system", „dark" oder „light". Systemstandard folgt der Einstellung
-    /// von Windows und wechselt mit ihr.
-    /// </summary>
-    public string Theme { get; set; } = "system";
     public string? LastFolder { get; set; }
     public double WindowWidth { get; set; } = 2000;
     public double WindowHeight { get; set; } = 1125;

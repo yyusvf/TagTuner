@@ -73,9 +73,9 @@ browse a tree that shows cover and artist per folder. Search results carry
 covers and their own right click menus. Optionally only folders that actually
 contain music.
 
-**Settings with a sidebar.** Five categories instead of one long roll, so
-there is room for settings that would not have fit. Light, dark or whatever
-Windows says. Everything applies as you change it.
+**Settings with a sidebar.** Six categories instead of one long roll, so
+there is room for settings that would not have fit. Everything applies as you
+change it.
 
 **Tabs and split view.** Keep several folders open and drag files between two
 halves. Hold Ctrl to copy instead of move. Opening a folder from the Explorer

@@ -290,10 +290,6 @@ internal static class SettingsShell
             XamlRoot = root,
         };
 
-        // Ein Dialog liegt über dem Fenster, nicht darin, und erbt dessen
-        // Thema nicht. Ohne das blieb er dunkel, wenn das Fenster hell war.
-        if (root.Content is FrameworkElement host) dialog.RequestedTheme = host.ActualTheme;
-
         // Die Vorlage legt 24 Pixel Rand um den Inhalt und darunter einen
         // Knopfbalken in einer anderen Farbe, auch wenn es keine Knöpfe
         // gibt. Das sah aus wie ein Kasten im Fenster. Ohne diese Ränder
