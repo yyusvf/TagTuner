@@ -160,6 +160,112 @@ internal static class SettingsUi
         return button;
     }
 
+    // ══ Zeilen im Stil der Windows-Einstellungen ═════════════════
+
+    /// <summary>
+    /// Eine kleine Überschrift über einer Gruppe von Zeilen. Normal gesetzt,
+    /// nicht in Großbuchstaben: Sie ordnet, sie ruft nicht.
+    /// </summary>
+    public static TextBlock Heading(string text) => new()
+    {
+        Text = Strings.T(text),
+        FontSize = 13,
+        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        Margin = new Thickness(2, 14, 0, 2),
+    };
+
+    /// <summary>
+    /// Eine Einstellung als Zeile: Icon, Titel und eine knappe Erklärung
+    /// links, der Regler rechts. So liest man von links nach rechts, was es
+    /// ist und wie es steht, statt einen Kasten nach dem anderen zu öffnen.
+    /// </summary>
+    /// <param name="description">Darf null sein; eine Zeile ohne Erklärung ist kürzer.</param>
+    /// <param name="control">Der Regler rechts, oder null für eine reine Anzeige.</param>
+    public static Border Row(string glyph, string title, string? description, FrameworkElement? control)
+    {
+        var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock
+        {
+            Text = Strings.T(title),
+            FontSize = 13.5,
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        TextBlock? detail = null;
+        if (description is not null)
+        {
+            detail = new TextBlock
+            {
+                Text = Strings.T(description),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            };
+            text.Children.Add(detail);
+        }
+
+        var grid = new Grid
+        {
+            ColumnSpacing = 16,
+            MinHeight = 44,
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                new ColumnDefinition { Width = GridLength.Auto },
+            },
+        };
+
+        var icon = new FontIcon
+        {
+            Glyph = glyph,
+            FontSize = 18,
+            Width = 22,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        grid.Children.Add(icon);
+
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        if (control is not null)
+        {
+            control.VerticalAlignment = VerticalAlignment.Center;
+            control.HorizontalAlignment = HorizontalAlignment.Right;
+            Grid.SetColumn(control, 2);
+            grid.Children.Add(control);
+        }
+
+        return new Border
+        {
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1),
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Child = grid,
+
+            // Die Erklärung, damit eine Seite sie nachträglich ändern kann,
+            // etwa nach dem Ein- und Ausschalten.
+            Tag = detail,
+        };
+    }
+
+    /// <summary>Ändert die Erklärung einer Zeile.</summary>
+    public static void Describe(Border row, string text)
+    {
+        if (row.Tag is TextBlock detail) detail.Text = text;
+    }
+
+    /// <summary>Ein Ein/Aus-Schalter ohne Beschriftung daneben: Die Zeile sagt schon, was er schaltet.</summary>
+    public static ToggleSwitch Switch(bool on) => new()
+    {
+        IsOn = on,
+        OnContent = "",
+        OffContent = "",
+        MinWidth = 0,
+    };
+
     public static StackPanel Buttons(params FrameworkElement[] items)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };

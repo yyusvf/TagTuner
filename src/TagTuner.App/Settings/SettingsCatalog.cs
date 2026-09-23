@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 using TagTuner.Core.Audio;
 using TagTuner.Core.Model;
@@ -23,7 +24,7 @@ internal static class SettingsCatalog
 {
     public static readonly IReadOnlyList<SettingsSection> Sections =
     [
-        new("TagTuner", "", App),
+        new("General", "", App),
         new("Folders", "", Folders),
         new("Library", "", Library),
         new("Tags", "", Tags),
@@ -40,56 +41,50 @@ internal static class SettingsCatalog
 
     private static IEnumerable<FrameworkElement> App(SettingsContext c)
     {
-        // ── Sprache ──────────────────────────────────────────────
-        var language = new ComboBox
+        // ── Kopf: was das ist, welche Version, und ob es eine neuere gibt ──
+        var status = new TextBlock
         {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-
-            // Unübersetzt: Jede Sprache nennt sich selbst. Wer Türkisch
-            // sucht, sucht nach „Türkçe".
-            ItemsSource = Strings.SupportedNames.ToList(),
-            SelectedIndex = Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Right,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Text = c.Settings.SkippedVersion is { Length: > 0 } skipped
+                ? Strings.T("Version {0} was skipped.", skipped)
+                : "",
         };
-        language.SelectionChanged += (_, _) =>
-        {
-            if (language.SelectedIndex < 0) return;
-            c.Settings.Language = Strings.Supported[language.SelectedIndex];
-            c.Save();
-        };
-
-        yield return Group("Language",
-            language,
-            Hint("Takes effect after a restart."));
-
-        // ── Aktualisierung ───────────────────────────────────────
-        var updateState = Hint(c.Settings.SkippedVersion is { Length: > 0 } skipped
-            ? Strings.T("Version {0} was skipped.", skipped) : "");
 
         UpdateCheck? offered = null;
 
         var installBtn = new Button
         {
             Content = Strings.T("Download and install"),
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Right,
             Visibility = Visibility.Collapsed,
         };
         installBtn.Click += (_, _) => { c.WantsInstall = offered; c.Close(); };
 
-        var checkBtn = new Button { Content = Strings.T("Check for updates now") };
+        var checkBtn = new Button
+        {
+            Content = Strings.T("Check for updates"),
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
         checkBtn.Click += async (_, _) =>
         {
             checkBtn.IsEnabled = false;
             installBtn.Visibility = Visibility.Collapsed;
             offered = null;
-            updateState.Text = Strings.T("Searching…");
+            status.Text = Strings.T("Searching…");
 
             var found = await UpdateService.CheckAsync(AppInfo.Version);
             checkBtn.IsEnabled = true;
 
-            updateState.Text = found switch
+            status.Text = found switch
             {
                 { Failed: true } => Strings.T("Check failed: {0}", found.Error ?? ""),
                 { HasUpdate: true } => Strings.T("Version {0} is available.", found.Version ?? ""),
-                _ => Strings.T("TagTuner is up to date ({0}).", AppInfo.Version),
+                _ => Strings.T("TagTuner is up to date."),
             };
 
             if (found is { HasUpdate: true, SetupUrl: not null })
@@ -108,50 +103,188 @@ internal static class SettingsCatalog
             }
         };
 
-        yield return Group("Updates",
-            Field("On start", Choice(
-                [("Never", "never"), ("Ask", "ask"), ("Automatically", "auto")],
-                c.Settings.UpdateBehavior,
-                value => { c.Settings.UpdateBehavior = value; c.Save(); })),
-            Hint("\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
-                 "\"Automatically\" checks on every start, installs without asking and restarts TagTuner."),
-            updateState,
-            Buttons(checkBtn, installBtn));
+        yield return AboutCard(status, checkBtn, installBtn);
 
-        // ── Explorer-Kontextmenü ─────────────────────────────────
-        var shellState = Hint("");
-        var regBtn = new Button { Content = Strings.T("Register") };
-        var unregBtn = new Button { Content = Strings.T("Remove") };
+        // ── App ──────────────────────────────────────────────────
+        yield return Heading("App");
 
-        void RefreshShell()
+        var language = new ComboBox
         {
-            var on = ContextMenuRegistration.IsRegistered();
-            shellState.Text = Strings.T(on ? "Registered ✓" : "Not registered");
-            regBtn.IsEnabled = !on;
-            unregBtn.IsEnabled = on;
-        }
-        RefreshShell();
+            MinWidth = 200,
 
-        regBtn.Click += (_, _) =>
+            // Unübersetzt: Jede Sprache nennt sich selbst. Wer Türkisch
+            // sucht, sucht nach „Türkçe".
+            ItemsSource = Strings.SupportedNames.ToList(),
+            SelectedIndex = Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
+        };
+        language.SelectionChanged += (_, _) =>
+        {
+            if (language.SelectedIndex < 0) return;
+            c.Settings.Language = Strings.Supported[language.SelectedIndex];
+            c.Save();
+        };
+        yield return Row("\uE774", "Language", "Takes effect after a restart.", language);
+
+        var updates = Choice(
+            [("Never", "never"), ("Ask", "ask"), ("Automatically", "auto")],
+            c.Settings.UpdateBehavior,
+            value => { c.Settings.UpdateBehavior = value; c.Save(); });
+        updates.MinWidth = 200;
+        updates.HorizontalAlignment = HorizontalAlignment.Right;
+        yield return Row("\uE895", "Updates on start",
+            "\"Never\" stops any connection. \"Ask\" speaks up when there is something new. " +
+            "\"Automatically\" checks on every start, installs without asking and restarts TagTuner.",
+            updates);
+
+        // ── Windows ──────────────────────────────────────────────
+        yield return Heading("Windows");
+
+        const string shellHint =
+            "A TagTuner entry in the right click menu for audio files and folders. It opens the " +
+            "folder the file is in. No administrator rights needed.";
+
+        var shell = Switch(ContextMenuRegistration.IsRegistered());
+        var shellRow = Row("\uE8A7", "Explorer context menu", shellHint, shell);
+        shell.Toggled += (_, _) =>
         {
             try
             {
-                ContextMenuRegistration.Register(Environment.ProcessPath!);
-                RefreshShell();
+                if (shell.IsOn) ContextMenuRegistration.Register(Environment.ProcessPath!);
+                else ContextMenuRegistration.Unregister();
+                Describe(shellRow, Strings.T(shellHint));
             }
-            catch (Exception ex) { shellState.Text = Strings.T("Failed: ") + ex.Message; }
+            catch (Exception ex)
+            {
+                Describe(shellRow, Strings.T("Failed: ") + ex.Message);
+            }
         };
-        unregBtn.Click += (_, _) => { ContextMenuRegistration.Unregister(); RefreshShell(); };
+        yield return shellRow;
 
-        yield return Group("Explorer context menu",
-            shellState,
-            Hint("Adds a TagTuner entry to the right click menu for audio files and folders. " +
-                 "One entry, no submenu: it opens the folder the file is in. " +
-                 "No administrator rights needed."),
-            Buttons(regBtn, unregBtn));
+        // ffmpeg: nur Anzeige. Gefunden oder nicht, und wo.
+        var ffmpeg = FfmpegLocator.Find(c.Settings.FfmpegPath);
+        var found = new TextBlock
+        {
+            Text = Strings.T(ffmpeg is null ? "Not found" : "Found"),
+            FontSize = 12.5,
+            Foreground = (Brush)Application.Current.Resources[ffmpeg is null ? "WarnBrush" : "OkBrush"],
+        };
+        var ffmpegRow = Row("\uE8D6", "ffmpeg",
+            ffmpeg is null ? "Needed for converting. Without it, TagTuner only edits tags." : null,
+            found);
+        if (ffmpeg is not null) Describe(ffmpegRow, ffmpeg);
+        yield return ffmpegRow;
+    }
 
-        yield return Group("ffmpeg",
-            Hint(FfmpegLocator.Find(c.Settings.FfmpegPath) ?? Strings.T("not found")));
+    /// <summary>
+    /// Der Kopf der Seite: Logo, Name, Version und die Wege nach draußen,
+    /// rechts der Stand der Aktualisierung. Das Erste, was man in den
+    /// Einstellungen sieht, sagt, was man vor sich hat.
+    /// </summary>
+    private static Border AboutCard(TextBlock status, Button check, Button install)
+    {
+        var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        var tertiary = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+
+        var logo = new Border
+        {
+            Width = 64,
+            Height = 64,
+            CornerRadius = new CornerRadius(14),
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+                    new Uri("ms-appx:///Assets/TagTuner.png")),
+                Stretch = Stretch.UniformToFill,
+            },
+        };
+
+        const string repo = "https://github.com/yyusvf/TagTuner";
+        HyperlinkButton Link(string label, string url) => new()
+        {
+            Content = Strings.T(label),
+            NavigateUri = new Uri(url),
+            FontSize = 12,
+            Padding = new Thickness(0),
+        };
+
+        var links = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 16,
+            Margin = new Thickness(0, 8, 0, 0),
+            Children =
+            {
+                Link("What's new", $"{repo}/releases/tag/v{AppInfo.Version}"),
+                Link("Report a problem", $"{repo}/issues"),
+                Link("GitHub", repo),
+            },
+        };
+
+        var about = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "TagTuner",
+                    FontSize = 22,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                },
+                new TextBlock
+                {
+                    Text = Strings.T("Version {0}", AppInfo.Version),
+                    FontSize = 12,
+                    FontFamily = (FontFamily)Application.Current.Resources["DataFont"],
+                    Foreground = tertiary,
+                },
+                new TextBlock
+                {
+                    Text = Strings.T("Music folders as playlists: tags, covers, format and order in one place."),
+                    FontSize = 12.5,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = secondary,
+                    Margin = new Thickness(0, 6, 0, 0),
+                },
+                links,
+            },
+        };
+
+        var update = new StackPanel
+        {
+            Spacing = 8,
+            MaxWidth = 220,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { status, check, install },
+        };
+
+        var grid = new Grid
+        {
+            ColumnSpacing = 18,
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                new ColumnDefinition { Width = GridLength.Auto },
+            },
+        };
+        grid.Children.Add(logo);
+        Grid.SetColumn(about, 1);
+        grid.Children.Add(about);
+        Grid.SetColumn(update, 2);
+        grid.Children.Add(update);
+
+        return new Border
+        {
+            Padding = new Thickness(20),
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Child = grid,
+        };
     }
 
     // ══ Ordner ═══════════════════════════════════════════════════
