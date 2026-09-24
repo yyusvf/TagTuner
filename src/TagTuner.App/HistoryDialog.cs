@@ -332,12 +332,16 @@ public static class HistoryDialog
             },
         };
 
-        TextBlock Line(double size, Brush? brush = null) => new()
+        TextBlock Line(double size, Brush? brush = null)
         {
-            FontSize = size,
-            Foreground = brush,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
+            var line = new TextBlock { FontSize = size, TextTrimming = TextTrimming.CharacterEllipsis };
+
+            // Nur setzen, wenn eine Farbe gewünscht ist: Foreground = null
+            // macht den Text unsichtbar, statt die übliche Farbe zu erben.
+            // So fehlten Beschreibung und Zeit in jeder Zeile.
+            if (brush is not null) line.Foreground = brush;
+            return line;
+        }
 
         var title = Line(13);
         var files = Line(11.5, dim);

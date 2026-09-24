@@ -86,7 +86,7 @@ public sealed partial class MainWindow
         static void Fill(TextBox box, string? value)
         {
             box.Text = value ?? "";
-            box.PlaceholderText = value is null ? "<verschieden>" : "";
+            box.PlaceholderText = value is null ? Strings.T("<mixed>") : "";
         }
     }
 

@@ -1,3 +1,4 @@
+using TagTuner.Core.Settings;
 using TagTuner.Core.Audio;
 using TagTuner.Core.Model;
 
@@ -221,8 +222,8 @@ public static class FolderScanner
             catch { }
         }
 
-        Add(Environment.SpecialFolder.MyMusic, "Musik");
-        Add(Environment.SpecialFolder.UserProfile, "Benutzer");
+        Add(Environment.SpecialFolder.MyMusic, Strings.T("Music"));
+        Add(Environment.SpecialFolder.UserProfile, Strings.T("User folder"));
 
         try
         {
