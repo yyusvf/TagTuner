@@ -198,6 +198,7 @@ public sealed partial class MainWindow
         for (var i = 0; i < incoming.Count; i++)
         {
             var src = incoming[i];
+            ProgressStep(i, incoming.Count, src.FileName);
             var tags = DropTags(src, rule, inherited, folderCover, number);
 
             // Erst in den Zielordner holen, dann dort angleichen — die Quelle
@@ -454,6 +455,7 @@ public sealed partial class MainWindow
             }
 
             if (order[i].Track == wanted && disc is null) continue;
+            ProgressStep(i, order.Count, order[i].FileName);
             var edit = new TagEdit { Track = wanted, Disc = disc };
             var outcome = await Task.Run(() => svc.WriteTagsOnly(order[i], edit));
             if (outcome.Success && outcome.History is not null) files.Add(outcome.History);

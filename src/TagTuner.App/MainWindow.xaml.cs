@@ -264,6 +264,8 @@ public sealed partial class MainWindow : Window
             CrumbHost.Children.Add(text);
         }
 
+        PlaceProgress();
+
         // Ans Ende scrollen, damit bei Platzmangel der aktuelle Ordner steht.
         DispatcherQueue.TryEnqueue(() =>
             CrumbScroll.ChangeView(CrumbScroll.ScrollableWidth, null, null, disableAnimation: true));
@@ -283,6 +285,7 @@ public sealed partial class MainWindow : Window
         // Meldet das System die Breite (noch) nicht, lieber die drei Tasten
         // grosszuegig freihalten als die Knoepfe darunter verschwinden lassen.
         CaptionSpacer.Width = inset > 0 ? inset : 141;
+        PlaceProgress();
     }
 
     /// <summary>Die Pfadleiste darf nur den Platz nehmen, den die Tabs übrig lassen.</summary>
@@ -709,6 +712,7 @@ public sealed partial class MainWindow : Window
 
         for (var i = 0; i < tracks.Count; i++)
         {
+            ProgressStep(i, tracks.Count, tracks[i].FileName);
             try
             {
                 var backup = backups.Create(tracks[i].Path);
@@ -742,6 +746,8 @@ public sealed partial class MainWindow : Window
         if (recursive)
         {
             Progress.IsIndeterminate = true;
+            ProgressTitle.Text = Strings.T("Reading…");
+            ProgressNote(tab.Name);
             ShowProgress(true, 0);
         }
 
@@ -1172,30 +1178,8 @@ public sealed partial class MainWindow : Window
     /// Gibt die laufende Datei frei, falls sie zu den gleich beschriebenen
     /// gehört. Alles andere spielt ungestört weiter.
     /// </summary>
-    /// <summary>
-    /// Der Fortschritt oben in der Leiste. Die Prozentzahl daneben nur, wenn
-    /// eine bekannt ist — beim Einlesen läuft der Balken unbestimmt.
-    /// </summary>
-    private void ShowProgress(bool busy, double percent)
-    {
-        ProgressHost.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        Progress.Value = Math.Clamp(percent, 0, 100);
-        ProgressLabel.Text = busy && !Progress.IsIndeterminate
-            ? $"{Math.Round(percent)} %"
-            : "";
-    }
-
     private void ReleaseIfAffected(IEnumerable<AudioTrack> tracks) =>
         _player.ReleaseIfPlaying(tracks.Select(t => t.Path));
-
-    private void SetBusy(bool busy, string? label)
-    {
-        ShowProgress(busy, 0);
-        PaneA.IsEnabled = PaneB.IsEnabled = !busy;
-        FolderTree.IsEnabled = !busy;
-        if (busy) { ApplyBtn.IsEnabled = false; AlignBtn.IsEnabled = false; }
-        if (label is not null) StatusText.Text = label + " …";
-    }
 
     private async Task<bool> Confirm(string title, string message, string primary)
     {
@@ -1299,6 +1283,8 @@ public sealed partial class MainWindow : Window
         if (found.SetupUrl is null) return;
 
         StatusText.Text = Strings.T("Downloading the update…");
+        ProgressTitle.Text = Strings.T("Downloading the update…");
+        ProgressNote(found.Version);
         ShowProgress(true, 0);
 
         try

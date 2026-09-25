@@ -73,6 +73,7 @@ public sealed partial class MainWindow
         for (var i = 0; i < plan.Count; i++)
         {
             var change = plan[i];
+            ProgressStep(i, plan.Count, change.Track.FileName);
             var edit = change.Edit;
             if (cover is not null && change.Changes.Any(c => c.Field == "Cover"))
                 edit = edit with { Cover = cover.Data, CoverMimeType = cover.MimeType };

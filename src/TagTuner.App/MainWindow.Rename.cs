@@ -152,6 +152,7 @@ public sealed partial class MainWindow
         for (var i = 0; i < plan.Count; i++)
         {
             var (track, target) = plan[i];
+            ProgressStep(i, plan.Count, track.FileName);
             try
             {
                 // Erst sichern, dann umbenennen. Der Verlauf legt die Sicherung

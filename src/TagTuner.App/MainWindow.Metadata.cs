@@ -298,15 +298,19 @@ public sealed partial class MainWindow
         var wantFormat = FFormat.SelectedItem as string;
         var wantRate = FRate.SelectedIndex >= 0 ? Rates[FRate.SelectedIndex] : (int?)null;
 
-        var ok = await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel, track =>
-        {
-            var convert =
-                (wantFormat is not null &&
-                 !AudioFormats.TargetExtension(track.Format)
-                     .Equals(AudioFormats.TargetExtension(wantFormat), StringComparison.OrdinalIgnoreCase))
-                || (wantRate is int hz && track.SampleRate != hz);
-            return (convert, wantFormat, wantRate, edit);
-        });
+        bool Converts(AudioTrack track) =>
+            (wantFormat is not null &&
+             !AudioFormats.TargetExtension(track.Format)
+                 .Equals(AudioFormats.TargetExtension(wantFormat), StringComparison.OrdinalIgnoreCase))
+            || (wantRate is int hz && track.SampleRate != hz);
+
+        // Im Verlauf reicht die Zahl; oben in der Leiste soll stehen, was passiert.
+        var doing = sel.Any(Converts)
+            ? Strings.T("Converting {0} file(s)", sel.Count)
+            : Strings.T("Writing tags to {0} file(s)", sel.Count);
+
+        var ok = await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel,
+            track => (Converts(track), wantFormat, wantRate, edit), doing);
 
         // Das kleine Fenster aus dem Explorer hat seine Aufgabe erledigt.
         // Bei Fehlern bleibt es offen, damit man es noch einmal versuchen kann.
@@ -340,7 +344,8 @@ public sealed partial class MainWindow
     private async Task<bool> RunJobAsync(
         string label,
         IReadOnlyList<AudioTrack> tracks,
-        Func<AudioTrack, (bool Convert, string? Format, int? Rate, TagEdit? Tags)> plan)
+        Func<AudioTrack, (bool Convert, string? Format, int? Rate, TagEdit? Tags)> plan,
+        string? doing = null)
     {
         // Nur loslassen, was gleich beschrieben wird. Der Player hält seine
         // Datei offen, und ffmpeg wie TagLib kämen sonst nicht daran — aber
@@ -356,7 +361,7 @@ public sealed partial class MainWindow
             return false;
         }
 
-        SetBusy(true, label);
+        SetBusy(true, doing ?? label);
 
         var backups = new BackupStore(_settings.ResolvedBackupFolder);
         var svc = new ConversionService(new FfmpegRunner(ffmpeg ?? "ffmpeg"), backups);
@@ -369,6 +374,7 @@ public sealed partial class MainWindow
         foreach (var track in tracks)
         {
             var (convert, format, rate, tags) = plan(track);
+            ProgressStep(done, tracks.Count, track.FileName);
             ConversionOutcome outcome;
 
             if (convert)

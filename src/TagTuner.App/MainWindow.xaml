@@ -70,23 +70,42 @@
                 </Border>
             </Grid>
 
-            <!-- Tabs -->
-            <!-- Fortschritt: direkt rechts vom Pfad, nur sichtbar während
-                 gearbeitet wird. -->
-            <Grid Grid.Column="3" x:Name="ProgressHost" Visibility="Collapsed"
-                  VerticalAlignment="Center" Margin="6,0,6,0">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Border Width="150" Height="5" CornerRadius="3"
-                            VerticalAlignment="Center"
-                            Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
-                        <ProgressBar x:Name="Progress" Height="5" CornerRadius="3"
-                                     Background="Transparent"
-                                     Foreground="{StaticResource AccentBrush}" />
-                    </Border>
-                    <TextBlock x:Name="ProgressLabel" FontSize="11" FontFamily="{StaticResource DataFont}"
-                               MinWidth="30" VerticalAlignment="Center"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
+            <!-- Fortschritt: sitzt mittig über dem Fenster, wenn zwischen
+                 Pfad und Tabs Platz ist, sonst hier direkt rechts vom Pfad.
+                 Umgehängt wird im Code (PlaceProgress). -->
+            <Grid Grid.Column="3" x:Name="ProgressDock" VerticalAlignment="Center"
+                  Margin="6,0,6,0" IsHitTestVisible="False">
+                <Border x:Name="ProgressHost" Visibility="Collapsed"
+                        Height="34" CornerRadius="17" Padding="12,0,14,0"
+                        VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Background="{StaticResource AccentDimBrush}"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <muxc:ProgressRing Width="16" Height="16" MinWidth="16" MinHeight="16"
+                                           IsActive="True" VerticalAlignment="Center"
+                                           Foreground="{StaticResource AccentBrush}" />
+                        <TextBlock x:Name="ProgressTitle" FontSize="12.5" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" MaxWidth="240"
+                                   TextTrimming="CharacterEllipsis" />
+                        <!-- Feste Breite: Mit jedem Dateinamen eine andere Breite
+                             ließe die Pille hin und her springen. -->
+                        <TextBlock x:Name="ProgressDetail" FontSize="12" Width="230"
+                                   VerticalAlignment="Center" Visibility="Collapsed"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Border Width="140" Height="5" CornerRadius="3"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
+                            <ProgressBar x:Name="Progress" Height="5" CornerRadius="3"
+                                         Background="Transparent"
+                                         Foreground="{StaticResource AccentBrush}" />
+                        </Border>
+                        <TextBlock x:Name="ProgressLabel" FontSize="11.5" FontFamily="{StaticResource DataFont}"
+                                   MinWidth="34" TextAlignment="Right" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
             </Grid>
 
             <!-- Im kleinen Fenster aus dem Explorer steht hier nur, was
@@ -96,6 +115,7 @@
                        TextTrimming="CharacterEllipsis"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
+            <!-- Tabs -->
             <StackPanel Grid.Column="4" x:Name="TabBar" Orientation="Horizontal" Spacing="4"
                         VerticalAlignment="Center">
                 <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="3" />
@@ -130,6 +150,10 @@
                  ueber die Titelleiste gezeichnet, nicht in sie hinein. -->
             <Border Grid.Column="6" x:Name="CaptionSpacer" Width="0" />
         </Grid>
+
+        <!-- Ebene über der Titelleiste für den Fortschritt in der Mitte.
+             Klicks gehen hindurch: Die Leiste bleibt zum Ziehen da. -->
+        <Grid Grid.Row="0" x:Name="ProgressCenter" IsHitTestVisible="False" />
 
         <!-- ══ Arbeitsfläche ════════════════════════════════════════ -->
         <Grid Grid.Row="1" x:Name="Work">
