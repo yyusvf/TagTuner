@@ -34,6 +34,11 @@ public sealed partial class MainWindow
 
         UpdateVolumeIcon();
 
+        // Die Lautstärke erst, wenn etwas läuft: Vorher gibt es nichts, dessen
+        // Lautstärke man einstellen könnte.
+        VolumeBtn.Visibility = track is null ? Visibility.Collapsed : Visibility.Visible;
+        if (track is null) VolumePopup.IsOpen = false;
+
         NowPanel.Visibility = track is null ? Visibility.Collapsed : Visibility.Visible;
         if (track is null) return;
 

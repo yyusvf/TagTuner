@@ -54,6 +54,7 @@ public static partial class Strings
         ["{0} folders, {1} songs"] = "{0} klasör, {1} şarkı",
         ["{0} min ago"] = "{0} dk önce",
         ["{0} of {1}"] = "{0} / {1}",
+        ["{0} of {1} file(s) converted, {2} failed."] = "{1} dosyadan {0} tanesi dönüştürüldü, {2} başarısız.",
         ["{0} of {1} file(s) get a new name."] = "{1} dosyadan {0} tanesi yeni ad alıyor.",
         ["{0} of {1} files change. Every file is backed up first; the history can undo it."] = "{1} dosyadan {0} tanesi değişir. Her biri önce yedeklenir; geçmiş geri alabilir.",
         ["{0} renamed, {1} failed: {2}"] = "{0} yeniden adlandırıldı, {1} başarısız: {2}",

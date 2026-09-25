@@ -318,34 +318,14 @@ public sealed partial class MainWindow
         if (ok && Quick && !_quickList) Close();
     }
 
-    private async void OnAlign(object sender, RoutedEventArgs e)
-    {
-        var analysis = ActiveTab.Analysis;
-        var target = ActiveTab.Target;
-        if (analysis is null || target is null) return;
-
-        var outliers = analysis.Outliers(target).ToList();
-        if (outliers.Count == 0) return;
-
-        var ok = await Confirm(Strings.T("Align folder"),
-            Strings.T("{0} file(s) will be converted to {1} · {2}.",
-                      outliers.Count, target.Format, FormatRate(target.SampleRate))
-            + "\n\n"
-            + Strings.T("The originals are replaced. Each file is backed up first, and "
-                        + "the backup can be played back from the history."),
-            Strings.T("Align"));
-        if (!ok) return;
-
-        await RunJobAsync(Strings.T("Align {0} file(s)", outliers.Count), outliers,
-            _ => (true, target.Format, target.SampleRate, null));
-    }
-
     /// <returns>Falsch, wenn etwas nicht geklappt hat oder gar nicht erst anfing.</returns>
     private async Task<bool> RunJobAsync(
         string label,
         IReadOnlyList<AudioTrack> tracks,
         Func<AudioTrack, (bool Convert, string? Format, int? Rate, TagEdit? Tags)> plan,
-        string? doing = null)
+        string? doing = null,
+        Action<int, JobStep, string?>? step = null,
+        bool report = true)
     {
         // Nur loslassen, was gleich beschrieben wird. Der Player hält seine
         // Datei offen, und ffmpeg wie TagLib kämen sonst nicht daran — aber
@@ -374,7 +354,9 @@ public sealed partial class MainWindow
         foreach (var track in tracks)
         {
             var (convert, format, rate, tags) = plan(track);
+            var index = done;
             ProgressStep(done, tracks.Count, track.FileName);
+            step?.Invoke(index, JobStep.Working, null);
             ConversionOutcome outcome;
 
             if (convert)
@@ -394,7 +376,7 @@ public sealed partial class MainWindow
             {
                 outcome = await Task.Run(() => svc.WriteTagsOnly(track, tags));
             }
-            else { done++; continue; }
+            else { done++; step?.Invoke(index, JobStep.Done, null); continue; }
 
             done++;
             ShowProgress(true, done * 100.0 / tracks.Count);
@@ -403,8 +385,14 @@ public sealed partial class MainWindow
             {
                 if (outcome.History is not null) files.Add(outcome.History);
                 foreach (var n in outcome.Notes) notes.Add($"{track.FileName}: {n}");
+                step?.Invoke(index, JobStep.Done,
+                    outcome.Notes.Count > 0 ? string.Join(" ", outcome.Notes) : null);
             }
-            else errors.Add($"{track.FileName}: {outcome.Error}");
+            else
+            {
+                errors.Add($"{track.FileName}: {outcome.Error}");
+                step?.Invoke(index, JobStep.Failed, outcome.Error);
+            }
         }
 
         if (files.Count > 0) _history.Add("batch", label, files);
@@ -416,7 +404,10 @@ public sealed partial class MainWindow
 
         SetBusy(false, null);
         await MergeTabAsync(ActiveTab);
-        await ReportAsync(files.Count, errors, notes);
+        // Wer selbst mitschreibt, zeigt Fehler und Hinweise dort. Ein zweiter
+        // Dialog ginge über einem offenen ohnehin nicht auf.
+        if (report) await ReportAsync(files.Count, errors, notes);
+        else StatusText.Text = Strings.T("{0} file(s) processed, backup created", files.Count);
         return errors.Count == 0;
     }
 }

@@ -641,7 +641,7 @@
                     </Grid>
                 </StackPanel>
 
-                <Button x:Name="VolumeBtn" Content="&#xE767;" Click="OnToggleMute"
+                <Button x:Name="VolumeBtn" Content="&#xE767;" Click="OnToggleMute" Visibility="Collapsed"
                         FontFamily="Segoe Fluent Icons" FontSize="12"
                         Width="28" Height="28" Padding="0" CornerRadius="13"
                         Background="Transparent" BorderThickness="0"

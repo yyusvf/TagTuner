@@ -54,6 +54,7 @@ public static partial class Strings
         ["{0} folders, {1} songs"] = "{0} cartelle, {1} brani",
         ["{0} min ago"] = "{0} min fa",
         ["{0} of {1}"] = "{0} di {1}",
+        ["{0} of {1} file(s) converted, {2} failed."] = "{0} di {1} file convertiti, {2} non riusciti.",
         ["{0} of {1} file(s) get a new name."] = "{0} file su {1} ricevono un nuovo nome.",
         ["{0} of {1} files change. Every file is backed up first; the history can undo it."] = "Cambiano {0} file su {1}. Ognuno viene salvato prima; la cronologia può annullare.",
         ["{0} renamed, {1} failed: {2}"] = "{0} rinominati, {1} non riusciti: {2}",

@@ -437,6 +437,7 @@
  "{0} folders, {1} songs": "{0} mappar, {1} låtar",
  "{0} min ago": "för {0} min sedan",
  "{0} of {1}": "{0} av {1}",
+ "{0} of {1} file(s) converted, {2} failed.": "{0} av {1} fil(er) konverterade, {2} misslyckades.",
  "{0} of {1} file(s) get a new name.": "{0} av {1} fil(er) får ett nytt namn.",
  "{0} of {1} files change. Every file is backed up first; the history can undo it.": "{0} av {1} filer ändras. Varje fil säkerhetskopieras först; historiken kan ångra det.",
  "{0} renamed, {1} failed: {2}": "{0} bytte namn, {1} misslyckades: {2}",

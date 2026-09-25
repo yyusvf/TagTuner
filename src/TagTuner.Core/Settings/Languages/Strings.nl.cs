@@ -54,6 +54,7 @@ public static partial class Strings
         ["{0} folders, {1} songs"] = "{0} mappen, {1} nummers",
         ["{0} min ago"] = "{0} min geleden",
         ["{0} of {1}"] = "{0} van {1}",
+        ["{0} of {1} file(s) converted, {2} failed."] = "{0} van {1} bestand(en) geconverteerd, {2} mislukt.",
         ["{0} of {1} file(s) get a new name."] = "{0} van {1} bestand(en) krijgen een nieuwe naam.",
         ["{0} of {1} files change. Every file is backed up first; the history can undo it."] = "{0} van {1} bestanden veranderen. Elk wordt eerst geback-upt; de geschiedenis kan het terugdraaien.",
         ["{0} renamed, {1} failed: {2}"] = "{0} hernoemd, {1} mislukt: {2}",
