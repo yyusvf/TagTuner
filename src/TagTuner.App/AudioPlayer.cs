@@ -1,3 +1,4 @@
+using TagTuner.Core.Audio;
 using TagTuner.Core.Model;
 using Microsoft.UI.Dispatching;
 using Windows.Media.Playback;
@@ -97,8 +98,7 @@ public sealed class AudioPlayer : IDisposable
         try
         {
             Current = track;
-            _player.Source = Windows.Media.Core.MediaSource.CreateFromUri(
-                new Uri(track.Path));
+            _player.Source = WithTags(track);
             _player.Play();
         }
         catch (Exception ex)
@@ -108,6 +108,50 @@ public sealed class AudioPlayer : IDisposable
             Changed?.Invoke();
             Failed?.Invoke($"{track.FileName}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Die Datei samt dem, was Windows über sie anzeigen soll: Titel,
+    /// Interpret, Album und Cover aus den Tags. Ohne das zeigt die
+    /// Medienanzeige von Windows (Lautstärke-Overlay, Sperrbildschirm,
+    /// Schnelleinstellungen) nur den Dateinamen oder gar nichts.
+    /// </summary>
+    private static MediaPlaybackItem WithTags(AudioTrack track)
+    {
+        var item = new MediaPlaybackItem(
+            Windows.Media.Core.MediaSource.CreateFromUri(new Uri(track.Path)));
+
+        try
+        {
+            var shown = item.GetDisplayProperties();
+            shown.Type = Windows.Media.MediaPlaybackType.Music;
+
+            var music = shown.MusicProperties;
+            music.Title = string.IsNullOrWhiteSpace(track.Title)
+                ? Path.GetFileNameWithoutExtension(track.Path)
+                : track.Title;
+            music.Artist = track.Artist;
+            music.AlbumTitle = track.Album;
+            music.AlbumArtist = track.AlbumArtist;
+            music.TrackNumber = track.Track;
+
+            if (AudioProbe.ReadCover(track.Path) is { Data.Length: > 0 } cover)
+            {
+                var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+                {
+                    writer.WriteBytes(cover.Data);
+                    writer.StoreAsync().AsTask().GetAwaiter().GetResult();
+                    writer.DetachStream();
+                }
+                shown.Thumbnail = Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(stream);
+            }
+
+            item.ApplyDisplayProperties(shown);
+        }
+        catch { /* Ohne Anzeige spielt es trotzdem */ }
+
+        return item;
     }
 
     public void Toggle()
