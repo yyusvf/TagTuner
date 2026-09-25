@@ -600,34 +600,71 @@
               BorderThickness="0,1,0,0"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
 
-            <!-- Wiedergabe: ein Knopf fuer Start und Pause, daneben die
-                 Lautstaerke, die erst herausfaehrt wenn etwas laeuft. -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+            <!-- Wiedergabe, bewusst leise: ein flacher Knopf, Titel und Zeit
+                 klein, darunter eine dünne Leiste für die Stelle im Lied, zum
+                 Springen anklickbar. Die Lautstärke ist nur ein Symbol; der
+                 Regler kommt senkrecht darüber, solange der Zeiger dort ist. -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
                         VerticalAlignment="Center">
                 <Button x:Name="PlayBtn" Content="&#xE768;" Click="OnTogglePlay"
-                        FontFamily="Segoe Fluent Icons" FontSize="13"
-                        Width="32" Height="32" Padding="0" CornerRadius="16"
+                        FontFamily="Segoe Fluent Icons" FontSize="12"
+                        Width="30" Height="30" Padding="0" CornerRadius="14"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         IsEnabled="False"
                         ToolTipService.ToolTip="Play and pause, or press space in the list" />
 
-                <Border x:Name="VolumeHost" Width="0" Opacity="0"
-                        VerticalAlignment="Center" SizeChanged="OnVolumeHostResized">
-                    <StackPanel Orientation="Horizontal" Spacing="5" Width="104"
-                                HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE767;" FontSize="12"
-                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                        <Slider x:Name="VolumeSlider" Width="82" Minimum="0" Maximum="100"
-                                VerticalAlignment="Center" IsThumbToolTipEnabled="False"
-                                ValueChanged="OnVolumeChanged" />
-                    </StackPanel>
-                </Border>
-
-                <StackPanel VerticalAlignment="Center" Spacing="0" MaxWidth="210">
-                    <TextBlock x:Name="NowPlaying" FontSize="11.5"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="NowTime" FontSize="10.5" FontFamily="{StaticResource DataFont}"
-                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <StackPanel x:Name="NowPanel" VerticalAlignment="Center" Spacing="3"
+                            Width="230" Visibility="Collapsed">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock x:Name="NowPlaying" FontSize="11.5"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" x:Name="NowTime" FontSize="10.5"
+                                   FontFamily="{StaticResource DataFont}"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    </Grid>
+                    <!-- Die Fläche ist höher als die Leiste, damit man sie
+                         trifft. Radius unter der halben Höhe, siehe Fortschritt. -->
+                    <Grid x:Name="SeekArea" Height="10" Background="Transparent"
+                          PointerPressed="OnSeekPressed" PointerMoved="OnSeekMoved"
+                          PointerReleased="OnSeekReleased" PointerCaptureLost="OnSeekReleased"
+                          PointerEntered="OnSeekEnter" PointerExited="OnSeekExit">
+                        <Grid x:Name="SeekTrack" Height="3" CornerRadius="1.4"
+                              VerticalAlignment="Center"
+                              Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
+                            <Border x:Name="SeekFill" HorizontalAlignment="Left" Width="0"
+                                    CornerRadius="1.4"
+                                    Background="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </Grid>
+                    </Grid>
                 </StackPanel>
+
+                <Button x:Name="VolumeBtn" Content="&#xE767;" Click="OnToggleMute"
+                        FontFamily="Segoe Fluent Icons" FontSize="12"
+                        Width="28" Height="28" Padding="0" CornerRadius="13"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        PointerEntered="OnVolumeEnter" PointerExited="OnVolumeLeave" />
+
+                <Popup x:Name="VolumePopup" DesiredPlacement="Top">
+                    <Border x:Name="VolumePanel" Padding="6,12" CornerRadius="8" Margin="0,0,0,6"
+                            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            PointerEntered="OnVolumeEnter" PointerExited="OnVolumeLeave">
+                        <StackPanel Spacing="6">
+                            <Slider x:Name="VolumeSlider" Orientation="Vertical" Height="110"
+                                    Minimum="0" Maximum="100" HorizontalAlignment="Center"
+                                    IsThumbToolTipEnabled="False"
+                                    ValueChanged="OnVolumeChanged" />
+                            <TextBlock x:Name="VolumeText" FontSize="10.5" HorizontalAlignment="Center"
+                                       FontFamily="{StaticResource DataFont}"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </StackPanel>
 
             <!-- Nur zu sehen, wenn ffmpeg fehlt. Dass alles in Ordnung ist,
