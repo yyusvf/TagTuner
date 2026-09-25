@@ -76,7 +76,7 @@
             <Grid Grid.Column="3" x:Name="ProgressDock" VerticalAlignment="Center"
                   Margin="6,0,6,0" IsHitTestVisible="False">
                 <Border x:Name="ProgressHost" Visibility="Collapsed"
-                        Height="34" CornerRadius="17" Padding="12,0,14,0"
+                        Height="34" CornerRadius="16" Padding="12,0,14,0"
                         VerticalAlignment="Center" HorizontalAlignment="Center"
                         Background="{StaticResource AccentDimBrush}"
                         BorderThickness="1"
@@ -95,12 +95,15 @@
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <!-- Selbst gezeichnet statt ProgressBar: Die zieht bei 0 %
-                             eine eigene dünne Linie quer durch ihre Spur. -->
+                             eine eigene dünne Linie quer durch ihre Spur.
+                             Die Radien liegen knapp unter der halben Höhe, hier wie
+                             an der Pille: Genau die Hälfte zeichnet WinUI mit einer
+                             hellen Naht quer durch die Mitte. -->
                         <Grid x:Name="ProgressTrack" Width="260" Height="6"
-                              CornerRadius="3" VerticalAlignment="Center"
+                              CornerRadius="2.5" VerticalAlignment="Center"
                               Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
                             <Border x:Name="ProgressFill" HorizontalAlignment="Left" Width="0"
-                                    CornerRadius="3" Background="{StaticResource AccentBrush}" />
+                                    CornerRadius="2.5" Background="{StaticResource AccentBrush}" />
                         </Grid>
                         <TextBlock x:Name="ProgressLabel" FontSize="11.5" FontFamily="{StaticResource DataFont}"
                                    MinWidth="34" TextAlignment="Right" VerticalAlignment="Center"
