@@ -12,7 +12,7 @@ namespace TagTuner.App;
 public sealed partial class MainWindow
 {
     /// <summary>Die Lautstärke vor dem Stummschalten, für das Zurück.</summary>
-    private double _unmutedVolume = 50;
+    private double _unmutedVolume = 20;
 
     /// <summary>Solange gezogen wird, folgt die Leiste dem Zeiger, nicht dem Lied.</summary>
     private bool _seeking;

@@ -116,7 +116,7 @@ public sealed class AppSettings
     public string? SkippedVersion { get; set; }
 
     // ── Wiedergabe ───────────────────────────────────────────────
-    public double Volume { get; set; } = 0.7;
+    public double Volume { get; set; } = 0.2;
 
     // ── Regeln je Ordner ─────────────────────────────────────────
 
