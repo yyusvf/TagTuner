@@ -642,8 +642,8 @@
                 </StackPanel>
 
                 <Button x:Name="VolumeBtn" Content="&#xE767;" Click="OnToggleMute" Visibility="Collapsed"
-                        FontFamily="Segoe Fluent Icons" FontSize="12"
-                        Width="28" Height="28" Padding="0" CornerRadius="13"
+                        FontFamily="Segoe Fluent Icons" FontSize="15"
+                        Width="32" Height="32" Padding="0" CornerRadius="15"
                         Background="Transparent" BorderThickness="0"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         PointerEntered="OnVolumeEnter" PointerExited="OnVolumeLeave" />
