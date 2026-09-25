@@ -27,7 +27,7 @@ public sealed partial class MainWindow
     /// <summary>Mehrere Dateien: Die Liste steht rechts neben der Spalte.</summary>
     private bool _quickList;
 
-    private const int QuickWidth = 400, QuickListWidth = 620, QuickHeight = 820;
+    private const int QuickWidth = 400, QuickListWidth = 700, QuickHeight = 820;
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
@@ -70,6 +70,7 @@ public sealed partial class MainWindow
         // löschen. Mit einem Teil des Ordners würde das die Nummern der
         // übrigen verbiegen.
         PaneA.ReadOnly = true;
+        PaneA.FitColumns = true;
         SubHostA.Visibility = Visibility.Collapsed;
 
         // AppWindow rechnet in echten Pixeln, die Maße hier sind in

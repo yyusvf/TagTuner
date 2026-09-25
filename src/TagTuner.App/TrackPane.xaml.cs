@@ -97,6 +97,20 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     public bool ReadOnly { get; set; }
 
+    /// <summary>
+    /// Die Spalten passen sich der Breite an, statt seitlich zu scrollen.
+    /// Für das kleine Fenster aus dem Explorer. Die Breiten sind dann nur
+    /// geliehen: Ziehen an den Spaltengrenzen ist aus, und gespeichert wird
+    /// nichts davon.
+    /// </summary>
+    public bool FitColumns { get; set; }
+
+    /// <summary>Die eingestellten Breiten, bevor <see cref="FitColumns"/> sie verteilt.</summary>
+    private List<double> _baseWidths = [];
+
+    /// <summary>Kleiner wird eine Textspalte beim Einpassen nicht.</summary>
+    private const double FitMinText = 70;
+
     /// <summary>Eine Spalte wurde in der Kopfzeile an eine andere Stelle gezogen.</summary>
     public event EventHandler? ColumnsReordered;
 
@@ -142,7 +156,8 @@ public sealed partial class TrackPane : UserControl
         _columns = TrackColumns.Resolve(settings);
         _combined = settings.CombineTitleAndArtist;
 
-        Columns.Set(TrackColumns.Widths(settings, _columns));
+        _baseWidths = TrackColumns.Widths(settings, _columns);
+        Columns.Set(_baseWidths);
 
         TrackColumns.BuildHeader(
             HeaderRow, _columns, Columns, _combined, _sortMarks,
@@ -558,6 +573,8 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     private void UpdateWidth()
     {
+        if (FitColumns) { Fit(); Wide.Width = WideScroll.ActualWidth; return; }
+
         var needed = HeaderRow.Padding.Left + HeaderRow.Padding.Right;
         for (var i = 0; i < _columns.Count; i++)
             needed += Columns.WidthAt(i) + HeaderRow.ColumnSpacing;
@@ -567,6 +584,49 @@ public sealed partial class TrackPane : UserControl
         needed += 24;
 
         Wide.Width = Math.Max(WideScroll.ActualWidth, needed);
+    }
+
+    /// <summary>
+    /// Verteilt die Breite: Zahlen, Cover und Formate behalten ihre Breite,
+    /// die Textspalten teilen sich den Rest im Verhältnis ihrer eingestellten
+    /// Breiten. Reicht es selbst dann nicht, bleibt die Laufleiste.
+    /// </summary>
+    private void Fit()
+    {
+        var available = WideScroll.ActualWidth;
+        if (available <= 0 || _baseWidths.Count != _columns.Count) return;
+
+        // Nichts zum Seitwärtsscrollen, auch keine Leiste, die dafür Platz hält.
+        WideScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        WideScroll.HorizontalScrollMode = ScrollMode.Disabled;
+
+        var chrome = HeaderRow.Padding.Left + HeaderRow.Padding.Right + 24
+                     + _columns.Count * HeaderRow.ColumnSpacing;
+
+        bool IsText(int i) => _columns[i].Look == ColumnLook.Text && _columns[i].Id != "cover";
+
+        // Feste Spalten in ihrer Grundbreite: Wer im Hauptfenster Format
+        // oder Samplerate breit gezogen hat, will das dort, nicht auf Kosten
+        // der Titel hier.
+        double Base(int i) => IsText(i) ? _baseWidths[i] : _columns[i].Width;
+
+        var fixedWidth = 0.0;
+        var textWidth = 0.0;
+        for (var i = 0; i < _columns.Count; i++)
+        {
+            if (IsText(i)) textWidth += Base(i);
+            else fixedWidth += Base(i);
+        }
+
+        var room = available - chrome - fixedWidth;
+        if (textWidth <= 0 || room <= 0) return;
+
+        var widths = new double[_columns.Count];
+        for (var i = 0; i < _columns.Count; i++)
+            widths[i] = IsText(i)
+                ? Math.Max(FitMinText, Math.Floor(Base(i) * room / textWidth))
+                : Base(i);
+        Columns.Set(widths);
     }
 
     private void OnWideScrollResized(object sender, SizeChangedEventArgs e) => UpdateWidth();
@@ -1103,6 +1163,7 @@ public sealed partial class TrackPane : UserControl
 
     private void OnGripPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (FitColumns) return;
         var grip = (Border)sender;
         _gripIndex = int.Parse((string)grip.Tag);
         _gripStartX = e.GetCurrentPoint(this).Position.X;
