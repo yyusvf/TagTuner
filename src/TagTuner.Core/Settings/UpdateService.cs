@@ -159,6 +159,20 @@ public static class UpdateService
     }
 
     /// <summary>„1.2.10" ist neuer als „1.2.9"; verglichen wird Zahl für Zahl.</summary>
+    /// <summary>
+    /// Vergisst eine übersprungene Version, sobald die installierte sie
+    /// eingeholt hat. Sonst stand in den Einstellungen noch „0.8.1 wurde
+    /// übersprungen", während längst 0.8.3 lief.
+    /// </summary>
+    public static void ForgetOutdatedSkip(AppSettings settings, string currentVersion)
+    {
+        if (settings.SkippedVersion is not { Length: > 0 } skipped) return;
+        if (IsNewer(skipped, currentVersion)) return;
+
+        settings.SkippedVersion = null;
+        settings.Save();
+    }
+
     public static bool IsNewer(string candidate, string current)
     {
         var a = Parts(candidate);

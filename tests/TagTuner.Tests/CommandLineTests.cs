@@ -78,3 +78,19 @@ public class AdoptBackupsTests
         Assert.Equal(2, Directory.GetFiles(folder).Length);
     }
 }
+
+public class SkippedVersionTests
+{
+    [Fact]
+    public void A_skip_is_forgotten_once_the_app_caught_up()
+    {
+        using var ws = new Workspace();
+        var settings = new TagTuner.Core.Settings.AppSettings { SkippedVersion = "0.8.1" };
+
+        TagTuner.Core.Settings.UpdateService.ForgetOutdatedSkip(settings, "0.8.0");
+        Assert.Equal("0.8.1", settings.SkippedVersion);
+
+        TagTuner.Core.Settings.UpdateService.ForgetOutdatedSkip(settings, "0.8.3");
+        Assert.Null(settings.SkippedVersion);
+    }
+}

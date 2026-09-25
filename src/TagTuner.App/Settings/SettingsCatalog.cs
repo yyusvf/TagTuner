@@ -50,6 +50,7 @@ internal static class SettingsCatalog
             HorizontalAlignment = HorizontalAlignment.Right,
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             Text = c.Settings.SkippedVersion is { Length: > 0 } skipped
+                   && UpdateService.IsNewer(skipped, AppInfo.Version)
                 ? Strings.T("Version {0} was skipped.", skipped)
                 : "",
         };

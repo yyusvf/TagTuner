@@ -144,6 +144,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        UpdateService.ForgetOutdatedSkip(_settings, AppInfo.Version);
         Fire(CheckForUpdatesAsync(), Strings.T("Updates"));
 
         SingleInstance.Listen(DispatcherQueue, OnSecondLaunch);
