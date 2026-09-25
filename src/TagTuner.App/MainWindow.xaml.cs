@@ -83,9 +83,7 @@ public sealed partial class MainWindow : Window
         // es in der Vorschau über der Taskleiste und bei Alt+Tab.
         var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "TagTuner.ico");
         if (File.Exists(icon)) AppWindow.SetIcon(icon);
-        if (!Quick)
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(
-                (int)_settings.WindowWidth, (int)_settings.WindowHeight));
+        if (!Quick) RestoreWindowSize();
 
         _activePane = PaneA;
         foreach (var pane in new[] { PaneA, PaneB }) WirePane(pane);
@@ -151,8 +149,7 @@ public sealed partial class MainWindow : Window
 
         Closed += (_, _) =>
         {
-            _settings.WindowWidth = AppWindow.Size.Width;
-            _settings.WindowHeight = AppWindow.Size.Height;
+            RememberWindowSize();
             _settings.MetaWidth = MetaCol.ActualWidth;
             _settings.TreeWidth = TreeCol.ActualWidth;
             _settings.SideWidth = SideCol.ActualWidth;
@@ -1476,6 +1473,56 @@ public sealed partial class MainWindow : Window
         bar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF);
         bar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF);
     }
+
+    // ══ Fenstergröße ═════════════════════════════════════════════
+
+    /// <summary>
+    /// Die gemerkte Größe, aber nie kleiner als brauchbar und nie größer als
+    /// der Bildschirm. Wurde die App einmal minimiert geschlossen, stand
+    /// sonst die Größe des Taskleisten-Stummels in den Einstellungen, und das
+    /// nächste Fenster ging als winziger Streifen auf.
+    /// </summary>
+    private void RestoreWindowSize()
+    {
+        var area = Microsoft.UI.Windowing.DisplayArea
+            .GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
+
+        var fallback = new AppSettings();
+        double w = _settings.WindowWidth, h = _settings.WindowHeight;
+        if (w < MinWindowWidth || h < MinWindowHeight)
+        {
+            w = fallback.WindowWidth;
+            h = fallback.WindowHeight;
+        }
+
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(
+            (int)Math.Min(w, area.Width), (int)Math.Min(h, area.Height)));
+
+        if (_settings.WindowMaximized &&
+            AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            presenter.Maximize();
+    }
+
+    /// <summary>
+    /// Merkt sich die Größe nur, wenn das Fenster normal dasteht. Minimiert
+    /// ist die Größe die des Stummels, maximiert die des Bildschirms: Beides
+    /// soll beim nächsten Start nicht die normale Größe werden.
+    /// </summary>
+    private void RememberWindowSize()
+    {
+        var state = (AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.State;
+        if (state == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized) return;
+
+        _settings.WindowMaximized = state == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized;
+        if (_settings.WindowMaximized) return;
+
+        if (AppWindow.Size.Width < MinWindowWidth || AppWindow.Size.Height < MinWindowHeight) return;
+        _settings.WindowWidth = AppWindow.Size.Width;
+        _settings.WindowHeight = AppWindow.Size.Height;
+    }
+
+    /// <summary>In echten Pixeln, wie AppWindow rechnet.</summary>
+    private const int MinWindowWidth = 800, MinWindowHeight = 500;
 
     // ══ Spalten ══════════════════════════════════════════════════
 

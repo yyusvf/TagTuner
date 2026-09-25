@@ -46,6 +46,9 @@ public sealed class AppSettings
     public double WindowWidth { get; set; } = 2000;
     public double WindowHeight { get; set; } = 1125;
 
+    /// <summary>Beim Schließen maximiert: beim nächsten Start wieder so.</summary>
+    public bool WindowMaximized { get; set; }
+
     /// <summary>Eigener ffmpeg-Pfad; leer heißt „mitgeliefertes benutzen".</summary>
     public string? FfmpegPath { get; set; }
 
