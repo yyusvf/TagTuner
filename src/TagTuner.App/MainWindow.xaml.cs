@@ -128,6 +128,7 @@ public sealed partial class MainWindow : Window
             start = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
 
         _tabs.Add(new FolderTab(start));
+        if (Quick) PrepareQuickTab();
         PaneA.Bind(ActiveTab);
 
         RebuildChrome();
@@ -743,9 +744,9 @@ public sealed partial class MainWindow : Window
             ShowProgress(true, 0);
         }
 
-        var tracks = await Task.Run(() => recursive
+        var tracks = tab.Filter(await Task.Run(() => recursive
             ? FolderScanner.TracksRecursive(path)
-            : FolderScanner.Tracks(path));
+            : FolderScanner.Tracks(path)));
 
         Progress.IsIndeterminate = false;
         ShowProgress(false, 0);
@@ -790,9 +791,9 @@ public sealed partial class MainWindow : Window
         var path = tab.Path;
         var recursive = tab.Recursive;
 
-        var fresh = await Task.Run(() => recursive
+        var fresh = tab.Filter(await Task.Run(() => recursive
             ? FolderScanner.TracksRecursive(path)
-            : FolderScanner.Tracks(path));
+            : FolderScanner.Tracks(path)));
 
         // Zwischenzeitlich woandershin navigiert.
         if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase)) return;
@@ -800,6 +801,10 @@ public sealed partial class MainWindow : Window
         var wanted = TrackSorting.Apply(fresh, tab.Sort, tab.SortDescending, _settings.SortByDiscThenTrack);
         var wantedPaths = new HashSet<string>(
             wanted.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
+
+        // Ein ausgetauschtes Lied fällt für die Liste aus der Auswahl, und sie
+        // meldet das sofort weiter. Darum die Auswahl vorher festhalten.
+        var selected = tab.SelectedPaths.ToList();
 
         // 1. Weg, was es nicht mehr gibt.
         for (var i = tab.Tracks.Count - 1; i >= 0; i--)
@@ -817,6 +822,9 @@ public sealed partial class MainWindow : Window
 
         tab.Analysis = FolderAnalysis.Of(wanted);
         tab.Target = tab.Analysis.ResolveTarget(_settings.DefaultFormat, _settings.DefaultSampleRate);
+
+        tab.SelectedPaths.Clear();
+        tab.SelectedPaths.AddRange(selected.Where(wantedPaths.Contains).Distinct(StringComparer.OrdinalIgnoreCase));
 
         PaneFor(tab)?.Refresh();
         RebuildTabs();

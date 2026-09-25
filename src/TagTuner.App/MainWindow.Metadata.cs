@@ -310,7 +310,8 @@ public sealed partial class MainWindow
 
         // Das kleine Fenster aus dem Explorer hat seine Aufgabe erledigt.
         // Bei Fehlern bleibt es offen, damit man es noch einmal versuchen kann.
-        if (ok && Quick) Close();
+        // Mit der Liste daneben geht es meist mit der nächsten Datei weiter.
+        if (ok && Quick && !_quickList) Close();
     }
 
     private async void OnAlign(object sender, RoutedEventArgs e)
@@ -401,6 +402,7 @@ public sealed partial class MainWindow
         }
 
         if (files.Count > 0) _history.Add("batch", label, files);
+        FollowConversions(files);
 
         // Nach einem Schreibvorgang kann jedes Cover ein anderes sein.
         TrackArt.Reload();

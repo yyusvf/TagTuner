@@ -28,6 +28,16 @@ public sealed class FolderTab(string path)
     public bool Recursive { get; set; }
 
     /// <summary>
+    /// Zeigt nur diese Dateien aus dem Ordner. Für das kleine Fenster aus dem
+    /// Explorer, das genau die dort markierten Lieder listet. Null heißt: alle.
+    /// </summary>
+    public HashSet<string>? Only { get; set; }
+
+    /// <summary>Wendet <see cref="Only"/> auf frisch gelesene Tracks an.</summary>
+    public IReadOnlyList<AudioTrack> Filter(IReadOnlyList<AudioTrack> tracks) =>
+        Only is { } only ? [.. tracks.Where(t => only.Contains(t.Path))] : tracks;
+
+    /// <summary>
     /// Wonach die Liste gerade sortiert ist. „Natural" ist die
     /// Playlist-Reihenfolge und die einzige, in der von Hand umsortiert
     /// werden darf.
