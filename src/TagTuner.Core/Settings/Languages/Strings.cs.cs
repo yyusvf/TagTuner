@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Prohledat podsložky",
         ["Searching…"] = "Hledání…",
         ["Select all"] = "Vybrat vše",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Vyberte skladby, které chcete upravit. Ctrl+A vybere vše.",
         ["Selection"] = "Výběr",
         ["Selection: {0} × {0} pixels"] = "Výřez: {0} × {0} pixelů",
         ["Set cover"] = "Nastavit obal",

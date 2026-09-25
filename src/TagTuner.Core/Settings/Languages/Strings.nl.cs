@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Submappen doorzoeken",
         ["Searching…"] = "Zoeken…",
         ["Select all"] = "Alles selecteren",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Selecteer nummers om ze te bewerken. Ctrl+A selecteert alles.",
         ["Selection"] = "Selectie",
         ["Selection: {0} × {0} pixels"] = "Uitsnede: {0} × {0} pixels",
         ["Set cover"] = "Hoes instellen",

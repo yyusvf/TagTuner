@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Esplora le sottocartelle",
         ["Searching…"] = "Ricerca…",
         ["Select all"] = "Seleziona tutto",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Seleziona i brani da modificare. Ctrl+A seleziona tutto.",
         ["Selection"] = "Selezione",
         ["Selection: {0} × {0} pixels"] = "Selezione: {0} × {0} pixel",
         ["Set cover"] = "Imposta copertina",

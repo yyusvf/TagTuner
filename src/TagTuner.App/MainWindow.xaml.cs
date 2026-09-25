@@ -190,17 +190,14 @@ public sealed partial class MainWindow : Window
         (TrackColumnLayout)Application.Current.Resources["TrackColumns"];
 
     /// <summary>
-    /// Worauf sich die Metadatenspalte bezieht: die Auswahl, oder — wenn
-    /// nichts gewählt ist — der ganze Ordner. So zeigt ein frisch geöffneter
-    /// Ordner sofort, worin seine Dateien sich einig sind.
+    /// Worauf sich die Metadatenspalte bezieht: genau die Auswahl.
+    ///
+    /// Früher war es ohne Auswahl der ganze Ordner. Dann standen dort Werte
+    /// und das Cover der ersten Datei, obwohl nichts markiert war, und ein
+    /// Klick aufs Cover-Menü änderte alle Dateien. Wer alle meint, wählt sie
+    /// mit Strg+A oder „Alle wählen".
     /// </summary>
-    private List<AudioTrack> TargetTracks()
-    {
-        var sel = ActivePane.Selected();
-        return sel.Count > 0 ? sel : [.. ActiveTab.Tracks];
-    }
-
-    private bool FolderScope => ActivePane.Selected().Count == 0 && ActiveTab.Tracks.Count > 0;
+    private List<AudioTrack> TargetTracks() => ActivePane.Selected();
 
     // ══ Titelleiste ══════════════════════════════════════════════
 
@@ -684,6 +681,12 @@ public sealed partial class MainWindow : Window
 
         if (selectFile is not null)
             tab.SelectedPaths.Add(selectFile);
+
+        if (_quickSelectAll)
+        {
+            _quickSelectAll = false;
+            tab.SelectedPaths.AddRange(tab.Tracks.Select(t => t.Path));
+        }
 
         PaneFor(tab)?.Refresh();
         // Kein Pfad in der Statuszeile: Der steht oben in der Pfadleiste, und

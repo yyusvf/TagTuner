@@ -96,11 +96,20 @@ public sealed partial class MainWindow
     {
         if (App.Launch.File is { Length: > 0 } file)
             TopTab.Only = new(StringComparer.OrdinalIgnoreCase) { file };
+        else
+            _quickSelectAll = true;
     }
+
+    /// <summary>
+    /// Aus einem Ordner geöffnet: Gemeint ist der ganze Ordner. Die Spalte
+    /// bezieht sich nur auf die Auswahl, und die Liste dazu ist hier nicht
+    /// zu sehen, also wird nach dem Einlesen alles ausgewählt.
+    /// </summary>
+    private bool _quickSelectAll;
 
     private void UpdateQuickTitle(List<AudioTrack> sel)
     {
-        QuickTitle.Text = sel.Count == 1 && !FolderScope
+        QuickTitle.Text = sel.Count == 1
             ? sel[0].FileName
             : ActiveTab.Name;
         Title = $"{QuickTitle.Text} · TagTuner";

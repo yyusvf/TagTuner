@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Alt klasörleri tara",
         ["Searching…"] = "Aranıyor…",
         ["Select all"] = "Tümünü seç",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Düzenlemek için şarkıları seç. Ctrl+A hepsini seçer.",
         ["Selection"] = "Seçim",
         ["Selection: {0} × {0} pixels"] = "Seçim: {0} × {0} piksel",
         ["Set cover"] = "Kapağı ayarla",

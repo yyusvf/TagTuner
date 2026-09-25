@@ -22,7 +22,6 @@ public sealed partial class MainWindow
 
     private void UpdateMetaPanel()
     {
-        var folderScope = FolderScope;
         var sel = TargetTracks();
         _suppressSelection = true;
 
@@ -32,13 +31,11 @@ public sealed partial class MainWindow
 
         // Titel und Track sind je Datei verschieden — für mehrere Dateien
         // gleichzeitig gibt es da nichts Sinnvolles zu schreiben.
-        var single = any && !folderScope && sel.Count == 1;
+        var single = sel.Count == 1;
         FTitle.IsEnabled = FTrack.IsEnabled = single;
 
-        MetaHead.Text = folderScope
-            ? Strings.T("METADATA: {0}, {1} TRACKS", ActiveTab.Name, sel.Count)
-            : sel.Count > 1 ? Strings.T("METADATA: {0} TRACKS", sel.Count)
-                            : Strings.T("METADATA");
+        MetaHead.Text = sel.Count > 1 ? Strings.T("METADATA: {0} TRACKS", sel.Count)
+                                      : Strings.T("METADATA");
         if (Quick) UpdateQuickTitle(sel);
 
         if (!any)
@@ -170,7 +167,7 @@ public sealed partial class MainWindow
 
         if (sel.Count > 1)
         {
-            Row(Strings.T(FolderScope ? "Folder" : "Selection"),
+            Row(Strings.T("Selection"),
                 Strings.T("{0} files", sel.Count));
 
             var total = TimeSpan.FromTicks(sel.Sum(t => t.Duration.Ticks));
@@ -209,11 +206,12 @@ public sealed partial class MainWindow
     /// <summary>Sagt vorher an, was „Anwenden" tun würde.</summary>
     private void UpdatePlan()
     {
-        var folderScope = FolderScope;
         var sel = TargetTracks();
         if (sel.Count == 0)
         {
-            PlanText.Text = Strings.T("Nothing selected.");
+            PlanText.Text = ActiveTab.Tracks.Count > 0
+                ? Strings.T("Select songs to edit them. Ctrl+A selects all.")
+                : Strings.T("Nothing selected.");
             ApplyBtn.IsEnabled = false;
             return;
         }
@@ -233,9 +231,7 @@ public sealed partial class MainWindow
                 jobs.Add(Strings.T("bring to {0}", FormatRate(hz)));
         }
 
-        var was = folderScope
-            ? Strings.T("Folder ({0} file(s))", sel.Count)
-            : Strings.T("{0} file(s)", sel.Count);
+        var was = Strings.T("{0} file(s)", sel.Count);
 
         ApplyBtn.IsEnabled = jobs.Count > 0;
         PlanText.Text = jobs.Count > 0
@@ -283,18 +279,10 @@ public sealed partial class MainWindow
 
     private async void OnApply(object sender, RoutedEventArgs e)
     {
-        var folderScope = FolderScope;
         var sel = TargetTracks();
         if (sel.Count == 0) return;
 
-        if (folderScope && !await Confirm(Strings.T("Apply to the whole folder"),
-                Strings.T("Nothing is selected. The change affects all {0} files in \"{1}\".",
-                          sel.Count, ActiveTab.Name)
-                + "\n\n" + Strings.T("Each file is backed up first."),
-                Strings.T("Apply to all")))
-            return;
-
-        var edit = BuildTagEdit(!folderScope && sel.Count == 1);
+        var edit = BuildTagEdit(sel.Count == 1);
         var wantFormat = FFormat.SelectedItem as string;
         var wantRate = FRate.SelectedIndex >= 0 ? Rates[FRate.SelectedIndex] : (int?)null;
 

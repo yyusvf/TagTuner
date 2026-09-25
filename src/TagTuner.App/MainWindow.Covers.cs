@@ -38,8 +38,7 @@ public sealed partial class MainWindow
         var targets = TargetTracks();
         if (targets.Count == 0) return;
 
-        var scope = FolderScope ? Strings.T("Folder ({0})", targets.Count)
-                                : targets.Count.ToString();
+        var scope = targets.Count.ToString();
         var many = targets.Count > 1;
         var hasCover = _cover is not null;
 

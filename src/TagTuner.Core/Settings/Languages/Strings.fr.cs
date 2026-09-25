@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Parcourir les sous-dossiers",
         ["Searching…"] = "Recherche…",
         ["Select all"] = "Tout sélectionner",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Sélectionnez des morceaux pour les modifier. Ctrl+A sélectionne tout.",
         ["Selection"] = "Sélection",
         ["Selection: {0} × {0} pixels"] = "Sélection : {0} × {0} pixels",
         ["Set cover"] = "Définir la pochette",

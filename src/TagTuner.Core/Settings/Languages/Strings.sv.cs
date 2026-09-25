@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Genomsök undermappar",
         ["Searching…"] = "Söker…",
         ["Select all"] = "Markera alla",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Markera låtar för att redigera dem. Ctrl+A markerar alla.",
         ["Selection"] = "Markering",
         ["Selection: {0} × {0} pixels"] = "Utsnitt: {0} × {0} pixlar",
         ["Set cover"] = "Ange omslag",

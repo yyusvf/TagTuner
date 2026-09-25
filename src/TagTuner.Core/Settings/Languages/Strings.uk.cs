@@ -363,6 +363,7 @@ public static partial class Strings
         ["Search subfolders"] = "Переглянути вкладені теки",
         ["Searching…"] = "Пошук…",
         ["Select all"] = "Вибрати все",
+        ["Select songs to edit them. Ctrl+A selects all."] = "Виберіть треки, щоб змінити їх. Ctrl+A вибирає всі.",
         ["Selection"] = "Вибір",
         ["Selection: {0} × {0} pixels"] = "Фрагмент: {0} × {0} пікселів",
         ["Set cover"] = "Задати обкладинку",
