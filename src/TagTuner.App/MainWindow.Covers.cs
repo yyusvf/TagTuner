@@ -48,6 +48,13 @@ public sealed partial class MainWindow
         menu.Items.Add(Item("\uEB9F", many ? Strings.T("Set cover for {0}…", scope) : Strings.T("Set cover…"),
             true, () => Run(() => SetFromFileAsync(targets))));
 
+        // Dieselbe Auswahl wie „Cover für alle setzen": alle Cover, die im
+        // Ordner schon vorkommen. Gesetzt wird aber nur für das, worauf sich
+        // die Spalte gerade bezieht.
+        var folder = ActiveTab.Tracks.ToList();
+        menu.Items.Add(Item("", Strings.T("Choose from this folder…"),
+            folder.Any(t => t.HasCover), () => Run(() => CoverForAllAsync(targets, folder))));
+
         menu.Items.Add(Item("\uE8C8", Strings.T("Copy cover"),
             hasCover, () => Run(CopyCoverAsync)));
 

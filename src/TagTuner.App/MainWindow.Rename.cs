@@ -223,9 +223,14 @@ public sealed partial class MainWindow
         Run(() => CoverForAllAsync(targets));
     }
 
-    private async Task CoverForAllAsync(List<AudioTrack> targets)
+    /// <param name="pool">
+    /// Woher die Cover zur Auswahl kommen. Ohne Angabe aus den Zielen selbst;
+    /// vom Cover in der Metadatenspalte aus aus dem ganzen Ordner, damit man
+    /// einem einzelnen Lied das Cover seiner Nachbarn geben kann.
+    /// </param>
+    private async Task CoverForAllAsync(List<AudioTrack> targets, IReadOnlyList<AudioTrack>? pool = null)
     {
-        var found = await Task.Run(() => DistinctCovers(targets));
+        var found = await Task.Run(() => DistinctCovers(pool ?? targets));
 
         // Vier Cover je Reihe, genau so breit, dass die Reihe die Fläche
         // füllt: Bei fester Kachelgröße passten nur drei, und rechts blieb
@@ -287,7 +292,9 @@ public sealed partial class MainWindow
 
         var dialog = new ContentDialog
         {
-            Title = Strings.T("Set cover for {0}…", targets.Count),
+            Title = targets.Count == 1
+                ? Strings.T("Set cover for \"{0}\"…", targets[0].Title is { Length: > 0 } t ? t : targets[0].FileName)
+                : Strings.T("Set cover for {0}…", targets.Count),
             Content = panel,
             PrimaryButtonText = Strings.T("Choose a file…"),
             CloseButtonText = Strings.T("Cancel"),
