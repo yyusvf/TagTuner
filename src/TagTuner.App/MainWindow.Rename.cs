@@ -70,14 +70,26 @@ public sealed partial class MainWindow
         pattern.TextChanged += (_, _) => Recalculate();
         Recalculate();
 
-        var panel = new StackPanel { Spacing = 10, Width = 460 };
-        panel.Children.Add(new TextBlock
+        // Die Platzhalter als Knöpfe: Ein Klick setzt ihn dort ein, wo die
+        // Schreibmarke steht, und ersetzt, was markiert ist.
+        var chips = new WrapPanel { HorizontalSpacing = 5, VerticalSpacing = 5 };
+        foreach (var placeholder in FileNaming.Placeholders)
         {
-            Text = string.Join("  ", FileNaming.Placeholders),
-            FontSize = 11,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Res("TextFillColorTertiaryBrush"),
-        });
+            var chip = new Button
+            {
+                Content = placeholder,
+                FontSize = 11.5,
+                FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+                Padding = new Thickness(8, 3, 8, 4),
+                MinWidth = 0,
+                MinHeight = 0,
+            };
+            chip.Click += (_, _) => InsertPlaceholder(pattern, placeholder);
+            chips.Children.Add(chip);
+        }
+
+        var panel = new StackPanel { Spacing = 10, Width = 460 };
+        panel.Children.Add(chips);
         panel.Children.Add(pattern);
         panel.Children.Add(summary);
         panel.Children.Add(new ScrollViewer
@@ -106,6 +118,20 @@ public sealed partial class MainWindow
         _settings.Save();
 
         await RunRenameAsync(plan);
+    }
+
+    /// <summary>
+    /// Setzt einen Platzhalter an der Schreibmarke ein und stellt sie dahinter,
+    /// damit der nächste Klick oder Tastendruck dort weitermacht.
+    /// </summary>
+    private static void InsertPlaceholder(TextBox box, string placeholder)
+    {
+        var start = Math.Clamp(box.SelectionStart, 0, box.Text.Length);
+        var length = Math.Clamp(box.SelectionLength, 0, box.Text.Length - start);
+
+        box.Text = box.Text.Remove(start, length).Insert(start, placeholder);
+        box.Focus(FocusState.Programmatic);
+        box.Select(start + placeholder.Length, 0);
     }
 
     /// <summary>
