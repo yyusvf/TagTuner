@@ -136,6 +136,52 @@ public sealed class HistoryStore
         if (touched) Save();
     }
 
+    /// <summary>
+    /// Holt Sicherungen, auf die der Verlauf zeigt, in den Sicherungsordner.
+    ///
+    /// Der Verlauf aus der Zeit, als die App noch LocalPrep hieß, zeigte nach
+    /// dem Umzug weiter in den alten Ordner. Diese Sicherungen sah die Liste
+    /// in den Einstellungen nie, und das Aufräumen nach Ablauf erreichte sie
+    /// auch nicht; der Verlauf bot für sie aber weiter „Rückgängig" an.
+    /// Liegt eine Sicherung schon im Ordner (die Übernahme hatte kopiert),
+    /// wird nur der Verweis umgebogen und die Kopie am alten Ort entfernt.
+    /// </summary>
+    /// <returns>Wie viele Verweise sich geändert haben.</returns>
+    public int AdoptBackups(string folder)
+    {
+        Load();
+        var changed = 0;
+
+        foreach (var f in _entries.SelectMany(e => e.Files))
+        {
+            if (f.BackupPath is not { } path) continue;
+            if (string.Equals(Path.GetDirectoryName(path), Path.TrimEndingDirectorySeparator(folder),
+                              StringComparison.OrdinalIgnoreCase)) continue;
+
+            string? target = Path.Combine(folder, Path.GetFileName(path));
+            try
+            {
+                if (File.Exists(target))
+                {
+                    if (File.Exists(path)) File.Delete(path);
+                }
+                else if (File.Exists(path))
+                {
+                    System.IO.Directory.CreateDirectory(folder);
+                    File.Move(path, target);
+                }
+                else target = null;   // nirgends mehr zu finden
+
+                f.BackupPath = target;
+                changed++;
+            }
+            catch { /* bleibt, wo es ist; beim nächsten Start wieder versucht */ }
+        }
+
+        if (changed > 0) Save();
+        return changed;
+    }
+
     public UndoResult Undo(string id)
     {
         Load();

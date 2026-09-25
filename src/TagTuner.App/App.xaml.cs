@@ -80,8 +80,13 @@ public partial class App : Application
         {
             var settings = AppSettings.Load();
             var store = new BackupStore(settings.ResolvedBackupFolder);
+            var history = new HistoryStore();
+
+            // Erst alles in den einen Ordner, dann gilt für alles dieselbe Frist.
+            history.AdoptBackups(store.Folder);
+
             var expired = store.DeleteExpired(settings.BackupRetention);
-            if (expired.Count > 0) new HistoryStore().ForgetBackups(expired);
+            if (expired.Count > 0) history.ForgetBackups(expired);
         }
         catch { /* Aufräumen ist Nebensache und darf den Start nicht verhindern */ }
     }

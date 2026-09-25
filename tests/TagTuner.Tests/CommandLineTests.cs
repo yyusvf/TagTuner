@@ -39,3 +39,42 @@ public class HistorySharingTests
                      new HistoryStore().Entries.Select(e => e.Description));
     }
 }
+
+/// <summary>
+/// Sicherungen außerhalb des Sicherungsordners, etwa noch aus der Zeit als
+/// LocalPrep, kommen beim Start dorthin, wo Liste und Aufräumen sie sehen.
+/// </summary>
+public class AdoptBackupsTests
+{
+    [Fact]
+    public void Moves_stray_backups_and_repoints_the_history()
+    {
+        using var ws = new Workspace();
+        var folder = ws.PathTo("Backups");
+        var old = ws.PathTo("LocalPrep", "Backups");
+        Directory.CreateDirectory(old);
+        Directory.CreateDirectory(folder);
+
+        var stray = Path.Combine(old, "a.mp3_20260917-014251-134.bak");
+        var copied = Path.Combine(old, "b.mp3_20260917-014304-791.bak");
+        File.WriteAllText(stray, "a");
+        File.WriteAllText(copied, "b");
+        File.WriteAllText(Path.Combine(folder, Path.GetFileName(copied)), "b");
+
+        var history = new HistoryStore();
+        history.Add("batch", "old", [
+            new HistoryFile { Original = ws.PathTo("a.mp3"), BackupPath = stray },
+            new HistoryFile { Original = ws.PathTo("b.mp3"), BackupPath = copied },
+            new HistoryFile { Original = ws.PathTo("c.mp3"), BackupPath = Path.Combine(old, "gone.bak") },
+        ]);
+
+        Assert.Equal(3, history.AdoptBackups(folder));
+
+        var files = new HistoryStore().Entries[0].Files;
+        Assert.Equal(Path.Combine(folder, Path.GetFileName(stray)), files[0].BackupPath);
+        Assert.Equal(Path.Combine(folder, Path.GetFileName(copied)), files[1].BackupPath);
+        Assert.Null(files[2].BackupPath);
+        Assert.Empty(Directory.GetFiles(old));
+        Assert.Equal(2, Directory.GetFiles(folder).Length);
+    }
+}
