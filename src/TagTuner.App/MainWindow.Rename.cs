@@ -227,16 +227,23 @@ public sealed partial class MainWindow
     {
         var found = await Task.Run(() => DistinctCovers(targets));
 
-        var gallery = new WrapPanel { HorizontalSpacing = 8, VerticalSpacing = 8 };
+        // Vier Cover je Reihe, genau so breit, dass die Reihe die Fläche
+        // füllt: Bei fester Kachelgröße passten nur drei, und rechts blieb
+        // ein Streifen leer. Rechts bleibt Platz für die Laufleiste.
+        const double width = 460, scrollbar = 12, gap = 8, columns = 4;
+        var tile = Math.Floor((width - scrollbar - gap * (columns - 1)) / columns);
+        var image = tile - 8;   // Innenabstand und Rand des Knopfes
+
+        var gallery = new WrapPanel { HorizontalSpacing = gap, VerticalSpacing = gap };
         AudioProbe.Cover? picked = null;
         ContentDialog? host = null;
 
         foreach (var cover in found)
         {
-            var picture = new Image { Stretch = Stretch.UniformToFill, Width = 96, Height = 96 };
+            var picture = new Image { Stretch = Stretch.UniformToFill, Width = image, Height = image };
             try
             {
-                var bitmap = new BitmapImage { DecodePixelWidth = 192 };
+                var bitmap = new BitmapImage { DecodePixelWidth = (int)(image * 2) };
                 using var stream = new MemoryStream(cover.Data);
                 bitmap.SetSource(stream.AsRandomAccessStream());
                 picture.Source = bitmap;
@@ -247,6 +254,8 @@ public sealed partial class MainWindow
             {
                 Padding = new Thickness(3),
                 CornerRadius = new CornerRadius(5),
+                Width = tile,
+                Height = tile,
                 Content = picture,
             };
             ToolTipService.SetToolTip(choice,
@@ -257,7 +266,7 @@ public sealed partial class MainWindow
             gallery.Children.Add(choice);
         }
 
-        var panel = new StackPanel { Spacing = 12, Width = 430 };
+        var panel = new StackPanel { Spacing = 12, Width = width };
         panel.Children.Add(new TextBlock
         {
             FontSize = 12,
@@ -269,7 +278,12 @@ public sealed partial class MainWindow
         });
 
         if (found.Count > 0)
-            panel.Children.Add(new ScrollViewer { MaxHeight = 320, Content = gallery });
+            panel.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 2 * tile + gap + tile / 2,   // zweieinhalb Reihen: Man sieht, dass es weitergeht
+                Padding = new Thickness(0, 0, scrollbar, 0),
+                Content = gallery,
+            });
 
         var dialog = new ContentDialog
         {
