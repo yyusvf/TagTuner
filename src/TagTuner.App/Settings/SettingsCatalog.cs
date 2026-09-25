@@ -391,21 +391,55 @@ internal static class SettingsCatalog
             onlyAudio);
 
         // ── Eigene Wurzeln ───────────────────────────────────────
+        // Jeder Ordner eine eigene Zeile mit seinen Knöpfen, wie bei den
+        // ausgeblendeten darunter: Man sieht, was man anfasst, statt erst
+        // eine Zeile in einer Liste zu markieren.
         yield return Heading("Your folders");
 
-        var list = new ListView
-        {
-            SelectionMode = ListViewSelectionMode.Single,
-            MaxHeight = 190,
-        };
+        var roots = new StackPanel { Spacing = 4 };
+        var hidden = new StackPanel { Spacing = 4 };
+        Button restoreAll = null!;   // gleich unten, braucht LibraryChanged
 
         void RefreshRoots()
         {
-            var at = list.SelectedIndex;
-            list.ItemsSource = c.Settings.LibraryPaths.ToList();
-            list.SelectedIndex = Math.Min(at, c.Settings.LibraryPaths.Count - 1);
+            roots.Children.Clear();
+            var paths = c.Settings.LibraryPaths;
+            if (paths.Count == 0)
+            {
+                roots.Children.Add(Row("\uE8B7", "No folders of your own yet.",
+                    "Add one here or with the + above the library.", null));
+                return;
+            }
+
+            for (var i = 0; i < paths.Count; i++)
+            {
+                var at = i;
+                var up = IconButton("\uE74A", "Up", () => MoveRoot(at, -1));
+                var down = IconButton("\uE74B", "Down", () => MoveRoot(at, 1));
+                // Wo es nicht weitergeht, fehlt der Pfeil, statt grau dazustehen;
+                // unsichtbar statt weg, damit die Knöpfe untereinander fluchten.
+                up.IsEnabled = at > 0;
+                down.IsEnabled = at < paths.Count - 1;
+                up.Opacity = up.IsEnabled ? 1 : 0;
+                down.Opacity = down.IsEnabled ? 1 : 0;
+
+                roots.Children.Add(FolderRow("\uE8B7", paths[i],
+                    Buttons(up, down, IconButton("\uE711", "Remove from the library", () =>
+                    {
+                        c.Settings.LibraryPaths.RemoveAt(at);
+                        LibraryChanged();
+                    }))));
+            }
         }
-        RefreshRoots();
+
+        void MoveRoot(int at, int by)
+        {
+            var to = at + by;
+            var paths = c.Settings.LibraryPaths;
+            if (to < 0 || to >= paths.Count) return;
+            (paths[at], paths[to]) = (paths[to], paths[at]);
+            LibraryChanged();
+        }
 
         var addBtn = AsyncAction("Add folder…", async () =>
         {
@@ -420,70 +454,98 @@ internal static class SettingsCatalog
                     string.Equals(p, folder.Path, StringComparison.OrdinalIgnoreCase)))
                 return;
 
+            // Wer einen ausgeblendeten Ordner selbst wieder hinzufügt, will ihn sehen.
+            c.Settings.HiddenRoots.RemoveAll(p =>
+                string.Equals(p, folder.Path, StringComparison.OrdinalIgnoreCase));
             c.Settings.LibraryPaths.Add(folder.Path);
-            c.Save();
-            RefreshRoots();
-            c.Changed("library");
+            LibraryChanged();
         });
-
-        var removeBtn = Action("Remove", () =>
-        {
-            var at = list.SelectedIndex;
-            if (at < 0 || at >= c.Settings.LibraryPaths.Count) return;
-
-            c.Settings.LibraryPaths.RemoveAt(at);
-            c.Save();
-            RefreshRoots();
-            c.Changed("library");
-        });
-
-        // Die Reihenfolge ist die im Baum. Hoch und runter statt Ziehen:
-        // In einer Liste von drei Einträgen ist Ziehen mehr Aufwand.
-        void Move(int by)
-        {
-            var at = list.SelectedIndex;
-            var to = at + by;
-            if (at < 0 || to < 0 || to >= c.Settings.LibraryPaths.Count) return;
-
-            (c.Settings.LibraryPaths[at], c.Settings.LibraryPaths[to]) =
-                (c.Settings.LibraryPaths[to], c.Settings.LibraryPaths[at]);
-
-            c.Save();
-            RefreshRoots();
-            list.SelectedIndex = to;
-            c.Changed("library");
-        }
 
         yield return Row("\uE8F1", "Folders in the library",
             "Music, Downloads, your user folder and the drives are always there and are found fresh " +
-            "on every start. Only folders you added yourself are listed here.",
+            "on every start. Folders you add yourself are listed below, in the order of the library.",
             addBtn);
-        yield return Panel(
-            list,
-            Buttons(removeBtn, Action("Up", () => Move(-1)), Action("Down", () => Move(1))));
+        yield return roots;
 
         // ── Ausgeblendete ────────────────────────────────────────
+        // Einzeln zurückholen; alle auf einmal nur, wenn es mehrere sind.
         yield return Heading("Hidden folders");
 
-        string Hidden() => c.Settings.HiddenRoots.Count == 0
-            ? Strings.T("Nothing is hidden.")
-            : string.Join(Environment.NewLine, c.Settings.HiddenRoots);
-
-        var restore = new Button
-        {
-            Content = Strings.T("Show hidden again"),
-            IsEnabled = c.Settings.HiddenRoots.Count > 0,
-        };
-        var hiddenRow = Row("\uE7B3", "Hidden folders", Hidden(), restore);
-        restore.Click += (_, _) =>
+        restoreAll = Action("Show all again", () =>
         {
             c.Settings.HiddenRoots.Clear();
+            LibraryChanged();
+        });
+
+        void RefreshHidden()
+        {
+            hidden.Children.Clear();
+            var paths = c.Settings.HiddenRoots;
+            restoreAll.Visibility = paths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+
+            if (paths.Count == 0)
+            {
+                hidden.Children.Add(Row("\uE7B3", "Nothing is hidden.",
+                    "Music, Downloads, your user folder or a drive that you remove from the library shows up here.",
+                    null));
+                return;
+            }
+
+            hidden.Children.Add(Row("\uE7B3", "Hidden from the library",
+                "They stay on disk and are only left out of the library.", restoreAll));
+
+            foreach (var path in paths.ToList())
+            {
+                hidden.Children.Add(FolderRow("\uED1A", path, Action("Show again", () =>
+                {
+                    c.Settings.HiddenRoots.Remove(path);
+                    LibraryChanged();
+                })));
+            }
+        }
+
+        void LibraryChanged()
+        {
             c.Save();
-            Describe(hiddenRow, Strings.T("The hidden folders are back"));
-            restore.IsEnabled = false;
+            RefreshRoots();
+            RefreshHidden();
             c.Changed("library");
+        }
+
+        RefreshRoots();
+        RefreshHidden();
+        yield return hidden;
+    }
+
+    /// <summary>
+    /// Ein Ordner als Zeile: sein Name groß, der ganze Pfad klein darunter.
+    /// Laufwerke wie „D:\" haben keinen Namen, dann steht der Pfad oben.
+    /// </summary>
+    private static Border FolderRow(string glyph, string path, FrameworkElement control)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        var row = string.IsNullOrEmpty(name)
+            ? Row(glyph, path, null, control)
+            : Row(glyph, name, path, control);
+        ToolTipService.SetToolTip(row, path);
+        return row;
+    }
+
+    /// <summary>Ein flacher Knopf mit nur einem Symbol; der Text steht im Tooltip.</summary>
+    private static Button IconButton(string glyph, string tip, Action run)
+    {
+        var button = new Button
+        {
+            Content = new FontIcon { Glyph = glyph, FontSize = 13 },
+            Width = 34,
+            Height = 32,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
         };
-        yield return hiddenRow;
+        ToolTipService.SetToolTip(button, Strings.T(tip));
+        button.Click += (_, _) => run();
+        return button;
     }
 
     // ══ Tags ═════════════════════════════════════════════════════
