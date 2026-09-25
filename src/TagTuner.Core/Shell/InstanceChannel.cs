@@ -23,11 +23,11 @@ public static class InstanceChannel
     /// Schickt die Befehlszeile an ein laufendes TagTuner. Wahr heißt: Es
     /// wurde angenommen, dieser Prozess hat nichts mehr zu tun.
     /// </summary>
-    public static bool Send(IReadOnlyList<string> args, int timeoutMs = 500)
+    public static bool Send(IReadOnlyList<string> args, int timeoutMs = 500, string? name = null)
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", Name, PipeDirection.Out);
+            using var client = new NamedPipeClientStream(".", name ?? Name, PipeDirection.Out);
 
             // Kurz halten: Läuft nichts, soll der Start nicht darauf warten.
             client.Connect(timeoutMs);
@@ -51,7 +51,7 @@ public static class InstanceChannel
     /// Rückruf kommt auf einem Hintergrundstrang; wer eine Oberfläche
     /// bedient, muss selbst auf deren Strang wechseln.
     /// </summary>
-    public static void Listen(Action<LaunchTarget> handle, CancellationToken ct = default)
+    public static void Listen(Action<LaunchTarget> handle, CancellationToken ct = default, string? name = null)
     {
         _ = Task.Run(async () =>
         {
@@ -60,7 +60,7 @@ public static class InstanceChannel
                 try
                 {
                     using var server = new NamedPipeServerStream(
-                        Name, PipeDirection.In, 1,
+                        name ?? Name, PipeDirection.In, 1,
                         PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
                     await server.WaitForConnectionAsync(ct);

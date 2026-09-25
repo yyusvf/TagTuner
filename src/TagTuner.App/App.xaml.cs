@@ -30,6 +30,24 @@ public partial class App : Application
         AudioProbe.Configure();
 
         var line = Environment.GetCommandLineArgs().Skip(1).ToList();
+        Launch = CommandLine.Parse(line);
+
+        // „Metadaten bearbeiten" aus dem Explorer: ein eigenes kleines
+        // Fenster, kein Tab im Hauptfenster. Mehrere markierte Dateien
+        // landen im selben.
+        if (Launch.Edit)
+        {
+            if (QuickEdit.HandOff(line))
+            {
+                Environment.Exit(0);
+                return;
+            }
+
+            _window = new MainWindow();
+            QuickEdit.Collect(_window.DispatcherQueue);
+            _window.Activate();
+            return;
+        }
 
         // Laeuft schon ein TagTuner, bekommt es den Pfad und macht einen Tab
         // daraus. Dieser Prozess endet dann sofort: Zwei Fenster auf denselben
@@ -42,9 +60,11 @@ public partial class App : Application
             return;
         }
 
-        Launch = CommandLine.Parse(line);
-
         CleanUpBackups();
+
+        // Nach einem Update mit neuem Aufbau des Kontextmenüs, einem Umzug
+        // oder einem Sprachwechsel stimmen die Einträge sonst nicht mehr.
+        ContextMenuRegistration.Refresh(Environment.ProcessPath!);
 
         _window = new MainWindow();
         _window.Activate();

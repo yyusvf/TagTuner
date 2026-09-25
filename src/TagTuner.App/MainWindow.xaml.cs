@@ -83,8 +83,9 @@ public sealed partial class MainWindow : Window
         // es in der Vorschau über der Taskleiste und bei Alt+Tab.
         var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "TagTuner.ico");
         if (File.Exists(icon)) AppWindow.SetIcon(icon);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(
-            (int)_settings.WindowWidth, (int)_settings.WindowHeight));
+        if (!Quick)
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(
+                (int)_settings.WindowWidth, (int)_settings.WindowHeight));
 
         _activePane = PaneA;
         foreach (var pane in new[] { PaneA, PaneB }) WirePane(pane);
@@ -95,6 +96,7 @@ public sealed partial class MainWindow : Window
         TreeCol.Width = new GridLength(_settings.TreeWidth);
         SideCol.Width = new GridLength(_settings.SideWidth);
         ApplyColumns();
+        if (Quick) EnterQuickMode();
 
         FFormat.ItemsSource = AudioFormats.Targets;
         FRate.ItemsSource = Rates.Select(FormatRate).ToList();
@@ -132,6 +134,16 @@ public sealed partial class MainWindow : Window
 
         RebuildChrome();
         _ = LoadTabAsync(ActiveTab, App.Launch.File);
+
+        // Das kleine Fenster aus dem Explorer ist gleich wieder zu. Es sucht
+        // keine Updates, nimmt keine weiteren Starts an und merkt sich nichts
+        // von seiner Größe: Das alles gehört dem Hauptfenster.
+        if (Quick)
+        {
+            QuickEdit.FileAdded += AddQuickFile;
+            Closed += (_, _) => _player.Dispose();
+            return;
+        }
 
         Fire(CheckForUpdatesAsync(), Strings.T("Updates"));
 

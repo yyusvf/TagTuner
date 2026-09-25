@@ -50,16 +50,29 @@ public sealed class HistoryStore
 
     private List<HistoryEntry> _entries = [];
 
-    public IReadOnlyList<HistoryEntry> Entries => _entries;
+    /// <summary>Wann die Datei zuletzt gelesen oder geschrieben wurde.</summary>
+    private DateTime _stamp;
+
+    public IReadOnlyList<HistoryEntry> Entries { get { Load(); return _entries; } }
 
     public HistoryStore() => Load();
 
+    /// <summary>
+    /// Liest die Datei, wenn sie sich seit dem letzten Mal geändert hat.
+    ///
+    /// Auch ein anderer Prozess schreibt hinein: das kleine Fenster zum
+    /// Bearbeiten aus dem Explorer. Ohne das Nachlesen überschriebe das
+    /// Hauptfenster dessen Einträge mit seinem alten Stand.
+    /// </summary>
     private void Load()
     {
         try
         {
-            if (File.Exists(FilePath))
-                _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(
+            var stamp = File.Exists(FilePath) ? File.GetLastWriteTimeUtc(FilePath) : default;
+            if (stamp == _stamp) return;
+            _stamp = stamp;
+            _entries = stamp == default ? [] :
+                JsonSerializer.Deserialize<List<HistoryEntry>>(
                     File.ReadAllText(FilePath), JsonOpts) ?? [];
         }
         catch { _entries = []; }
@@ -71,6 +84,7 @@ public sealed class HistoryStore
         {
             System.IO.Directory.CreateDirectory(AppSettings.Directory);
             File.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
+            _stamp = File.GetLastWriteTimeUtc(FilePath);
         }
         catch { }
     }
@@ -80,6 +94,7 @@ public sealed class HistoryStore
 
     public HistoryEntry Add(string kind, string description, IEnumerable<HistoryFile> files)
     {
+        Load();
         var entry = new HistoryEntry
         {
             Kind = kind,
@@ -95,7 +110,7 @@ public sealed class HistoryStore
 
     /// <summary>Alle Sicherungspfade, auf die noch ein Eintrag zeigt.</summary>
     public IEnumerable<string> ReferencedBackups() =>
-        _entries.SelectMany(e => e.Files)
+        Entries.SelectMany(e => e.Files)
                 .Select(f => f.BackupPath)
                 .Where(p => p is not null)!;
 
@@ -105,6 +120,7 @@ public sealed class HistoryStore
     /// </summary>
     public void ForgetBackups(IEnumerable<string> paths)
     {
+        Load();
         var gone = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
         if (gone.Count == 0) return;
 
@@ -122,6 +138,7 @@ public sealed class HistoryStore
 
     public UndoResult Undo(string id)
     {
+        Load();
         var entry = _entries.FirstOrDefault(e => e.Id == id)
             ?? throw new InvalidOperationException(Strings.T("Entry not found."));
 
@@ -161,7 +178,7 @@ public sealed class HistoryStore
     /// <summary>Der Eintrag und die Datei darin, zu der eine Sicherung gehört.</summary>
     public (HistoryEntry Entry, HistoryFile File)? Find(string backupPath)
     {
-        foreach (var entry in _entries)
+        foreach (var entry in Entries)
             foreach (var file in entry.Files)
                 if (string.Equals(file.BackupPath, backupPath, StringComparison.OrdinalIgnoreCase))
                     return (entry, file);
@@ -182,6 +199,7 @@ public sealed class HistoryStore
     /// </param>
     public List<HistoryFile> Restore(string backupPath, BackupStore store, string? target = null)
     {
+        Load();
         if (!File.Exists(backupPath))
             throw new InvalidOperationException(Strings.T("The backup no longer exists."));
 
@@ -222,6 +240,7 @@ public sealed class HistoryStore
 
     public void Clear()
     {
+        Load();
         _entries.Clear();
         Save();
     }

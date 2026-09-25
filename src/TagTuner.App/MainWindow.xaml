@@ -35,7 +35,7 @@
                    Source="ms-appx:///Assets/TagTuner.png" />
 
             <!-- Navigation -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1"
+            <StackPanel Grid.Column="1" x:Name="NavBar" Orientation="Horizontal" Spacing="1"
                         VerticalAlignment="Center" Margin="4,0,2,0">
                 <Button x:Name="BackBtn" Content="&#xE72B;" Click="OnBack"
                         FontFamily="Segoe Fluent Icons" FontSize="12"
@@ -89,7 +89,14 @@
                 </StackPanel>
             </Grid>
 
-            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4"
+            <!-- Im kleinen Fenster aus dem Explorer steht hier nur, was
+                 bearbeitet wird, statt Pfad, Tabs und Werkzeugen. -->
+            <TextBlock Grid.Column="2" x:Name="QuickTitle" Visibility="Collapsed"
+                       FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <StackPanel Grid.Column="4" x:Name="TabBar" Orientation="Horizontal" Spacing="4"
                         VerticalAlignment="Center">
                 <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="3" />
                 <Button x:Name="AddTabBtn" Content="&#xE710;" Click="OnAddTab"
@@ -100,7 +107,7 @@
             </StackPanel>
 
             <!-- Werkzeuge -->
-            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
+            <StackPanel Grid.Column="5" x:Name="ToolBar" Orientation="Horizontal" Spacing="2"
                         VerticalAlignment="Center" Margin="4,0,0,0">
                 <Button x:Name="SplitBtn" Content="&#xE745;" Click="OnToggleSplit"
                         FontFamily="Segoe Fluent Icons" FontSize="13"
@@ -560,7 +567,7 @@
         </Grid>
 
         <!-- ══ Statusleiste ═════════════════════════════════════════ -->
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" Padding="10,0,12,0"
+        <Grid Grid.Row="2" x:Name="StatusBar" ColumnDefinitions="Auto,*,Auto,Auto" Padding="10,0,12,0"
               ColumnSpacing="12"
               BorderThickness="0,1,0,0"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">

@@ -39,6 +39,7 @@ public sealed partial class MainWindow
             ? Strings.T("METADATA: {0}, {1} TRACKS", ActiveTab.Name, sel.Count)
             : sel.Count > 1 ? Strings.T("METADATA: {0} TRACKS", sel.Count)
                             : Strings.T("METADATA");
+        if (Quick) UpdateQuickTitle(sel);
 
         if (!any)
         {
@@ -297,7 +298,7 @@ public sealed partial class MainWindow
         var wantFormat = FFormat.SelectedItem as string;
         var wantRate = FRate.SelectedIndex >= 0 ? Rates[FRate.SelectedIndex] : (int?)null;
 
-        await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel, track =>
+        var ok = await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel, track =>
         {
             var convert =
                 (wantFormat is not null &&
@@ -306,6 +307,10 @@ public sealed partial class MainWindow
                 || (wantRate is int hz && track.SampleRate != hz);
             return (convert, wantFormat, wantRate, edit);
         });
+
+        // Das kleine Fenster aus dem Explorer hat seine Aufgabe erledigt.
+        // Bei Fehlern bleibt es offen, damit man es noch einmal versuchen kann.
+        if (ok && Quick) Close();
     }
 
     private async void OnAlign(object sender, RoutedEventArgs e)
@@ -330,7 +335,8 @@ public sealed partial class MainWindow
             _ => (true, target.Format, target.SampleRate, null));
     }
 
-    private async Task RunJobAsync(
+    /// <returns>Falsch, wenn etwas nicht geklappt hat oder gar nicht erst anfing.</returns>
+    private async Task<bool> RunJobAsync(
         string label,
         IReadOnlyList<AudioTrack> tracks,
         Func<AudioTrack, (bool Convert, string? Format, int? Rate, TagEdit? Tags)> plan)
@@ -346,7 +352,7 @@ public sealed partial class MainWindow
             await Inform(Strings.T("ffmpeg is missing"),
                 Strings.T("Converting needs ffmpeg.exe. It is expected next to the "
                           + "application or in tools\\ffmpeg. tools\\fetch-ffmpeg.ps1 fetches it."));
-            return;
+            return false;
         }
 
         SetBusy(true, label);
@@ -403,5 +409,6 @@ public sealed partial class MainWindow
         SetBusy(false, null);
         await MergeTabAsync(ActiveTab);
         await ReportAsync(files.Count, errors, notes);
+        return errors.Count == 0;
     }
 }

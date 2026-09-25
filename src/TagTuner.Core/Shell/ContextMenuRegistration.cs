@@ -8,10 +8,10 @@ namespace TagTuner.Core.Shell;
 /// Der Eintrag „TagTuner" im Rechtsklick-Menü des Explorers.
 ///
 /// Schreibt ausschließlich nach HKCU — keine Administratorrechte nötig.
-/// Ein einzelner, anklickbarer Eintrag ohne Untermenü. Er öffnet den Ordner,
-/// in dem die Datei liegt, und stellt sie dort ausgewählt dar. Ein Untermenü
-/// gab es in der Electron-Fassung, weil die drei getrennte Bereiche hatte;
-/// hier ist alles ein Fenster.
+/// Ein Untermenü mit zwei Einträgen: „In TagTuner öffnen" zeigt den Ordner
+/// in der App, mit der Datei ausgewählt. „Metadaten bearbeiten" öffnet nur
+/// die Metadatenspalte in einem kleinen Fenster, das nach dem Anwenden
+/// wieder zugeht.
 /// </summary>
 public static class ContextMenuRegistration
 {
@@ -36,21 +36,31 @@ public static class ContextMenuRegistration
     }
 
     /// <summary>
-    /// Trägt den Eintrag für alle Audioformate und für Ordner ein.
+    /// Trägt die Einträge für alle Audioformate und für Ordner ein.
     /// Entfernt vorher die alten Schlüssel — ein von einer früheren Fassung
-    /// geschriebenes Untermenü bliebe sonst bestehen, egal was wir neu schreiben.
+    /// geschriebener Eintrag bliebe sonst bestehen, egal was wir neu schreiben.
     /// </summary>
     public static void Register(string exePath, string? iconPath = null)
     {
         Unregister();
 
-        var command = $"\"{exePath}\" --file=\"%1\"";
         var icon = iconPath ?? $"{exePath},0";
 
         foreach (var ext in Extensions)
-            WriteEntry(FileKey(ext), command, icon);
+            WriteMenu(FileKey(ext), icon, "--file", exePath);
 
-        WriteEntry(FolderKey, $"\"{exePath}\" --folder=\"%1\"", icon);
+        WriteMenu(FolderKey, icon, "--folder", exePath);
+    }
+
+    /// <summary>
+    /// Schreibt die Einträge neu, falls sie eingeschaltet sind: nach einem
+    /// Update mit anderem Aufbau, nach einem Umzug der App oder einem
+    /// Sprachwechsel. Wer sie ausgeschaltet hat, bekommt sie nicht zurück.
+    /// </summary>
+    public static void Refresh(string exePath)
+    {
+        try { if (IsRegistered()) Register(exePath); }
+        catch { }
     }
 
     public static void Unregister()
@@ -59,21 +69,40 @@ public static class ContextMenuRegistration
         DeleteTree(FolderKey);
     }
 
-    private static void WriteEntry(string path, string command, string icon)
+    /// <summary>
+    /// Das Untermenü. Die Unterschlüssel tragen eine Nummer im Namen, weil
+    /// der Explorer sie alphabetisch nach Schlüssel sortiert, nicht nach
+    /// Beschriftung.
+    /// </summary>
+    private static void WriteMenu(string path, string icon, string target, string exePath)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(path, writable: true)
-            ?? throw new InvalidOperationException(
-                Strings.T("The registry key {0} cannot be created.", path));
+        using var key = Create(Registry.CurrentUser, path);
+        key.SetValue("MUIVerb", Label, RegistryValueKind.String);
+        key.SetValue("Icon", icon, RegistryValueKind.String);
+        // Leer heißt: Die Einträge stehen im Unterschlüssel „shell".
+        key.SetValue("SubCommands", "", RegistryValueKind.String);
 
-        // Der Standardwert ist die Beschriftung im Menü.
-        key.SetValue(null, Label, RegistryValueKind.String);
+        using var shell = Create(key, "shell");
+        WriteEntry(shell, "1open", Strings.T("Open in TagTuner"), icon,
+                   $"\"{exePath}\" {target}=\"%1\"");
+        WriteEntry(shell, "2edit", Strings.T("Edit metadata"), icon,
+                   $"\"{exePath}\" --edit {target}=\"%1\"");
+    }
+
+    private static void WriteEntry(RegistryKey parent, string name, string label, string icon, string command)
+    {
+        using var key = Create(parent, name);
+        key.SetValue("MUIVerb", label, RegistryValueKind.String);
         key.SetValue("Icon", icon, RegistryValueKind.String);
 
-        using var cmd = key.CreateSubKey("command", writable: true)
-            ?? throw new InvalidOperationException(
-                Strings.T("The registry key {0} cannot be created.", path + "\\command"));
+        using var cmd = Create(key, "command");
         cmd.SetValue(null, command, RegistryValueKind.String);
     }
+
+    private static RegistryKey Create(RegistryKey parent, string path) =>
+        parent.CreateSubKey(path, writable: true)
+            ?? throw new InvalidOperationException(
+                Strings.T("The registry key {0} cannot be created.", parent.Name + "\\" + path));
 
     private static void DeleteTree(string path)
     {

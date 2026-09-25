@@ -1,6 +1,10 @@
 namespace TagTuner.Core.Shell;
 
-public sealed record LaunchTarget(string? File, string? Folder)
+/// <param name="Edit">
+/// Nur die Metadaten bearbeiten: ein kleines Fenster, das nach dem Anwenden
+/// wieder zugeht, statt der ganzen App.
+/// </param>
+public sealed record LaunchTarget(string? File, string? Folder, bool Edit = false)
 {
     public bool HasAny => File is not null || Folder is not null;
 
@@ -9,7 +13,7 @@ public sealed record LaunchTarget(string? File, string? Folder)
 }
 
 /// <summary>
-/// Liest --file= und --folder= aus der Kommandozeile.
+/// Liest --file=, --folder= und --edit aus der Kommandozeile.
 ///
 /// Die Werte hängen mit „=" am Schalter, nicht als eigenes Argument. In der
 /// Electron-Fassung war „--file &lt;pfad&gt;" die Form, und Chromium sortiert
@@ -25,6 +29,7 @@ public static class CommandLine
     public static LaunchTarget Parse(IReadOnlyList<string> args)
     {
         string? file = null, folder = null;
+        var edit = false;
         var loose = new List<string>();
         var bare = new List<string>();
 
@@ -36,6 +41,9 @@ public static class CommandLine
 
             if (arg.StartsWith("--folder=", StringComparison.OrdinalIgnoreCase))
             { folder = Clean(arg[9..]); continue; }
+
+            if (arg.Equals("--edit", StringComparison.OrdinalIgnoreCase))
+            { edit = true; continue; }
 
             if (arg.Equals("--file", StringComparison.OrdinalIgnoreCase) ||
                 arg.Equals("--folder", StringComparison.OrdinalIgnoreCase))
@@ -62,7 +70,7 @@ public static class CommandLine
             else if (System.IO.File.Exists(p)) file = p;
         }
 
-        return new LaunchTarget(file, folder);
+        return new LaunchTarget(file, folder, edit);
     }
 
     private static string Clean(string s) => s.Trim().Trim('"');
