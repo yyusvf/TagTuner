@@ -745,7 +745,7 @@ public sealed partial class MainWindow : Window
         // das aus, als haenge die App.
         if (recursive)
         {
-            Progress.IsIndeterminate = true;
+            _progressUnknown = true;
             ProgressTitle.Text = Strings.T("Reading…");
             ProgressNote(tab.Name);
             ShowProgress(true, 0);
@@ -755,7 +755,7 @@ public sealed partial class MainWindow : Window
             ? FolderScanner.TracksRecursive(path)
             : FolderScanner.Tracks(path)));
 
-        Progress.IsIndeterminate = false;
+        _progressUnknown = false;
         ShowProgress(false, 0);
 
         if (!string.Equals(tab.Path, path, StringComparison.OrdinalIgnoreCase))

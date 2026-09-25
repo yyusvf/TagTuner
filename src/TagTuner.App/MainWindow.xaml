@@ -94,13 +94,14 @@
                                    VerticalAlignment="Center" Visibility="Collapsed"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Border Width="140" Height="5" CornerRadius="3"
-                                VerticalAlignment="Center"
-                                Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
-                            <ProgressBar x:Name="Progress" Height="5" CornerRadius="3"
-                                         Background="Transparent"
-                                         Foreground="{StaticResource AccentBrush}" />
-                        </Border>
+                        <!-- Selbst gezeichnet statt ProgressBar: Die zieht bei 0 %
+                             eine eigene dünne Linie quer durch ihre Spur. -->
+                        <Grid x:Name="ProgressTrack" Width="260" Height="6"
+                              CornerRadius="3" VerticalAlignment="Center"
+                              Background="{ThemeResource ControlStrongFillColorDisabledBrush}">
+                            <Border x:Name="ProgressFill" HorizontalAlignment="Left" Width="0"
+                                    CornerRadius="3" Background="{StaticResource AccentBrush}" />
+                        </Grid>
                         <TextBlock x:Name="ProgressLabel" FontSize="11.5" FontFamily="{StaticResource DataFont}"
                                    MinWidth="34" TextAlignment="Right" VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

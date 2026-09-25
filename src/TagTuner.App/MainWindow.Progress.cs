@@ -11,6 +11,12 @@ namespace TagTuner.App;
 
 public sealed partial class MainWindow
 {
+    /// <summary>
+    /// Beim Einlesen ist nicht bekannt, wie weit es ist. Dann dreht nur der
+    /// Kreis, und Balken wie Prozentzahl bleiben weg.
+    /// </summary>
+    private bool _progressUnknown;
+
     /// <summary>Abstand, den die Pille in der Mitte zu Pfad und Tabs hält.</summary>
     private const double ProgressGap = 16;
 
@@ -38,10 +44,11 @@ public sealed partial class MainWindow
     {
         var appearing = busy && ProgressHost.Visibility != Visibility.Visible;
         ProgressHost.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        Progress.Value = Math.Clamp(percent, 0, 100);
-        ProgressLabel.Text = busy && !Progress.IsIndeterminate
-            ? $"{Math.Round(percent)} %"
-            : "";
+        percent = Math.Clamp(percent, 0, 100);
+        ProgressFill.Width = ProgressTrack.Width * percent / 100;
+        ProgressTrack.Visibility = _progressUnknown ? Visibility.Collapsed : Visibility.Visible;
+        ProgressLabel.Visibility = ProgressTrack.Visibility;
+        ProgressLabel.Text = busy && !_progressUnknown ? $"{Math.Round(percent)} %" : "";
 
         if (appearing) PlaceProgress();
     }
