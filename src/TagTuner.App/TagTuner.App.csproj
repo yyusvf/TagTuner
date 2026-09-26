@@ -20,7 +20,7 @@
 
     <Product>TagTuner</Product>
     <Company>yyusvf</Company>
-    <Version>0.8.4</Version>
+    <Version>0.8.5</Version>
     <Description>Lokale Audiovorbereitung — Samplerate, Format und Metadaten</Description>
   </PropertyGroup>
 
