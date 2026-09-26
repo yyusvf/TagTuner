@@ -185,6 +185,7 @@ public sealed partial class MainWindow
         pane.Activated += OnPaneActivated;
         pane.FilesDropped += OnPaneFilesDropped;
         pane.ReorderCompleted += OnPaneReordered;
+        pane.NumbersFollowOrder = tab => !tab.Recursive && _settings.RuleFor(tab.Path).WritesNumbers;
         pane.TracksMoved += OnPaneTracksMoved;
         pane.DeleteRequested += OnPaneDeleteRequested;
         pane.PlayRequested += (_, track) => _player.Play(track);

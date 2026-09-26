@@ -557,8 +557,14 @@ public sealed partial class TrackPane
         _suppress = false;
         PaintHeaders();
 
-        var renumbered = RowReorder.Renumbered(before, numbersBefore, after, numbersAfter);
-        Flash(renumbered.Select(t => Tab.Tracks.IndexOf(t)).Where(i => i >= 0));
+        // Aufleuchten heißt „diese Nummer wurde neu geschrieben". Schreibt der
+        // Ordner keine Nummern, ändert sich nur die Anzeige; dann bleibt es
+        // dunkel, sonst sähe es nach einer Änderung aus, die es nicht gibt.
+        if (NumbersFollowOrder?.Invoke(Tab) == true)
+        {
+            var renumbered = RowReorder.Renumbered(before, numbersBefore, after, numbersAfter);
+            Flash(renumbered.Select(t => Tab.Tracks.IndexOf(t)).Where(i => i >= 0));
+        }
 
         var restore = DispatcherQueue.CreateTimer();
         restore.Interval = TimeSpan.FromMilliseconds(300);

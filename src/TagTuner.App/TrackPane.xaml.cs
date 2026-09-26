@@ -95,6 +95,12 @@ public sealed partial class TrackPane : UserControl
     public bool ReadOnly { get; set; }
 
     /// <summary>
+    /// Ob das Umsortieren in diesem Ordner Track-Nummern schreibt. Nur dann
+    /// leuchten die umnummerierten Zeilen danach auf.
+    /// </summary>
+    public Func<FolderTab, bool>? NumbersFollowOrder { get; set; }
+
+    /// <summary>
     /// Die Spalten passen sich der Breite an, statt seitlich zu scrollen.
     /// Für das kleine Fenster aus dem Explorer. Die Breiten sind dann nur
     /// geliehen: Ziehen an den Spaltengrenzen ist aus, und gespeichert wird
