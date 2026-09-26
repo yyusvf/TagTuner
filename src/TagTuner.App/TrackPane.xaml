@@ -7,13 +7,16 @@
 
     <Grid RowDefinitions="Auto,Auto,*">
 
-        <!-- Kopfzeile der Hälfte: welcher Ordner, wie viele Tracks -->
+        <!-- Kopfzeile der Hälfte: welcher Ordner, wie viele Tracks. Ein Klick
+             darauf macht die Hälfte zur aktiven, in der geteilten Ansicht der
+             schnelle Weg, zwischen den Ordnern zu wechseln. -->
         <Grid Grid.Row="0" x:Name="PaneBar" ColumnDefinitions="Auto,Auto,*,Auto" Padding="18,9"
-              ColumnSpacing="8"
+              ColumnSpacing="8" Background="Transparent" Tapped="OnPaneBarTapped"
               BorderThickness="0,0,0,1"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
             <TextBlock Grid.Column="0" x:Name="FolderName" FontSize="18" FontWeight="Bold"
-                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       PointerEntered="OnFolderNameEnter" PointerExited="OnFolderNameExit" />
             <!-- Anklickbar: Es ist der Weg zurueck in den einzelnen Ordner.
                  Ein eigener Knopf in der Seitenspalte stand dafuer im Weg,
                  obwohl man ihn fast nie braucht. -->

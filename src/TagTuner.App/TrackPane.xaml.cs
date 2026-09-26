@@ -796,6 +796,29 @@ public sealed partial class TrackPane : UserControl
     private void OnGotFocus(object sender, RoutedEventArgs e) => Activated?.Invoke(this, this);
 
     /// <summary>
+    /// Klick auf die Kopfzeile: Diese Hälfte wird die aktive, und die Liste
+    /// bekommt den Fokus, damit Tastatur und Leertaste gleich hier wirken.
+    /// „Alle wählen" und das Unterordner-Abzeichen machen ihr Eigenes.
+    /// </summary>
+    private void OnPaneBarTapped(object sender, TappedRoutedEventArgs e)
+    {
+        for (var node = e.OriginalSource as DependencyObject; node is not null && node != PaneBar;
+             node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase || node == ScopeBadge) return;
+        }
+
+        Activated?.Invoke(this, this);
+        if (WideScroll.Visibility == Visibility.Visible) List.Focus(FocusState.Pointer);
+    }
+
+    /// <summary>Über dem Ordnernamen zeigt die Hand, dass er anklickbar ist.</summary>
+    private void OnFolderNameEnter(object sender, PointerRoutedEventArgs e) =>
+        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+
+    private void OnFolderNameExit(object sender, PointerRoutedEventArgs e) => ProtectedCursor = null;
+
+    /// <summary>
     /// Leertaste spielt die Auswahl ab. Die Liste würde damit sonst die
     /// Markierung umschalten, darum wird das Ereignis hier abgefangen.
     /// </summary>
