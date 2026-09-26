@@ -109,21 +109,17 @@ internal static class SettingsCatalog
         // ── App ──────────────────────────────────────────────────
         yield return Heading("App");
 
-        var language = new ComboBox
-        {
-            MinWidth = 200,
-
-            // Unübersetzt: Jede Sprache nennt sich selbst. Wer Türkisch
-            // sucht, sucht nach „Türkçe".
-            ItemsSource = Strings.SupportedNames.ToList(),
-            SelectedIndex = Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
-        };
-        language.SelectionChanged += (_, _) =>
-        {
-            if (language.SelectedIndex < 0) return;
-            c.Settings.Language = Strings.Supported[language.SelectedIndex];
-            c.Save();
-        };
+        // Unübersetzt: Jede Sprache nennt sich selbst. Wer Türkisch sucht,
+        // sucht nach „Türkçe".
+        var language = Dropdown(
+            Strings.SupportedNames.ToList(),
+            Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
+            i =>
+            {
+                c.Settings.Language = Strings.Supported[i];
+                c.Save();
+            });
+        language.MinWidth = 200;
         yield return Row("\uE774", "Language", "Takes effect after a restart.", language);
 
         var updates = Choice(
