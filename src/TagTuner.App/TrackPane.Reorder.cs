@@ -90,7 +90,6 @@ public sealed partial class TrackPane
     private RowDrag? _rowDrag;
     private DispatcherQueueTimer? _scrollTimer;
     private ScrollViewer? _listScroll;
-    private TransitionCollection? _savedTransitions;
 
     /// <summary>
     /// Ob sich die Liste gerade per Hand umsortieren lässt. Nur in der
@@ -515,12 +514,6 @@ public sealed partial class TrackPane
     {
         if (Tab is null) return;
 
-        // Die Liste hätte sonst ihr eigenes Gleiten für verschobene Zeilen:
-        // von der alten Stelle aus, an der die Zeile gar nicht mehr zu sehen
-        // war. Einen Augenblick ohne, bis die Liste neu gelegt ist.
-        _savedTransitions ??= List.ItemContainerTransitions;
-        List.ItemContainerTransitions = new TransitionCollection();
-
         foreach (var container in RealizedContainers()) ResetRow(container);
 
         var before = items.OfType<AudioTrack>().ToList();
@@ -565,19 +558,6 @@ public sealed partial class TrackPane
             var renumbered = RowReorder.Renumbered(before, numbersBefore, after, numbersAfter);
             Flash(renumbered.Select(t => Tab.Tracks.IndexOf(t)).Where(i => i >= 0));
         }
-
-        var restore = DispatcherQueue.CreateTimer();
-        restore.Interval = TimeSpan.FromMilliseconds(300);
-        restore.IsRepeating = false;
-        restore.Tick += (_, _) =>
-        {
-            if (_savedTransitions is { } saved && _rowDrag is null)
-            {
-                List.ItemContainerTransitions = saved;
-                _savedTransitions = null;
-            }
-        };
-        restore.Start();
 
         ReorderCompleted?.Invoke(this, this);
     }

@@ -702,6 +702,13 @@ public sealed partial class TrackPane : UserControl
         InitializeComponent();
         HookRowDrag();
 
+        // Ohne die eingebauten Übergänge der Liste. Die ließen verschobene
+        // Zeilen noch einmal von ihrer alten Stelle aus gleiten, obwohl das
+        // eigene Ziehen sie schon hingebracht hat. Sie nur kurz abzuschalten
+        // und wieder einzusetzen blendete jedes Mal alle Zeilen neu ein: Die
+        // ganze Liste flackerte hell auf, wenn man mehrmals hin und her zog.
+        List.ItemContainerTransitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
+
         // Zieht jemand eine Spalte breiter, muss der Bereich mitwachsen,
         // sonst verschwindet ihr rechter Teil hinter dem Fensterrand.
         Columns.PropertyChanged += (_, _) => UpdateWidth();
