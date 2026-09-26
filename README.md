@@ -3,7 +3,7 @@
 **Music folders as playlists.** A Windows app for getting albums in order:
 tags, covers, track order and file format, all in one window.
 
-![Version](https://img.shields.io/badge/version-0.8.5-C8F542)
+![Version](https://img.shields.io/badge/version-0.8.6-C8F542)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
 
 **Website:** [tagtuner.app](https://tagtuner.app)
