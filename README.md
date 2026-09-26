@@ -59,7 +59,7 @@ Take the ZIP, unpack it, run `TagTuner.exe`.
 - Pick from seventeen columns, reorder them, resize them, sort by any of them
 - Albums with several discs get a line per disc
 - Search the open folder with Ctrl+F
-- Built-in player: double click or space bar
+- Built-in player: space bar, or right click and Play
 
 **Browsing**
 - Tabs, and a split view to drag files between two folders

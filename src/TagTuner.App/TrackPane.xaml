@@ -75,7 +75,6 @@
                       DragLeave="OnDragLeave"
                       RightTapped="OnRightTapped"
                       KeyDown="OnListKeyDown"
-                      DoubleTapped="OnListDoubleTapped"
                       GotFocus="OnGotFocus"
                       ContainerContentChanging="OnRowRealizing"
                       Padding="0,4,6,14">

@@ -831,13 +831,6 @@ public sealed partial class TrackPane : UserControl
         e.Handled = true;
     }
 
-    private void OnListDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-    {
-        if (TrackAt(e.OriginalSource) is not { } track) return;
-        PlayRequested?.Invoke(this, track);
-        e.Handled = true;
-    }
-
     private void OnSelectAll(object sender, RoutedEventArgs e)
     {
         Activated?.Invoke(this, this);
