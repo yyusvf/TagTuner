@@ -96,8 +96,7 @@ public sealed partial class CoverCropDialog : ContentDialog
 
             ResizeOptions.Visibility = Visibility.Visible;
 
-            foreach (var n in _edges)
-                EdgeBox.Items.Add(Strings.T("{0} × {0} pixels", n));
+            EdgeBox.Items = _edges.Select(n => Strings.T("{0} × {0} pixels", n)).ToList();
 
             // Nicht größer anbieten als das Bild ist: Hochrechnen bringt keine
             // Bildpunkte dazu, nur Dateigröße.

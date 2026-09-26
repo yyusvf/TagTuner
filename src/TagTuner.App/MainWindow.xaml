@@ -262,11 +262,11 @@
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                     <StackPanel Grid.Column="0" Spacing="3">
                                         <TextBlock Text="File format" Style="{StaticResource FieldLabel}" />
-                                        <ComboBox x:Name="FFormat" HorizontalAlignment="Stretch" />
+                                        <local:Dropdown x:Name="FFormat" HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="3">
                                         <TextBlock Text="Sample rate" Style="{StaticResource FieldLabel}" />
-                                        <ComboBox x:Name="FRate" HorizontalAlignment="Stretch" />
+                                        <local:Dropdown x:Name="FRate" HorizontalAlignment="Stretch" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>

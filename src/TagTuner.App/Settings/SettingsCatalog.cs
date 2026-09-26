@@ -111,7 +111,7 @@ internal static class SettingsCatalog
 
         // Unübersetzt: Jede Sprache nennt sich selbst. Wer Türkisch sucht,
         // sucht nach „Türkçe".
-        var language = Dropdown(
+        var language = Select(
             Strings.SupportedNames.ToList(),
             Math.Max(0, Array.IndexOf(Strings.Supported, Strings.Current)),
             i =>

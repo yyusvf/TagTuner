@@ -93,67 +93,27 @@ internal static class SettingsUi
     /// übersetzt, der gespeicherte Wert bleibt englisch — sonst hinge der
     /// Inhalt der Einstellungsdatei an der Sprache.
     /// </summary>
-    public static DropDownButton Choice(
+    public static TagTuner.App.Dropdown Choice(
         (string Label, string Value)[] options, string current, Action<string> apply) =>
-        Dropdown(options.Select(o => Strings.T(o.Label)).ToList(),
+        Select(options.Select(o => Strings.T(o.Label)).ToList(),
                  Math.Max(0, Array.FindIndex(options, o => o.Value == current)),
                  i => apply(options[i].Value));
 
     /// <summary>Eine Auswahl aus einer Liste gleichartiger Werte, etwa Formaten.</summary>
-    public static DropDownButton Pick(
+    public static TagTuner.App.Dropdown Pick(
         IEnumerable<string> items, string? current, Action<int> apply)
     {
         var list = items.ToList();
         var at = list.FindIndex(x => string.Equals(x, current, StringComparison.OrdinalIgnoreCase));
-        return Dropdown(list, at >= 0 ? at : 0, apply);
+        return Select(list, at >= 0 ? at : 0, apply);
     }
 
-    /// <summary>
-    /// Eine Auswahl, die direkt unter ihrem Knopf aufklappt, mit einem Haken
-    /// am gewählten Eintrag.
-    ///
-    /// Keine ComboBox: Die legt ihre Liste so, dass der gewählte Eintrag über
-    /// dem Feld liegt. Bei langen Listen wie den Sprachen rückt sie dafür bis
-    /// an den oberen Rand, und das Gewählte steht weit weg vom Feld.
-    /// </summary>
-    public static DropDownButton Dropdown(IReadOnlyList<string> labels, int selected, Action<int> apply)
+    /// <summary>Ein <see cref="TagTuner.App.Dropdown"/>, das jede Wahl gleich weitergibt.</summary>
+    public static TagTuner.App.Dropdown Select(IReadOnlyList<string> labels, int selected, Action<int> apply)
     {
-        var text = new TextBlock
-        {
-            Text = selected >= 0 && selected < labels.Count ? labels[selected] : "",
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        var button = new DropDownButton
-        {
-            Content = text,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-        };
-
-        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
-        var group = "dropdown-" + Guid.NewGuid().ToString("n");
-        for (var i = 0; i < labels.Count; i++)
-        {
-            var at = i;
-            var item = new RadioMenuFlyoutItem { Text = labels[i], GroupName = group, IsChecked = i == selected };
-            item.Click += (_, _) =>
-            {
-                text.Text = labels[at];
-                apply(at);
-            };
-            menu.Items.Add(item);
-        }
-
-        // So breit wie der Knopf, damit die Liste wie seine Fortsetzung aussieht.
-        menu.Opening += (_, _) =>
-        {
-            var style = new Style(typeof(MenuFlyoutPresenter));
-            style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, button.ActualWidth));
-            menu.MenuFlyoutPresenterStyle = style;
-        };
-
-        button.Flyout = menu;
-        return button;
+        var box = new TagTuner.App.Dropdown { Items = labels, SelectedIndex = selected, HorizontalAlignment = HorizontalAlignment.Stretch };
+        box.SelectionChanged += (_, _) => { if (box.SelectedIndex >= 0) apply(box.SelectedIndex); };
+        return box;
     }
 
     public static Button Action(string label, Action run)
@@ -261,7 +221,7 @@ internal static class SettingsUi
 
             // Auswahl und Eingabe brauchen Platz für ihren Text; sonst
             // schrumpfen sie auf die Breite des Pfeils.
-            if (control is ComboBox or TextBox or DropDownButton && control.MinWidth == 0) control.MinWidth = 220;
+            if (control is ComboBox or TextBox or TagTuner.App.Dropdown && control.MinWidth == 0) control.MinWidth = 220;
             Grid.SetColumn(control, 2);
             grid.Children.Add(control);
         }

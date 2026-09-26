@@ -96,8 +96,8 @@ public sealed partial class MainWindow : Window
         ApplyColumns();
         if (Quick) EnterQuickMode();
 
-        FFormat.ItemsSource = AudioFormats.Targets;
-        FRate.ItemsSource = Rates.Select(FormatRate).ToList();
+        FFormat.Items = AudioFormats.Targets;
+        FRate.Items = Rates.Select(FormatRate).ToList();
         FFormat.SelectionChanged += (_, _) => UpdatePlan();
         FRate.SelectionChanged += (_, _) => UpdatePlan();
         foreach (var box in TagBoxes())

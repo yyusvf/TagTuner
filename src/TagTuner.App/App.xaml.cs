@@ -21,6 +21,12 @@ public partial class App : Application
         RequestedTheme = ApplicationTheme.Dark;
 
         InitializeComponent();
+
+        // DIAG (temporär)
+        UnhandledException += (_, e) =>
+        {
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "tagtuner-crash.txt"), $"{DateTime.Now}\n{e.Exception}\n{e.Message}\n\n"); } catch { }
+        };
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
