@@ -32,8 +32,8 @@ public sealed class Dropdown : DropDownButton
         Flyout = _menu;
 
         // Mindestens so breit wie das Feld, damit die Liste wie seine
-        // Fortsetzung aussieht. Einmal gesetzt: Den Stil beim Aufklappen
-        // auszutauschen brachte WinUI zum Absturz.
+        // Fortsetzung aussieht. Gesetzt, wenn sich die Breite ändert, nicht
+        // erst beim Aufklappen, während die Liste schon aufgebaut wird.
         SizeChanged += (_, e) =>
         {
             if (_menu.IsOpen || e.NewSize.Width <= 0) return;
