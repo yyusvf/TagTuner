@@ -71,9 +71,6 @@ public sealed partial class TrackPane : UserControl
 
     private bool _suppress;
 
-    /// <summary>Die Einträge beim Beginn eines Zugs, um danach zu sehen, ob sich die Reihenfolge geändert hat.</summary>
-    private List<object>? _orderBefore;
-
     // ── Spalten ──────────────────────────────────────────────────
 
     private readonly Dictionary<TrackSort, TextBlock> _sortMarks = [];
@@ -187,8 +184,15 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     private void OnRowRealizing(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (args.InRecycleQueue) return;
         if (args.ItemContainer is not ListViewItem container) return;
+
+        // Eine Zeile, die beim Scrollen während eines Zugs weitergereicht
+        // wird, nähme ihre Verschiebung sonst zum nächsten Lied mit.
+        if (args.InRecycleQueue)
+        {
+            ResetRow(container);
+            return;
+        }
 
         // Die Vorlage der Liste ist ein einziges, leeres Grid. Hineingebaut
         // wird im Code: ContentTemplateRoot lässt sich nicht setzen, und eine
@@ -205,6 +209,7 @@ public sealed partial class TrackPane : UserControl
             PaintHeader(container, header, SelectedSet());
             row.DataContext = header;
             TrackColumns.FillDiscRow(row, header.Disc);
+            PlaceRow(container);
             args.Handled = true;
             return;
         }
@@ -225,6 +230,8 @@ public sealed partial class TrackPane : UserControl
 
         TrackColumns.FillRow(row, track, _combined, TrackTextFor, Highlight);
         Paint(container, track);
+        PlaceRow(container);
+        PaintFlash(container);
         args.Handled = true;
     }
 
@@ -358,6 +365,10 @@ public sealed partial class TrackPane : UserControl
     /// </summary>
     private void OnTracksChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
+        // Ändert sich der Ordner mitten im Zug (neu eingelesen), passen die
+        // gemerkten Zeilen nicht mehr. Dann lieber abbrechen als falsch ablegen.
+        if (_rowDrag is not null) CancelRowDrag(animate: false);
+
         if (!_sectioned || _syncQueued) return;
         _syncQueued = true;
         DispatcherQueue.TryEnqueue(() =>
@@ -683,6 +694,7 @@ public sealed partial class TrackPane : UserControl
     public TrackPane()
     {
         InitializeComponent();
+        HookRowDrag();
 
         // Zieht jemand eine Spalte breiter, muss der Bereich mitwachsen,
         // sonst verschwindet ihr rechter Teil hinter dem Fensterrand.
@@ -730,12 +742,9 @@ public sealed partial class TrackPane : UserControl
         // wuesste nicht, in welchen der Ordner die Datei gehoert.
         ScopeBadge.Visibility = Tab.Recursive ? Visibility.Visible : Visibility.Collapsed;
 
-        // Umsortieren per Hand setzt voraus, dass die Anzeige die
-        // Playlist-Reihenfolge ist. Nach Interpret sortiert waere das Ziehen
-        // einer Zeile eine Nummernvergabe, die niemand so gemeint hat.
-        var natural = !Tab.Recursive && Tab.Sort == TrackSort.Natural;
-        List.CanReorderItems = natural && !ReadOnly;
-        List.CanDragItems = !Tab.Recursive && !ReadOnly;
+        // Ob umsortiert und hinausgezogen werden darf, fragt der eigene Zug
+        // (CanReorder, CanDragOut) bei jedem Druck neu. Ablegen von außen
+        // bleibt Sache der Liste.
         List.AllowDrop = !Tab.Recursive && !ReadOnly;
 
         UpdateSortMarks();
@@ -814,70 +823,40 @@ public sealed partial class TrackPane : UserControl
 
     // ══ Ziehen ═══════════════════════════════════════════════════
 
-    private void OnDragStarting(object sender, DragItemsStartingEventArgs e)
-    {
-        if (e.Items.Any(i => i is DiscHeader)) { e.Cancel = true; return; }
-        _drag = (this, e.Items.OfType<AudioTrack>().ToList());
-        _orderBefore = List.Items.ToList();
-    }
-
-    private void OnReorderCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
-    {
-        _drag = null;
-        var before = _orderBefore;
-        _orderBefore = null;
-
-        // Umsortiert ist, was jetzt anders dasteht als beim Beginn des Zugs.
-        // Vorher hing das daran, dass das Ablegen hier gemeldet wurde; beim
-        // Umsortieren innerhalb der Liste behält die Liste das aber für sich,
-        // und die Nummern wurden nie geschrieben. Ein Zug in die andere Hälfte
-        // ändert an dieser Reihenfolge nichts und zählt damit auch nicht.
-        if (before is null || List.Items.SequenceEqual(before)) return;
-
-        ReorderedSections = null;
-        if (_sectioned && Tab is not null)
-        {
-            // Die Liste hat nur die Anzeige umgestellt. Die Reihenfolge der
-            // Lieder im Ordner folgt ihr, und jedes Lied merkt sich die Disc,
-            // unter der es gelandet ist. Über der ersten Disc-Zeile zählt es
-            // zur ersten Disc.
-            var sections = new List<(AudioTrack, uint)>();
-            var disc = _view.OfType<DiscHeader>().FirstOrDefault()?.Disc ?? 0;
-            foreach (var item in _view)
-            {
-                if (item is DiscHeader header) disc = header.Disc;
-                else if (item is AudioTrack track) sections.Add((track, disc));
-            }
-
-            _syncQueued = true;   // kein Abgleich mitten im Umstellen
-            for (var i = 0; i < sections.Count; i++)
-            {
-                var at = Tab.Tracks.IndexOf(sections[i].Item1);
-                if (at >= 0 && at != i) Tab.Tracks.Move(at, i);
-            }
-            _syncQueued = false;
-
-            ReorderedSections = sections;
-        }
-
-        ReorderCompleted?.Invoke(this, this);
-    }
+    // Das Umsortieren innerhalb der Liste und der Beginn eines Zugs nach
+    // draußen stehen in TrackPane.Reorder.cs. Hier bleibt das Ablegen.
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
         if (Tab?.Recursive == true) { HideLine(); return; }
 
         var copy = e.Modifiers.HasFlag(DragDropModifiers.Control);
-
-        // Innerhalb derselben Hälfte macht die Liste das Umsortieren selbst.
-        if (_drag is { } d && d.Pane == this) { HideLine(); return; }
-
         var index = IndexAt(e.GetPosition(List));
+
+        // Ein Zug aus dieser Hälfte, der hinaus- und wieder hereinkam: Dann
+        // ist es doch ein Umsortieren, sofern das hier geht.
+        if (_drag is { } d && d.Pane == this)
+        {
+            if (!CanReorder) { HideLine(); return; }
+            ShowLine(index);
+
+            // Kopieren ist das einzige, was der Zug erlaubt (siehe
+            // OnSystemDragStarting); verschoben wird trotzdem, das Zeichen
+            // dafür bleibt aus.
+            e.AcceptedOperation = DataPackageOperation.Copy;
+            e.DragUIOverride.IsCaptionVisible = false;
+            e.DragUIOverride.IsGlyphVisible = false;
+            e.Handled = true;
+            return;
+        }
 
         if (_drag is { } other)
         {
             ShowLine(index);
-            e.AcceptedOperation = copy ? DataPackageOperation.Copy : DataPackageOperation.Move;
+
+            // Der Zug erlaubt nur Kopieren, damit der Explorer nichts
+            // verschiebt. Ob hier verschoben wird, sagt Strg beim Ablegen.
+            e.AcceptedOperation = DataPackageOperation.Copy;
             e.DragUIOverride.Caption = Caption(Strings.T(copy ? "Copy to" : "Move to"));
             e.DragUIOverride.IsCaptionVisible = true;
             e.DragUIOverride.IsGlyphVisible = false;
@@ -913,11 +892,17 @@ public sealed partial class TrackPane : UserControl
 
         if (_drag is { } d)
         {
-            if (d.Pane == this) return;   // eigenes Umsortieren, das macht die Liste
+            e.AcceptedOperation = DataPackageOperation.Copy;
+            e.Handled = true;
+
+            if (d.Pane == this)
+            {
+                _drag = null;
+                DropOwnTracks(d.Tracks, index);
+                return;
+            }
 
             var copy = e.Modifiers.HasFlag(DragDropModifiers.Control);
-            e.AcceptedOperation = copy ? DataPackageOperation.Copy : DataPackageOperation.Move;
-            e.Handled = true;
 
             var source = d.Pane;
             var tracks = d.Tracks;

@@ -59,16 +59,17 @@
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
         <Grid Grid.Row="1">
+            <!-- Umsortieren und Hinausziehen macht die Liste nicht selbst,
+                 sondern TrackPane.Reorder.cs: Die Zeilen sollen beim Ziehen
+                 gleiten wie auf der Website. -->
             <ListView x:Name="List"
                       SelectionMode="Extended"
                       SelectionChanged="OnSelectionChanged"
-                      CanReorderItems="True"
-                      CanDragItems="True"
+                      CanReorderItems="False"
+                      CanDragItems="False"
                       AllowDrop="True"
                       DragOver="OnDragOver"
                       Drop="OnDrop"
-                      DragItemsStarting="OnDragStarting"
-                      DragItemsCompleted="OnReorderCompleted"
                       DragLeave="OnDragLeave"
                       RightTapped="OnRightTapped"
                       KeyDown="OnListKeyDown"
