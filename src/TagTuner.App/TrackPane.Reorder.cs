@@ -93,6 +93,17 @@ public sealed partial class TrackPane
     private TransitionCollection? _savedTransitions;
 
     /// <summary>
+    /// Die Zeitgeber nach dem Loslassen, als Felder gehalten. Als lokale
+    /// Variable konnte der Zeitgeber eingesammelt werden, bevor er feuerte;
+    /// dann blieb der Zug für immer „am Einrasten": Zeiger als Doppelpfeil,
+    /// jeder weitere Druck ignoriert, die Auswahl festgeklemmt.
+    /// </summary>
+    private DispatcherQueueTimer? _settleTimer, _restoreTimer;
+
+    /// <summary>Was nach dem Einrasten noch zu tun ist, falls es vorher gebraucht wird.</summary>
+    private Action? _finishSettle;
+
+    /// <summary>
     /// Ob sich die Liste gerade per Hand umsortieren lässt. Nur in der
     /// Playlist-Reihenfolge eines einzelnen Ordners; sonst wäre ein Zug eine
     /// Nummernvergabe, die niemand so gemeint hat.
@@ -157,6 +168,10 @@ public sealed partial class TrackPane
         // blockieren. Nur einer, der gerade an seinen Platz gleitet, zählt
         // noch; der ist gleich von selbst fertig.
         if (_rowDrag is { Settling: false }) CancelRowDrag(animate: false);
+
+        // Der vorige Zug rastet noch ein: sofort abschließen, damit schnelles
+        // Hin- und Herziehen nicht an ihm hängen bleibt.
+        _finishSettle?.Invoke();
         if (_rowDrag is not null || !CanDragOut) return;
 
         // Mit dem Finger scrollt die Liste; ein Zug per Hand käme ihr dabei
@@ -518,16 +533,20 @@ public sealed partial class TrackPane
         foreach (var container in RealizedContainers()) PlaceRow(container);
         List.ReleasePointerCaptures();
 
+        _finishSettle = Finish;
         if (!drag.Animate) { Finish(); return; }
 
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = SettleTime;
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) => Finish();
-        timer.Start();
+        _settleTimer?.Stop();
+        _settleTimer = DispatcherQueue.CreateTimer();
+        _settleTimer.Interval = SettleTime;
+        _settleTimer.IsRepeating = false;
+        _settleTimer.Tick += (_, _) => Finish();
+        _settleTimer.Start();
 
         void Finish()
         {
+            _settleTimer?.Stop();
+            _finishSettle = null;
             if (!ReferenceEquals(_rowDrag, drag)) return;
             EndRowDrag();
             _drag = null;
@@ -597,7 +616,8 @@ public sealed partial class TrackPane
             Flash(renumbered.Select(t => Tab.Tracks.IndexOf(t)).Where(i => i >= 0));
         }
 
-        var restore = DispatcherQueue.CreateTimer();
+        _restoreTimer?.Stop();
+        var restore = _restoreTimer = DispatcherQueue.CreateTimer();
         restore.Interval = TimeSpan.FromMilliseconds(300);
         restore.IsRepeating = false;
         restore.Tick += (_, _) =>
