@@ -112,6 +112,15 @@ public sealed partial class TrackPane
         List.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnRowReleased), true);
         List.PointerCaptureLost += OnRowCaptureLost;
         List.PointerCanceled += OnRowCaptureLost;
+
+        // Wird die Liste gesperrt, etwa weil gerade Nummern geschrieben
+        // werden, bekommt sie weder Loslassen noch Verlust des Zeigers
+        // gemeldet. Ein Zug, der dann liefe, bliebe für immer hängen: Zeiger
+        // als Doppelpfeil, Auswahl festgeklemmt, kein weiterer Zug möglich.
+        IsEnabledChanged += (_, _) =>
+        {
+            if (!IsEnabled) { _pending = null; CancelRowDrag(animate: false); }
+        };
     }
 
     private ScrollViewer? ListScroll => _listScroll ??= FindScroll(List);
@@ -142,6 +151,12 @@ public sealed partial class TrackPane
     private void OnRowPressed(object sender, PointerRoutedEventArgs e)
     {
         _pending = null;
+
+        // Ein Zug, der noch läuft, obwohl gerade neu gedrückt wird, hat sein
+        // Loslassen verpasst. Er wird verworfen statt jeden weiteren Zug zu
+        // blockieren. Nur einer, der gerade an seinen Platz gleitet, zählt
+        // noch; der ist gleich von selbst fertig.
+        if (_rowDrag is { Settling: false }) CancelRowDrag(animate: false);
         if (_rowDrag is not null || !CanDragOut) return;
 
         // Mit dem Finger scrollt die Liste; ein Zug per Hand käme ihr dabei
@@ -162,7 +177,16 @@ public sealed partial class TrackPane
         if (_rowDrag is { } drag)
         {
             if (e.Pointer.PointerId != drag.PointerId || drag.Settling) return;
-            drag.Pointer = e.GetCurrentPoint(List).Position;
+
+            // Taste schon los, ohne dass das Loslassen ankam: dort ablegen,
+            // wo der Zeiger zuletzt war.
+            var now = e.GetCurrentPoint(List);
+            if (!now.Properties.IsLeftButtonPressed)
+            {
+                DropRow(drag);
+                return;
+            }
+            drag.Pointer = now.Position;
 
             if (Left(drag.Pointer))
             {
@@ -282,7 +306,14 @@ public sealed partial class TrackPane
             Pointer = e.GetCurrentPoint(List).Position,
         };
 
-        List.CapturePointer(e.Pointer);
+        // Kommt der Zeiger nicht zu fassen (Taste schon wieder los), gibt es
+        // auch kein Loslassen mehr, das den Zug beenden würde.
+        if (!List.CapturePointer(e.Pointer))
+        {
+            _rowDrag = null;
+            _drag = null;
+            return;
+        }
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
 
         if (ListScroll is { } sv) sv.ViewChanged += OnDragScrolled;
