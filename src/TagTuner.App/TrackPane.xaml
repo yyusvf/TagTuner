@@ -15,8 +15,7 @@
               BorderThickness="0,0,0,1"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
             <TextBlock Grid.Column="0" x:Name="FolderName" FontSize="18" FontWeight="Bold"
-                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                       PointerEntered="OnFolderNameEnter" PointerExited="OnFolderNameExit" />
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <!-- Anklickbar: Es ist der Weg zurueck in den einzelnen Ordner.
                  Ein eigener Knopf in der Seitenspalte stand dafuer im Weg,
                  obwohl man ihn fast nie braucht. -->

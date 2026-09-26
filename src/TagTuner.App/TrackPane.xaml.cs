@@ -812,12 +812,6 @@ public sealed partial class TrackPane : UserControl
         if (WideScroll.Visibility == Visibility.Visible) List.Focus(FocusState.Pointer);
     }
 
-    /// <summary>Über dem Ordnernamen zeigt die Hand, dass er anklickbar ist.</summary>
-    private void OnFolderNameEnter(object sender, PointerRoutedEventArgs e) =>
-        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
-
-    private void OnFolderNameExit(object sender, PointerRoutedEventArgs e) => ProtectedCursor = null;
-
     /// <summary>
     /// Leertaste spielt die Auswahl ab. Die Liste würde damit sonst die
     /// Markierung umschalten, darum wird das Ereignis hier abgefangen.
