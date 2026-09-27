@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Reine Domänenschicht: kein WinUI, keine Fenster.
-       Alles hier ist ohne laufende Oberfläche testbar. -->
+  <!-- Reine Domänenschicht: kein WinUI, keine Fenster, kein Windows.
+       Alles hier ist ohne laufende Oberfläche testbar und läuft genauso
+       unter macOS; was nur ein System kann, gehört in dessen App. -->
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TagTuner.Core</RootNamespace>

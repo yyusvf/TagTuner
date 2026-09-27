@@ -56,8 +56,8 @@ public class FileNumberingTests
     [Fact]
     public void A_name_that_is_taken_is_skipped()
     {
-        var a = Make(@"C:\m\03 Ufer.mp3", 1); a.FileName = "03 Ufer.mp3";
-        var b = Make(@"C:\m\01 Ufer.mp3", 3); b.FileName = "01 Ufer.mp3";
+        var a = Make(Path.Combine("m", "03 Ufer.mp3"), 1); a.FileName = "03 Ufer.mp3";
+        var b = Make(Path.Combine("m", "01 Ufer.mp3"), 3); b.FileName = "01 Ufer.mp3";
 
         // Beide wollen den Namen des anderen: Ein Tausch ließe sich nicht
         // sicher zurücknehmen, also bleiben beide, wie sie sind.

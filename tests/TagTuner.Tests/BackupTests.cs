@@ -34,11 +34,11 @@ public class BackupStoreTests
     [Fact]
     public void Original_name_drops_the_stamp() =>
         Assert.Equal("01 Nebelfeld.mp3",
-            BackupStore.OriginalName(@"C:\b\01 Nebelfeld.mp3_20250101-120000-000.bak"));
+            BackupStore.OriginalName(Path.Combine("b", "01 Nebelfeld.mp3_20250101-120000-000.bak")));
 
     [Fact]
     public void A_name_without_a_stamp_is_left_alone() =>
-        Assert.Equal("Lied_live", BackupStore.OriginalName(@"C:\b\Lied_live.bak"));
+        Assert.Equal("Lied_live", BackupStore.OriginalName(Path.Combine("b", "Lied_live.bak")));
 
     [Fact]
     public void Tags_can_be_read_from_a_backup()

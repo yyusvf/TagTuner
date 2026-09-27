@@ -236,13 +236,36 @@ public static class FolderScanner
 
         try
         {
-            foreach (var d in DriveInfo.GetDrives().Where(d => d.IsReady))
-                roots.Add(new FolderEntry(d.RootDirectory.FullName,
-                                          d.Name.TrimEnd('\\'), true));
+            foreach (var (path, name) in Drives())
+                roots.Add(new FolderEntry(path, name, true));
         }
         catch { }
 
         return [.. roots.Where(r =>
             !skip.Contains(r.Path.TrimEnd(Path.DirectorySeparatorChar)))];
+    }
+
+    /// <summary>
+    /// Die Laufwerke. Unter Windows C:\, D:\ und so weiter. Unter macOS die
+    /// Datenträger in /Volumes: DriveInfo meldet dort auch Dutzende
+    /// Systembereiche (/System/Volumes/…, /dev), mit denen niemand Musik
+    /// sortiert. Die Startplatte steht in /Volumes nur als Verweis auf „/";
+    /// sie ist über den Benutzerordner schon erreichbar.
+    /// </summary>
+    private static IEnumerable<(string Path, string Name)> Drives()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            if (!Directory.Exists("/Volumes")) yield break;
+            foreach (var dir in new DirectoryInfo("/Volumes").EnumerateDirectories())
+            {
+                if (dir.LinkTarget is not null) continue;
+                yield return (dir.FullName, dir.Name);
+            }
+            yield break;
+        }
+
+        foreach (var d in DriveInfo.GetDrives().Where(d => d.IsReady))
+            yield return (d.RootDirectory.FullName, d.Name.TrimEnd('\\'));
     }
 }

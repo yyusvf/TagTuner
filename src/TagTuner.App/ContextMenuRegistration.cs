@@ -2,7 +2,7 @@ using Microsoft.Win32;
 
 using TagTuner.Core.Settings;
 
-namespace TagTuner.Core.Shell;
+namespace TagTuner.App;
 
 /// <summary>
 /// Der Eintrag „TagTuner" im Rechtsklick-Menü des Explorers.

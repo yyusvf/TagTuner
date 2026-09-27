@@ -8,15 +8,17 @@ public class CommandLineTests
     [Fact]
     public void Edit_from_the_explorer_menu()
     {
-        var target = CommandLine.Parse(["--edit", @"--file=""C:\Music\a.mp3"""]);
+        var folder = Path.Combine(Path.GetTempPath(), "Music");
+        var file = Path.Combine(folder, "a.mp3");
+        var target = CommandLine.Parse(["--edit", $"--file=\"{file}\""]);
         Assert.True(target.Edit);
-        Assert.Equal(@"C:\Music\a.mp3", target.File);
-        Assert.Equal(@"C:\Music", target.FolderToOpen);
+        Assert.Equal(file, target.File);
+        Assert.Equal(folder, target.FolderToOpen);
     }
 
     [Fact]
     public void Open_is_not_edit() =>
-        Assert.False(CommandLine.Parse([@"--folder=C:\Music"]).Edit);
+        Assert.False(CommandLine.Parse([$"--folder={Path.GetTempPath()}"]).Edit);
 }
 
 /// <summary>

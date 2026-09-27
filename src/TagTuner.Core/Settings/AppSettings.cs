@@ -208,8 +208,18 @@ public sealed class AppSettings
 
     [JsonIgnore]
     public static string Directory =>
-        DirectoryOverride
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TagTuner");
+        DirectoryOverride ?? Path.Combine(SystemDataFolder, "TagTuner");
+
+    /// <summary>
+    /// Wo Programme ihre Daten ablegen: unter Windows %APPDATA%, unter macOS
+    /// ~/Library/Application Support. .NET liefert auf dem Mac für
+    /// ApplicationData ~/.config, das ist dort nicht der übliche Ort.
+    /// </summary>
+    private static string SystemDataFolder =>
+        OperatingSystem.IsMacOS()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                           "Library", "Application Support")
+            : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     [JsonIgnore]
     public static string FilePath => Path.Combine(Directory, "settings.json");
