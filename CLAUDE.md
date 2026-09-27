@@ -92,6 +92,14 @@ und Xcode Mac-Apps bauen kann (`dotnet workload install macos`, dann ein leeres 
 bauen und starten). Neue Xcode-Versionen werden von .NET teils erst Wochen später unterstützt.
 `dotnet test tests/TagTuner.Tests` muss dort grün sein.
 
+**Ergebnis Schritt 0 (28.09.2026):** geht. macOS 27.0 (arm64), Xcode 27.0, .NET SDK 10.0.401 (arm64,
+ohne sudo nach `~/.dotnet` installiert; das x64-SDK unter `/usr/local/share/dotnet/x64` nicht nehmen).
+Tests grün (53/53). Der Workload `macos` (26.5.10318) verlangt eigentlich Xcode 26.6 und bricht sonst
+ab, mit `-p:ValidateXcodeVersion=false` (bzw. als Property im csproj) baut und startet eine leere
+`dotnet new macos`-App mit Xcode 27 aber einwandfrei, auch mit Verweis auf `TagTuner.Core` (TagLib# wird
+mitgepackt). Sobald ein Workload für Xcode 27 erscheint (`dotnet workload update`), den Schalter entfernen.
+Shell: `export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
+
 1. **Grundgerüst:** Fenster mit Seitenleiste (Bibliothek), Trackliste (NSTableView, Spalten wie
    Windows), Metadaten-Inspektor rechts; Ordner öffnen, Tags bearbeiten, Anwenden, Cover.
    Menüleiste mit üblichen Kürzeln (⌘Z Rückgängig, ⌘F Suchen, ⌘, Einstellungen).
