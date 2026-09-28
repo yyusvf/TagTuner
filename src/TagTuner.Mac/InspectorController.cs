@@ -14,11 +14,8 @@ namespace TagTuner.Mac;
 /// </summary>
 internal sealed partial class InspectorController : NSViewController
 {
-    /// <summary>Vor dem Schreiben: der Player muss betroffene Dateien loslassen.</summary>
-    public event Action<IReadOnlyList<AudioTrack>>? Writing;
-
-    /// <summary>Nach dem Schreiben, mit den betroffenen Pfaden.</summary>
-    public event Action<IReadOnlyList<string>, string>? Written;
+    /// <summary>„Anwenden": was in welche Datei soll, und wie es im Verlauf heißt.</summary>
+    public event Action<IReadOnlyList<(AudioTrack Track, TagEdit Edit)>, string>? ApplyRequested;
 
     private List<AudioTrack> _sel = [];
     private readonly Dictionary<NSTextField, string> _loaded = [];
@@ -478,7 +475,7 @@ internal sealed partial class InspectorController : NSViewController
         View.Window?.MakeFirstResponder(null);   // laufende Eingabe übernehmen
         var edit = BuildEdit();
         if (edit.IsEmpty) return;
-        Write(_sel, _ => edit, Describe(edit));
+        ApplyRequested?.Invoke([.. _sel.Select(t => (t, edit))], Describe(edit));
     }
 
     /// <summary>Für den Verlauf: welche Felder, nicht nur wie viele Dateien.</summary>
@@ -493,46 +490,8 @@ internal sealed partial class InspectorController : NSViewController
         return string.Join(", ", parts);
     }
 
-    /// <summary>
-    /// Schreibt Tags in mehrere Dateien, je Datei mit Sicherung davor, und
-    /// trägt das Ganze als einen Vorgang in den Verlauf ein. Auch für
-    /// „Tags einfügen", deshalb mit einer eigenen Änderung je Datei.
-    /// </summary>
-    public void Write(IReadOnlyList<AudioTrack> tracks, Func<AudioTrack, TagEdit> editFor, string label)
-    {
-        if (_busy) return;
-        SetBusy(true);
-        Writing?.Invoke(tracks);
-
-        var settings = AppDelegate.Settings;
-        Task.Run(() =>
-        {
-            var backups = new BackupStore(settings.ResolvedBackupFolder);
-            var svc = new ConversionService(new FfmpegRunner(FfmpegLocator.Find(settings.FfmpegPath) ?? "ffmpeg"), backups);
-            var files = new List<HistoryFile>();
-            var errors = new List<string>();
-            foreach (var t in tracks)
-            {
-                var edit = editFor(t);
-                if (edit.IsEmpty) continue;
-                var r = svc.WriteTagsOnly(t, edit);
-                if (r.Success && r.History is not null) files.Add(r.History);
-                else if (!r.Success) errors.Add($"{t.FileName}: {r.Error}");
-            }
-            if (files.Count > 0) AppDelegate.History.Add("batch", label, files);
-
-            InvokeOnMainThread(() =>
-            {
-                SetBusy(false);
-                var status = errors.Count == 0
-                    ? Strings.T("{0} file(s) processed, backup created", files.Count)
-                    : Strings.T("{0} failed: {1}", errors.Count, errors[0]);
-                if (errors.Count > 0)
-                    Alert(Strings.T("Finished with errors"), string.Join("\n", errors.Take(8)));
-                Written?.Invoke([.. tracks.Select(t => t.Path)], status);
-            });
-        });
-    }
+    /// <summary>Während geschrieben wird, lässt sich nichts bearbeiten.</summary>
+    public bool Busy { get => _busy; set => SetBusy(value); }
 
     private void SetBusy(bool on)
     {

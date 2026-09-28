@@ -35,6 +35,10 @@ public sealed partial class MainWindowController
                     case "next": NextTrack(Window); break;
                     case "search": _search!.SearchField.StringValue = parts[1]; _tracks.Filter(parts[1]); break;
                     case "sort": _tracks.SortBy(parts[1], parts.Length > 2 && parts[2] == "desc"); break;
+                    case "move": _tracks.MoveRows([.. parts[1].Split(',').Select(int.Parse)], int.Parse(parts[2])); break;
+                    case "album": ApplyAlbumMode(Window); break;
+                    case "album!": AlbumSheet.AutoConfirm = true; ApplyAlbumMode(Window); break;
+                    case "rule": ToggleRule(new NSMenuItem { Tag = int.Parse(parts[1]) }); break;
                     case "copytags": CopyTags(Window); break;
                     case "pastetags": PasteTags(Window); break;
                     case "settings": SettingsWindow.Show(); break;

@@ -15,6 +15,18 @@ internal sealed partial class TrackListController : NSViewController
     public event Action? SelectionChanged;
     public event Action<AudioTrack>? PlayRequested;
 
+    /// <summary>Zeilen wurden gezogen: die ganze Liste in der neuen Reihenfolge.</summary>
+    public event Action<List<AudioTrack>>? Reordered;
+
+    private const string RowType = "app.tagtuner.track";
+    private int[]? _dragRows;
+
+    /// <summary>
+    /// Umsortieren ergibt nur in der Playlist-Reihenfolge Sinn: nach Titel
+    /// sortiert oder gefiltert gibt es keine Stelle, an die man etwas zieht.
+    /// </summary>
+    public bool CanReorder => _sort == TrackSort.Natural && _filter.Length == 0 && Folder is not null;
+
     private readonly TrackTable _table = new();
     private readonly NSTextField _empty = NSTextField.CreateLabel("");
     private List<AudioTrack> _all = [];
@@ -71,7 +83,9 @@ internal sealed partial class TrackListController : NSViewController
         _table.Delegate = new Delegate(this);
         _table.DataSource = new Source(this);
         _table.Menu = new NSMenu { Delegate = new MenuDelegate(this) };
-        _table.RegisterForDraggedTypes([NSPasteboard.NSPasteboardTypeFileUrl]);
+        _table.RegisterForDraggedTypes([NSPasteboard.NSPasteboardTypeFileUrl, RowType]);
+        _table.SetDraggingSourceOperationMask(NSDragOperation.Move, true);
+        _table.SetDraggingSourceOperationMask(NSDragOperation.Copy, false);
 
         var scroll = new NSScrollView
         {
@@ -210,6 +224,28 @@ internal sealed partial class TrackListController : NSViewController
 
     public void SelectAllTracks() => _table.SelectAll(this);
 
+    /// <summary>
+    /// Verschiebt Zeilen vor die Zeile <paramref name="row"/> (in der alten
+    /// Zählung) und meldet die neue Reihenfolge. Geschrieben wird woanders.
+    /// </summary>
+    public bool MoveRows(int[] block, int row)
+    {
+        if (!CanReorder) return false;
+        var count = _shown.Count;
+        // Die Lücke zählt nur die Zeilen, die stehen bleiben.
+        var gap = RowReorder.Remaining(count, block).Count(i => i < row);
+        var order = RowReorder.Order(count, block, gap);
+        if (order.SequenceEqual(Enumerable.Range(0, count))) return false;
+
+        var before = _shown;
+        var tracks = order.Select(i => before[i]).ToList();
+        _shown = tracks;
+        _table.ReloadData();
+        Select(block.Select(i => before[i].Path));
+        Reordered?.Invoke(tracks);
+        return true;
+    }
+
     public void RedrawRows() =>
         _table.ReloadData(NSIndexSet.FromNSRange(new NSRange(0, _shown.Count)),
                           NSIndexSet.FromNSRange(new NSRange(0, _table.ColumnCount)));
@@ -287,17 +323,47 @@ internal sealed partial class TrackListController : NSViewController
             owner.Select(keep);
         }
 
-        // Dateien aus dem Finder: vorerst nur annehmen, wenn es Ordner sind –
-        // die öffnen sich dann. Übernehmen und Verschieben kommt später.
+        // Eine Zeile trägt ihren Pfad als Datei-URL mit: So lässt sie sich
+        // auch in den Finder ziehen, und dort landet eine Kopie.
+        public override INSPasteboardWriting GetPasteboardWriterForRow(NSTableView tableView, nint row)
+        {
+            var item = new NSPasteboardItem();
+            var path = owner._shown[(int)row].Path;
+            item.SetStringForType(path, RowType);
+            item.SetStringForType(NSUrl.FromFilename(path).AbsoluteString!, NSPasteboard.NSPasteboardTypeFileUrl);
+            return item;
+        }
+
+        public override void DraggingSessionWillBegin(NSTableView tableView, NSDraggingSession draggingSession,
+                                                      CGPoint willBeginAtScreenPoint, NSIndexSet rowIndexes) =>
+            owner._dragRows = [.. rowIndexes.Select(i => (int)i)];
+
+        public override void DraggingSessionEnded(NSTableView tableView, NSDraggingSession draggingSession,
+                                                  CGPoint endedAtScreenPoint, NSDragOperation operation) =>
+            owner._dragRows = null;
+
         public override NSDragOperation ValidateDrop(NSTableView tableView, INSDraggingInfo info, nint row,
                                                      NSTableViewDropOperation dropOperation)
         {
+            if (info.DraggingSource == tableView)
+            {
+                if (!owner.CanReorder || owner._dragRows is null) return NSDragOperation.None;
+                if (dropOperation == NSTableViewDropOperation.On)
+                    tableView.SetDropRowDropOperation(row, NSTableViewDropOperation.Above);
+                return NSDragOperation.Move;
+            }
+            // Ordner aus dem Finder öffnen sich. Dateien übernehmen kommt später.
             return DroppedFolder(info) is null ? NSDragOperation.None : NSDragOperation.Generic;
         }
 
         public override bool AcceptDrop(NSTableView tableView, INSDraggingInfo info, nint row,
                                         NSTableViewDropOperation dropOperation)
         {
+            if (info.DraggingSource == tableView)
+            {
+                return owner._dragRows is { Length: > 0 } block && owner.MoveRows(block, (int)row);
+            }
+
             if (DroppedFolder(info) is not { } folder) return false;
             (owner.View.Window?.WindowController as MainWindowController)?.OpenFolder(folder);
             return true;

@@ -64,8 +64,8 @@ public sealed partial class MainWindowController : NSWindowController
         _library.FolderChosen += path => OpenFolder(path, fromLibrary: true);
         _tracks.SelectionChanged += () => _inspector.Show(_tracks.SelectedTracks);
         _tracks.PlayRequested += Play;
-        _inspector.Writing += tracks => _resume = _player.Release(tracks.Select(t => t.Path));
-        _inspector.Written += (paths, status) => AfterWrite(paths, status);
+        _tracks.Reordered += OnReordered;
+        _inspector.ApplyRequested += (jobs, label) => _ = WriteAsync(jobs, "batch", label);
         _player.Changed += UpdatePlayer;
         _player.Finished += () => BeginInvokeOnMainThread(() => Step(+1, onlyIfPlaying: false));
 
@@ -128,6 +128,41 @@ public sealed partial class MainWindowController : NSWindowController
         var total = TimeSpan.FromTicks(all.Sum(t => t.Duration.Ticks));
         var len = total.TotalHours >= 1 ? total.ToString(@"h\:mm\:ss") : total.ToString(@"m\:ss");
         Window.Subtitle = all.Count == 0 ? "" : $"{Strings.T("{0} files", all.Count)} · {len}";
+    }
+
+    /// <summary>
+    /// Schreibt, lädt den Ordner neu und behält die Auswahl. Der Player lässt
+    /// betroffene Dateien vorher los und macht danach an derselben Stelle weiter.
+    /// </summary>
+    /// <param name="renameAfter">Danach die Dateinamen den Nummern nachziehen, wenn der Ordner das will.</param>
+    private async Task WriteAsync(IReadOnlyList<(AudioTrack Track, TagEdit Edit)> jobs, string kind, string label,
+                                  bool renameAfter = false)
+    {
+        if (_inspector.Busy || jobs.Count == 0) return;
+        _inspector.Busy = true;
+        var paths = jobs.Select(j => j.Track.Path).ToList();
+        _resume = _player.Release(paths);
+
+        var r = await Batch.WriteTagsAsync(jobs, kind, label);
+        var errors = r.Errors;
+        var status = Strings.T("{0} file(s) processed, backup created", r.Written);
+
+        if (renameAfter && _tracks.Folder is { } folder)
+        {
+            // Mit den frisch geschriebenen Nummern, nicht mit denen von vorher.
+            var fresh = await Task.Run(() => FolderScanner.Tracks(folder).ToList());
+            _resume ??= _player.Release(fresh.Select(t => t.Path));
+            var renamed = await Batch.RenameToNumbersAsync(folder, fresh);
+            errors.AddRange(renamed.Errors);
+            if (renamed.Written > 0)
+                status += " · " + Strings.T("{0} file name(s) numbered in \"{1}\"", renamed.Written, Path.GetFileName(folder));
+        }
+
+        _inspector.Busy = false;
+        if (errors.Count > 0)
+            new NSAlert { MessageText = Strings.T("Finished with errors"), InformativeText = string.Join("\n", errors.Take(8)) }
+                .BeginSheet(Window);
+        AfterWrite(paths, status);
     }
 
     private async void AfterWrite(IReadOnlyList<string> paths, string status)
@@ -343,7 +378,8 @@ public sealed partial class MainWindowController : NSWindowController
             Cover = cover is not null && Core.Audio.AudioFormats.CanCarryCover(t.Path) ? cover.Data : null,
             CoverMimeType = cover?.MimeType,
         };
-        _inspector.Write(targets, For, Strings.T("From \"{0}\": {1}", src.FileName, Strings.T("Paste tags")));
+        _ = WriteAsync([.. targets.Select(t => (t, For(t)))], "batch",
+            Strings.T("From \"{0}\": {1}", src.FileName, Strings.T("Paste tags")));
     }
 
     [Export("validateMenuItem:")]
@@ -352,6 +388,8 @@ public sealed partial class MainWindowController : NSWindowController
         var sel = _tracks.SelectedTracks;
         return item.Action?.Name switch
         {
+            "toggleRule:" => ValidateRuleItem(item),
+            "applyAlbumMode:" => CurrentRule?.AlbumMode == true && _tracks.Tracks.Count > 0,
             "undo:" => AppDelegate.History.Entries.Any(e => e.CanUndo),
             "applyChanges:" or "revertChanges:" => _inspector.HasChanges,
             "copyTags:" => sel.Count == 1,

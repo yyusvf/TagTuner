@@ -70,6 +70,18 @@ internal static class MainMenu
         edit.AddItem(NSMenuItem.SeparatorItem);
         Item(edit, Strings.T("Find in this folder…"), "focusSearch:", "f");
 
+        // ── Ordner ───────────────────────────────────────────────
+        var folder = Sub(bar, Strings.T("Folder"));
+        Item(folder, Strings.T("Apply to existing files…"), "applyAlbumMode:", "l");
+        folder.AddItem(NSMenuItem.SeparatorItem);
+        Rule(folder, Strings.T("Album mode"), MainWindowController.RuleSwitch.AlbumMode);
+        Rule(folder, Strings.T("Base metadata"), MainWindowController.RuleSwitch.BaseTags, indent: 1);
+        Rule(folder, Strings.T("Cover"), MainWindowController.RuleSwitch.Cover, indent: 1);
+        Rule(folder, Strings.T("Track numbering"), MainWindowController.RuleSwitch.Numbering, indent: 1);
+        Rule(folder, Strings.T("File names follow"), MainWindowController.RuleSwitch.RenameFiles, indent: 2);
+        folder.AddItem(NSMenuItem.SeparatorItem);
+        Rule(folder, Strings.T("Reset to the global setting"), MainWindowController.RuleSwitch.Reset);
+
         // ── Darstellung ──────────────────────────────────────────
         var view = Sub(bar, Strings.T("View"));
         Item(view, Strings.T("Show Sidebar"), "toggleSidebar:", "s",
@@ -107,6 +119,13 @@ internal static class MainMenu
         NSApplication.SharedApplication.HelpMenu = help;
 
         return bar;
+    }
+
+    private static void Rule(NSMenu menu, string title, MainWindowController.RuleSwitch sw, int indent = 0)
+    {
+        var item = Item(menu, title, "toggleRule:");
+        item.Tag = (int)sw;
+        item.IndentationLevel = indent;
     }
 
     private static NSMenu Sub(NSMenu bar, string title)
