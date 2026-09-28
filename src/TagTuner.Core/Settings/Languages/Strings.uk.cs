@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Диск і трек в одній колонці",
         ["Disc number"] = "Номер диска",
         ["Display"] = "Відображення",
+        ["Do not ask again"] = "Більше не питати",
         ["Down"] = "Вниз",
         ["Download and install"] = "Завантажити та встановити",
         ["Downloading the update…"] = "Завантаження оновлення…",

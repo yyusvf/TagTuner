@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Płyta i utwór w jednej kolumnie",
         ["Disc number"] = "Numer płyty",
         ["Display"] = "Wygląd",
+        ["Do not ask again"] = "Nie pytaj ponownie",
         ["Down"] = "W dół",
         ["Download and install"] = "Pobierz i zainstaluj",
         ["Downloading the update…"] = "Pobieranie aktualizacji…",

@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Skiva och spår i en kolumn",
         ["Disc number"] = "Skivnummer",
         ["Display"] = "Visning",
+        ["Do not ask again"] = "Fråga inte igen",
         ["Down"] = "Ner",
         ["Download and install"] = "Ladda ner och installera",
         ["Downloading the update…"] = "Laddar ner uppdateringen…",

@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Schijf en track in één kolom",
         ["Disc number"] = "Schijfnummer",
         ["Display"] = "Weergave",
+        ["Do not ask again"] = "Niet meer vragen",
         ["Down"] = "Omlaag",
         ["Download and install"] = "Downloaden en installeren",
         ["Downloading the update…"] = "Update wordt gedownload…",

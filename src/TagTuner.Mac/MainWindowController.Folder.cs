@@ -2,6 +2,7 @@ using TagTuner.Core.Audio;
 using TagTuner.Core.Folders;
 using TagTuner.Core.Metadata;
 using TagTuner.Core.Model;
+using TagTuner.Core.Safety;
 using TagTuner.Core.Settings;
 
 namespace TagTuner.Mac;
@@ -105,6 +106,96 @@ public sealed partial class MainWindowController
 
         await WriteAsync(jobs, "album", Strings.T("Album mode applied to \"{0}\"", Path.GetFileName(folder)),
                          renameAfter: rule.WritesFileNames);
+    }
+
+    // ── Dateien hereinziehen ─────────────────────────────────────
+
+    /// <summary>
+    /// Dateien aus dem Finder übernehmen: kopieren oder verschieben, ans Ziel
+    /// des Ordners angleichen, Tags erben und an der Ablagestelle einsortieren.
+    /// Gerechnet und geschrieben wird in Core (FolderImport).
+    /// </summary>
+    private async void OnFilesDropped(List<string> paths, int index, bool move)
+    {
+        if (_tracks.Folder is not { } folder || _inspector.Busy) return;
+
+        var incoming = await Task.Run(() => paths.Select(AudioProbe.Read).OfType<AudioTrack>().ToList());
+        if (incoming.Count == 0) return;
+        var existing = TrackSorting.FolderSort(_tracks.Tracks, Settings.SortByDiscThenTrack);
+        var req = ImportRequest.For(folder, existing, incoming, index, move, Settings);
+
+        if (Batch.MissingFfmpeg(req.NeedConvert.Select(t => new Job(t, new TagEdit(), req.Target.Format, req.Target.SampleRate))))
+        {
+            new NSAlert
+            {
+                MessageText = Strings.T("ffmpeg is missing"),
+                InformativeText = Strings.T("Converting needs ffmpeg. Install it with Homebrew: brew install ffmpeg"),
+            }.BeginSheet(Window);
+            return;
+        }
+
+        if (!Settings.SkipConformDialog)
+        {
+            var lines = FolderImport.Describe(req);
+            var alert = new NSAlert
+            {
+                MessageText = Strings.T(move ? "Move files" : "Align files"),
+                InformativeText = lines[0] + "\n\n" + string.Join("\n", lines.Skip(1)),
+                ShowsSuppressionButton = true,
+            };
+            alert.SuppressionButton!.Title = Strings.T("Do not ask again");
+            alert.AddButton(Strings.T(move ? "Move" : "Apply"));
+            alert.AddButton(Strings.T("Cancel"));
+            var answer = await Sheet(alert);
+            if (answer != (nint)(long)NSAlertButtonReturn.First) return;
+            if (alert.SuppressionButton.State == NSCellStateValue.On)
+            {
+                Settings.SkipConformDialog = true;
+                Settings.Save();
+            }
+        }
+
+        _inspector.Busy = true;
+        if (move) _resume = _player.Release(incoming.Select(t => t.Path));
+        var doing = Strings.T(move ? "Move {0} file(s)" : "Take in {0} file(s)", incoming.Count);
+        Window.Subtitle = doing + "…";
+
+        var backups = new BackupStore(Settings.ResolvedBackupFolder);
+        var svc = new ConversionService(new FfmpegRunner(FfmpegLocator.Find(Settings.FfmpegPath) ?? "ffmpeg"), backups);
+        var r = await Task.Run(() => FolderImport.RunAsync(req, svc, backups, (i, pct) => BeginInvokeOnMainThread(() =>
+            Window.Subtitle = $"{doing} · {Strings.T("{0} of {1}", i + 1, incoming.Count)}" + (pct > 0 ? $" · {pct} %" : ""))));
+
+        if (r.Files.Count > 0)
+            AppDelegate.History.Add(move ? "move" : "import",
+                Strings.T(move ? "{0} file(s) moved to \"{1}\"" : "{0} file(s) taken into \"{1}\"",
+                          r.Done, Path.GetFileName(folder)), r.Files);
+
+        var errors = r.Errors;
+        if (Settings.RuleFor(folder).WritesFileNames)
+        {
+            var fresh = await Task.Run(() => FolderScanner.Tracks(folder).ToList());
+            errors.AddRange((await Batch.RenameToNumbersAsync(folder, fresh)).Errors);
+        }
+
+        _inspector.Busy = false;
+        if (errors.Count > 0 || r.Notes.Count > 0)
+            new NSAlert
+            {
+                MessageText = errors.Count > 0 ? Strings.T("Finished with errors") : Strings.T("Finished"),
+                InformativeText = string.Join("\n", errors.Concat(r.Notes).Take(10)),
+            }.BeginSheet(Window);
+        AfterWrite([.. existing.Select(t => t.Path)],
+            Strings.T(move ? "{0} file(s) moved to \"{1}\"" : "{0} file(s) taken into \"{1}\"", r.Done, Path.GetFileName(folder)));
+    }
+
+    private Task<nint> Sheet(NSAlert alert)
+    {
+#if DEBUG
+        if (AlbumSheet.AutoConfirm) return Task.FromResult((nint)(long)NSAlertButtonReturn.First);
+#endif
+        var tcs = new TaskCompletionSource<nint>();
+        alert.BeginSheetForResponse(Window, r => tcs.TrySetResult(r));
+        return tcs.Task;
     }
 
     // ── Umbenennen nach Muster ───────────────────────────────────

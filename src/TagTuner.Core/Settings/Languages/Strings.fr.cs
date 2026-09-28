@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Disque et piste dans une colonne",
         ["Disc number"] = "Numéro de disque",
         ["Display"] = "Affichage",
+        ["Do not ask again"] = "Ne plus demander",
         ["Down"] = "Descendre",
         ["Download and install"] = "Télécharger et installer",
         ["Downloading the update…"] = "Téléchargement de la mise à jour…",

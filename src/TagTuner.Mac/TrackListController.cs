@@ -18,6 +18,9 @@ internal sealed partial class TrackListController : NSViewController
     public event Action? Loaded;
     public event Action<AudioTrack>? PlayRequested;
 
+    /// <summary>Audiodateien von außen abgelegt: Pfade, Stelle in der Playlist, verschieben?</summary>
+    public event Action<List<string>, int, bool>? FilesDropped;
+
     /// <summary>Zeilen wurden gezogen: die ganze Liste in der neuen Reihenfolge.</summary>
     public event Action<List<AudioTrack>>? Reordered;
 
@@ -405,7 +408,15 @@ internal sealed partial class TrackListController : NSViewController
                     tableView.SetDropRowDropOperation(row, NSTableViewDropOperation.Above);
                 return NSDragOperation.Move;
             }
-            // Ordner aus dem Finder öffnen sich. Dateien übernehmen kommt später.
+            if (DroppedAudio(info).Count > 0 && owner.Folder is not null)
+            {
+                if (dropOperation == NSTableViewDropOperation.On)
+                    tableView.SetDropRowDropOperation(row, NSTableViewDropOperation.Above);
+                // Wie im Finder: kopieren, mit ⌘ verschieben.
+                return NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask)
+                    ? NSDragOperation.Move : NSDragOperation.Copy;
+            }
+            // Ordner aus dem Finder öffnen sich.
             return DroppedFolder(info) is null ? NSDragOperation.None : NSDragOperation.Generic;
         }
 
@@ -417,9 +428,28 @@ internal sealed partial class TrackListController : NSViewController
                 return owner._dragRows is { Length: > 0 } block && owner.MoveRows(block, (int)row);
             }
 
+            var audio = DroppedAudio(info);
+            if (audio.Count > 0 && owner.Folder is not null)
+            {
+                // Sortiert oder gefiltert gibt es keine Playlist-Stelle: ans Ende.
+                var at = owner.CanReorder ? (int)row : owner._all.Count;
+                var move = NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask);
+                owner.FilesDropped?.Invoke(audio, at, move);
+                return true;
+            }
+
             if (DroppedFolder(info) is not { } folder) return false;
             (owner.View.Window?.WindowController as MainWindowController)?.OpenFolder(folder);
             return true;
+        }
+
+        /// <summary>Abgelegte Audiodateien, die nicht schon in diesem Ordner liegen.</summary>
+        private List<string> DroppedAudio(INSDraggingInfo info)
+        {
+            var urls = info.DraggingPasteboard.ReadObjectsForClasses([new Class(typeof(NSUrl))], null);
+            return [.. (urls?.OfType<NSUrl>() ?? []).Select(u => u.Path).OfType<string>()
+                .Where(p => File.Exists(p) && AudioFormats.IsAudioFile(p))
+                .Where(p => !string.Equals(Path.GetDirectoryName(p), owner.Folder?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))];
         }
 
         private static string? DroppedFolder(INSDraggingInfo info)

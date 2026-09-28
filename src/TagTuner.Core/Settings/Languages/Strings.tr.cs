@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Disk ve parça tek sütunda",
         ["Disc number"] = "Disk numarası",
         ["Display"] = "Görünüm",
+        ["Do not ask again"] = "Bir daha sorma",
         ["Down"] = "Aşağı",
         ["Download and install"] = "İndir ve kur",
         ["Downloading the update…"] = "Güncelleme indiriliyor…",

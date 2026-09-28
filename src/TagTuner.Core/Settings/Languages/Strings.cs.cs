@@ -184,6 +184,7 @@ public static partial class Strings
         ["Disc and track in one column"] = "Disk a stopa v jednom sloupci",
         ["Disc number"] = "Číslo disku",
         ["Display"] = "Zobrazení",
+        ["Do not ask again"] = "Příště se neptat",
         ["Down"] = "Dolů",
         ["Download and install"] = "Stáhnout a nainstalovat",
         ["Downloading the update…"] = "Stahování aktualizace…",

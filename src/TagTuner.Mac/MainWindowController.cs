@@ -65,6 +65,7 @@ public sealed partial class MainWindowController : NSWindowController
         _tracks.SelectionChanged += () => _inspector.Show(_tracks.SelectedTracks);
         _tracks.PlayRequested += Play;
         _tracks.Reordered += OnReordered;
+        _tracks.FilesDropped += OnFilesDropped;
         _tracks.Loaded += () => _inspector.ShowFolder(_tracks.Folder, _tracks.Tracks);
         _inspector.Overview.AlbumRequested += () => ApplyAlbumMode(Window);
         _inspector.Overview.AlignRequested += (outliers, target) => _ = WriteAsync(
