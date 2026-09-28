@@ -75,7 +75,7 @@ internal static class FolderLook
 /// Die Bibliothek: eigene Ordner, Musik, Downloads, Benutzerordner und die
 /// Laufwerke, darüber die Suche nach Ordnern und Liedern.
 /// </summary>
-internal sealed class LibraryController : NSViewController
+internal sealed partial class LibraryController : NSViewController
 {
     public event Action<string>? FolderChosen;
 

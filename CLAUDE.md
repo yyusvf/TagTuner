@@ -113,9 +113,15 @@ Shell: `export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
 ### Stand und Arbeitsweise auf dem Mac
 
 `src/TagTuner.Mac` steht (Schritte 1 und 2 größtenteils, siehe Tabelle unten). AppKit ganz im Code,
-kein Storyboard. Aufbau: `MainWindowController` verbindet `LibraryController` (Seitenleiste),
-`TrackListController` (NSTableView) und `InspectorController` (Felder, Cover, `FolderOverview` ohne
-Auswahl) über ein `NSSplitViewController` mit Sidebar/Inspector-Items (Liquid Glass von selbst).
+kein Storyboard. **Visuell wie die Windows-App aufgebaut** (Wunsch des Nutzers): `MainWindowController`
+legt vier Spalten in ein `NSSplitViewController` – `InspectorController` (Metadaten, links, als
+Sidebar-Item), `LibraryController` (Bibliothek mit Cover/Interpret je Ordner und Suche),
+`TrackListController` (Ordnertitel, Titel·Interpret-Spalte, Disc-Zeilen) und `FolderPanel`
+(Ordner-Analyse, Album-Modus, rechts als Inspector-Item) –, darunter `PlayerBar` (Player,
+Statuszeile, Rückgängig). Oben Zurück/Vor, Pfad, Suche, Verlauf, Einstellungen. Farben in `Theme.cs`
+wie `App.xaml`; das Lindgrün kommt als `AccentColor` aus dem Asset-Katalog (MSBuild-Eigenschaft
+`AccentColor`, nach Änderungen an Assets einmal `obj/` löschen, sonst übergeht actool sie).
+Senkrechte Stapel über die volle Breite: `ArrangedFill` (NSStackView kann das nicht selbst).
 Geschrieben wird immer über `Batch` (Sicherung, Verlauf), Übernehmen über `FolderImport` aus Core.
 
 ```

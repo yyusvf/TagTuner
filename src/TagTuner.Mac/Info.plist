@@ -18,8 +18,6 @@
 	<string>© yyusvf</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSAccentColorName</key>
-	<string>AccentColor</string>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/AppIcon.appiconset</string>
 </dict>

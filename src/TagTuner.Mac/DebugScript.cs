@@ -41,6 +41,9 @@ public sealed partial class MainWindowController
                     case "album!": AlbumSheet.AutoConfirm = true; ApplyAlbumMode(Window); break;
                     case "rule": ToggleRule(new NSMenuItem { Tag = int.Parse(parts[1]) }); break;
                     case "rename": RenameFiles(Window); break;
+                    case "libsearch": _library.DebugSearch(parts[1]); break;
+                    case "back": GoBack(Window); break;
+                    case "forward": GoForward(Window); break;
                     case "newtab": ((AppDelegate)NSApplication.SharedApplication.Delegate).NewWindowForTab(null); break;
                     case "confirm": AlbumSheet.AutoConfirm = true; break;
                     case "drop": OnFilesDropped([.. parts[2].Split('|')], int.Parse(parts[1]), false); break;
@@ -98,6 +101,11 @@ internal sealed partial class TrackListController
 
     public void SortBy(string column, bool descending) =>
         _table.SortDescriptors = [new NSSortDescriptor(column, !descending)];
+}
+
+internal sealed partial class LibraryController
+{
+    public void DebugSearch(string text) { _search.StringValue = text; Search(text); }
 }
 
 internal sealed partial class InspectorController
