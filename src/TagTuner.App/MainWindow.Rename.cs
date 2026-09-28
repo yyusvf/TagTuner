@@ -134,37 +134,10 @@ public sealed partial class MainWindow
         box.Select(start + placeholder.Length, 0);
     }
 
-    /// <summary>
-    /// Was das Muster aus diesen Tracks macht, ohne die Dateien, die ihren
-    /// Namen behalten. Zwei Tracks dürfen nicht auf demselben Namen landen,
-    /// darum wandert jeder Treffer gleich in die Liste des Belegten.
-    /// </summary>
+    /// <summary>Was das Muster aus diesen Tracks macht; gerechnet wird in Core.</summary>
     private static List<(AudioTrack Track, string Target)> RenamePlan(
-        IReadOnlyList<AudioTrack> tracks, string pattern)
-    {
-        var plan = new List<(AudioTrack, string)>();
-        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var track in tracks)
-        {
-            var folder = Path.GetDirectoryName(track.Path)!;
-            var wanted = Path.Combine(folder, FileNaming.Build(track, pattern));
-
-            // Die eigene Datei zählt nicht als Hindernis, sonst bekäme jede
-            // schon richtig benannte Datei ein „(2)" verpasst.
-            if (string.Equals(wanted, track.Path, StringComparison.OrdinalIgnoreCase))
-            {
-                taken.Add(track.Path);
-                continue;
-            }
-
-            var target = FileNaming.Free(wanted, taken);
-            taken.Add(target);
-            plan.Add((track, target));
-        }
-
-        return plan;
-    }
+        IReadOnlyList<AudioTrack> tracks, string pattern) =>
+        FileNaming.Plan(tracks, pattern);
 
     private async Task RunRenameAsync(List<(AudioTrack Track, string Target)> plan)
     {

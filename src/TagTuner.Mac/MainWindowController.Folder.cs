@@ -23,6 +23,7 @@ public sealed partial class MainWindowController
         if ((RuleSwitch)(int)item.Tag == RuleSwitch.Reset)
         {
             Settings.ClearRule(folder);
+            _inspector.ShowFolder(folder, _tracks.Tracks);
             Window.Subtitle = Strings.T("\"{0}\" follows the global setting again", Path.GetFileName(folder));
             return;
         }
@@ -37,6 +38,7 @@ public sealed partial class MainWindowController
             case RuleSwitch.RenameFiles: rule.RenameFiles = !rule.RenameFiles; break;
         }
         Settings.SetRule(folder, rule);
+        _inspector.ShowFolder(folder, _tracks.Tracks);
     }
 
     /// <summary>Häkchen und Ausgrauen der Regel-Einträge, aus ValidateMenuItem.</summary>
@@ -103,6 +105,31 @@ public sealed partial class MainWindowController
 
         await WriteAsync(jobs, "album", Strings.T("Album mode applied to \"{0}\"", Path.GetFileName(folder)),
                          renameAfter: rule.WritesFileNames);
+    }
+
+    // ── Umbenennen nach Muster ───────────────────────────────────
+
+    [Export("renameFiles:")]
+    public async void RenameFiles(NSObject sender)
+    {
+        // Die Auswahl, oder ohne Auswahl der ganze Ordner in Playlist-Reihenfolge.
+        var tracks = _tracks.SelectedTracks is { Count: > 0 } sel
+            ? sel : TrackSorting.FolderSort(_tracks.Tracks, Settings.SortByDiscThenTrack);
+        if (tracks.Count == 0 || _inspector.Busy) return;
+
+        var plan = await RenameSheet.AskAsync(Window, tracks);
+        if (plan is not { Count: > 0 }) return;
+
+        _inspector.Busy = true;
+        var paths = plan.Select(p => p.Track.Path).ToList();
+        _resume = _player.Release(paths);
+        var r = await Batch.RenameAsync(plan);
+        _inspector.Busy = false;
+        if (r.Errors.Count > 0)
+            new NSAlert { MessageText = Strings.T("Finished with errors"), InformativeText = string.Join("\n", r.Errors.Take(8)) }
+                .BeginSheet(Window);
+        AfterWrite(paths, Strings.T("{0} file(s) renamed", r.Written),
+                   r.Files.ToDictionary(f => f.Original, f => f.OutputPath!, StringComparer.OrdinalIgnoreCase));
     }
 
     // ── Umsortieren ──────────────────────────────────────────────

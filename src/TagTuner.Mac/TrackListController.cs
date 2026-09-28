@@ -13,6 +13,9 @@ namespace TagTuner.Mac;
 internal sealed partial class TrackListController : NSViewController
 {
     public event Action? SelectionChanged;
+
+    /// <summary>Der Ordner ist (neu) eingelesen.</summary>
+    public event Action? Loaded;
     public event Action<AudioTrack>? PlayRequested;
 
     /// <summary>Zeilen wurden gezogen: die ganze Liste in der neuen Reihenfolge.</summary>
@@ -61,24 +64,10 @@ internal sealed partial class TrackListController : NSViewController
         _table.AutosaveName = "TrackTable";
         _table.AutosaveTableColumns = true;
 
-        foreach (var col in VisibleColumns())
-        {
-            var c = new NSTableColumn(col.Id)
-            {
-                Title = Strings.T(col.Header),
-                Width = (nfloat)(col.IsCover ? 28 : col.Width),
-                MinWidth = col.IsCover ? 28 : 30,
-                Editable = false,
-            };
-            if (col.IsCover) c.MaxWidth = 28;
-            // Nur die Textspalten wachsen mit dem Fenster, Nummern und Kürzel bleiben schmal.
-            c.ResizingMask = col.Look == ColumnLook.Text && !col.IsCover
-                ? NSTableColumnResizing.Autoresizing | NSTableColumnResizing.UserResizingMask
-                : NSTableColumnResizing.UserResizingMask;
-            if (col.Look == ColumnLook.MonoRight) c.HeaderCell.Alignment = NSTextAlignment.Right;
-            if (col.Sort is not null) c.SortDescriptorPrototype = new NSSortDescriptor(col.Id, true);
-            _table.AddColumn(c);
-        }
+        foreach (var col in VisibleColumns()) _table.AddColumn(NewColumn(col));
+
+        // Rechtsklick auf die Kopfzeile: Spalten ein- und ausblenden, wie im Finder.
+        _table.HeaderView!.Menu = new NSMenu { Delegate = new ColumnMenu(this) };
 
         _table.Delegate = new Delegate(this);
         _table.DataSource = new Source(this);
@@ -116,6 +105,69 @@ internal sealed partial class TrackListController : NSViewController
         ]);
         View = root;
         ShowEmpty();
+    }
+
+    private static NSTableColumn NewColumn(TrackColumn col)
+    {
+        var c = new NSTableColumn(col.Id)
+        {
+            Title = Strings.T(col.Header),
+            Width = (nfloat)(col.IsCover ? 28 : col.Width),
+            MinWidth = col.IsCover ? 28 : 30,
+            Editable = false,
+        };
+        if (col.IsCover) c.MaxWidth = 28;
+        // Nur die Textspalten wachsen mit dem Fenster, Nummern und Kürzel bleiben schmal.
+        c.ResizingMask = col.Look == ColumnLook.Text && !col.IsCover
+            ? NSTableColumnResizing.Autoresizing | NSTableColumnResizing.UserResizingMask
+            : NSTableColumnResizing.UserResizingMask;
+        if (col.Look == ColumnLook.MonoRight) c.HeaderCell.Alignment = NSTextAlignment.Right;
+        if (col.Sort is not null) c.SortDescriptorPrototype = new NSSortDescriptor(col.Id, true);
+        return c;
+    }
+
+    private sealed class ColumnMenu(TrackListController owner) : NSMenuDelegate
+    {
+        public override void MenuWillHighlightItem(NSMenu menu, NSMenuItem item) { }
+
+        public override void NeedsUpdate(NSMenu menu)
+        {
+            menu.RemoveAllItems();
+            foreach (var col in TrackColumn.All)
+            {
+                var shown = owner._table.FindColumn(new NSString(col.Id)) >= 0;
+                var title = col.IsCover ? Strings.T("Cover") : Strings.T(col.Header);
+                var item = new NSMenuItem(title, (_, _) => owner.ToggleColumn(col))
+                {
+                    State = shown ? NSCellStateValue.On : NSCellStateValue.Off,
+                };
+                menu.AddItem(item);
+            }
+        }
+    }
+
+    private void ToggleColumn(TrackColumn col)
+    {
+        var at = _table.FindColumn(new NSString(col.Id));
+        if (at >= 0)
+        {
+            if (_table.ColumnCount <= 2) return;   // eine Textspalte bleibt immer
+            _table.RemoveColumn(_table.TableColumns()[at]);
+        }
+        else
+        {
+            _table.AddColumn(NewColumn(col));
+            // An ihren Platz aus dem Katalog, nicht einfach ans Ende.
+            var wanted = TrackColumn.All.ToList().IndexOf(col);
+            var target = _table.TableColumns().Count(c =>
+                TrackColumn.ById(c.Identifier) is { } other && TrackColumn.All.ToList().IndexOf(other) < wanted);
+            _table.MoveColumn(_table.ColumnCount - 1, target);
+        }
+
+        Settings.TrackColumns = [.. _table.TableColumns().Select(c =>
+            new TrackColumnState { Id = c.Identifier, Visible = true, Width = c.Width })];
+        Settings.Save();
+        _table.ReloadData();
     }
 
     private static IEnumerable<TrackColumn> VisibleColumns()
@@ -158,6 +210,7 @@ internal sealed partial class TrackListController : NSViewController
         _all = tracks;
         Refresh();
         ShowEmpty();
+        Loaded?.Invoke();
 
         if (keepSelection is { Count: > 0 })
             Select(keepSelection);
@@ -482,6 +535,8 @@ internal sealed partial class TrackListController : NSViewController
             menu.AddItem(new NSMenuItem(Strings.T("Set cover…"), new Selector("chooseCover:"), ""));
             menu.AddItem(new NSMenuItem(Strings.T("Paste cover"), new Selector("pasteCover:"), ""));
             menu.AddItem(new NSMenuItem(Strings.T("Remove cover"), new Selector("removeCover:"), ""));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(new NSMenuItem(Strings.T("Rename…"), new Selector("renameFiles:"), ""));
             menu.AddItem(NSMenuItem.SeparatorItem);
             menu.AddItem(new NSMenuItem(Strings.T("Show in Finder"), (_, _) =>
                 NSWorkspace.SharedWorkspace.ActivateFileViewer([.. sel.Select(x => NSUrl.FromFilename(x.Path))])));

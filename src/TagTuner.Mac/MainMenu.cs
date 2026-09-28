@@ -42,6 +42,8 @@ internal static class MainMenu
         Item(file, Strings.T("Show in Finder"), "revealInFinder:", "r",
              NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ShiftKeyMask);
         Item(file, Strings.T("Reload"), "reloadFolder:", "r");
+        Item(file, Strings.T("Rename…"), "renameFiles:", "r",
+             NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask);
         file.AddItem(NSMenuItem.SeparatorItem);
         Item(file, Strings.T("Close"), "performClose:", "w");
 

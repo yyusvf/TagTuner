@@ -39,6 +39,7 @@ public sealed partial class MainWindowController
                     case "album": ApplyAlbumMode(Window); break;
                     case "album!": AlbumSheet.AutoConfirm = true; ApplyAlbumMode(Window); break;
                     case "rule": ToggleRule(new NSMenuItem { Tag = int.Parse(parts[1]) }); break;
+                    case "rename": RenameFiles(Window); break;
                     case "copytags": CopyTags(Window); break;
                     case "pastetags": PasteTags(Window); break;
                     case "settings": SettingsWindow.Show(); break;

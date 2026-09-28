@@ -65,6 +65,11 @@ public sealed partial class MainWindowController : NSWindowController
         _tracks.SelectionChanged += () => _inspector.Show(_tracks.SelectedTracks);
         _tracks.PlayRequested += Play;
         _tracks.Reordered += OnReordered;
+        _tracks.Loaded += () => _inspector.ShowFolder(_tracks.Folder, _tracks.Tracks);
+        _inspector.Overview.AlbumRequested += () => ApplyAlbumMode(Window);
+        _inspector.Overview.AlignRequested += (outliers, target) => _ = WriteAsync(
+            [.. outliers.Select(t => new Job(t, new TagEdit(), target.Format, target.SampleRate))],
+            "align", Strings.T("Align folder"));
         _inspector.ApplyRequested += (jobs, label) => _ = WriteAsync(jobs, "batch", label);
         _player.Changed += UpdatePlayer;
         _player.Finished += () => BeginInvokeOnMainThread(() => Step(+1, onlyIfPlaying: false));
@@ -429,6 +434,7 @@ public sealed partial class MainWindowController : NSWindowController
             "pasteTags:" => _copied is not null && sel.Count > 0,
             "chooseCover:" or "pasteCover:" or "removeCover:" => sel.Count > 0,
             "revealInFinder:" or "reloadFolder:" => _tracks.Folder is not null,
+            "renameFiles:" => _tracks.Tracks.Count > 0 && !_inspector.Busy,
             "playPause:" => _player.Track is not null || _tracks.Shown.Count > 0,
             "nextTrack:" or "previousTrack:" => _player.Track is not null,
             _ => true,

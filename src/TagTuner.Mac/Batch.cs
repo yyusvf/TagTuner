@@ -78,6 +78,30 @@ internal static class Batch
     public static bool MissingFfmpeg(IEnumerable<Job> jobs) =>
         jobs.Any(j => j.Converts) && FfmpegLocator.Find(Settings.FfmpegPath) is null;
 
+    /// <summary>Benennt um, je Datei mit Sicherung, als ein Vorgang im Verlauf.</summary>
+    public static Task<BatchResult> RenameAsync(IReadOnlyList<(AudioTrack Track, string Target)> plan) =>
+        Task.Run(() =>
+        {
+            var backups = new BackupStore(Settings.ResolvedBackupFolder);
+            var files = new List<HistoryFile>();
+            var errors = new List<string>();
+            foreach (var (track, target) in plan)
+            {
+                try
+                {
+                    // Erst sichern, dann umbenennen. Der Verlauf legt die Sicherung
+                    // an den alten Platz zurück und räumt den neuen Namen weg.
+                    var backup = backups.Create(track.Path);
+                    File.Move(track.Path, target);
+                    files.Add(new HistoryFile { Original = track.Path, BackupPath = backup, OutputPath = target });
+                }
+                catch (Exception ex) { errors.Add($"{track.FileName}: {ex.Message}"); }
+            }
+            if (files.Count > 0)
+                AppDelegate.History.Add("rename", Strings.T("{0} file(s) renamed", files.Count), files);
+            return new BatchResult(files, errors, []);
+        });
+
     /// <summary>
     /// Zieht die Nummer vorn im Dateinamen der Track-Nummer nach, wenn die
     /// Regel des Ordners das will. Wie unter Windows: erst sichern, dann

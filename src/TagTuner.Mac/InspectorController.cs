@@ -134,7 +134,7 @@ internal sealed partial class InspectorController : NSViewController
         content.SetCustomSpacing(20, grid);
         content.TranslatesAutoresizingMaskIntoConstraints = false;
 
-        var scroll = new NSScrollView
+        var scroll = _editScroll = new NSScrollView
         {
             HasVerticalScroller = true,
             DrawsBackground = false,
@@ -171,7 +171,7 @@ internal sealed partial class InspectorController : NSViewController
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
             Spacing = 8,
         }.Arranged(_spinner, new NSView(), _reset, _apply);
-        var bottom = new NSStackView
+        var bottom = _bottom = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
@@ -181,7 +181,22 @@ internal sealed partial class InspectorController : NSViewController
         var line = new NSBox { BoxType = NSBoxType.NSBoxSeparator };
 
         var root = new NSView();
-        foreach (var v in new NSView[] { scroll, line, bottom })
+        _line = line;
+        var overviewScroll = _overviewScroll = new NSScrollView
+        {
+            HasVerticalScroller = true,
+            DrawsBackground = false,
+            AutohidesScrollers = true,
+            DocumentView = Overview,
+        };
+        Overview.TranslatesAutoresizingMaskIntoConstraints = false;
+        NSLayoutConstraint.ActivateConstraints([
+            Overview.LeadingAnchor.ConstraintEqualTo(overviewScroll.ContentView.LeadingAnchor),
+            Overview.TrailingAnchor.ConstraintEqualTo(overviewScroll.ContentView.TrailingAnchor),
+            Overview.TopAnchor.ConstraintEqualTo(overviewScroll.ContentView.TopAnchor),
+        ]);
+
+        foreach (var v in new NSView[] { scroll, line, bottom, overviewScroll })
         {
             v.TranslatesAutoresizingMaskIntoConstraints = false;
             root.AddSubview(v);
@@ -200,6 +215,10 @@ internal sealed partial class InspectorController : NSViewController
             buttons.TrailingAnchor.ConstraintEqualTo(bottom.TrailingAnchor, -16),
             _plan.TrailingAnchor.ConstraintEqualTo(bottom.TrailingAnchor, -16),
             root.WidthAnchor.ConstraintGreaterThanOrEqualTo(260),
+            overviewScroll.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor),
+            overviewScroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            overviewScroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            overviewScroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
         ]);
         View = root;
         Show([]);
@@ -237,9 +256,31 @@ internal sealed partial class InspectorController : NSViewController
     public bool HasChanges => Fields().Any(f => _loaded.TryGetValue(f, out var was) && f.StringValue != was)
                               || _pendingCover is not null || WantedFormat is not null || WantedRate is not null;
 
+    /// <summary>Ohne Auswahl zeigt der Inspektor den Ordner.</summary>
+    public FolderOverview Overview { get; } = new();
+
+    private NSScrollView _editScroll = null!, _overviewScroll = null!;
+    private NSView _bottom = null!, _line = null!;
+    private string? _folder;
+
+    public void ShowFolder(string? folder, IReadOnlyList<AudioTrack> tracks)
+    {
+        _folder = folder;
+        Overview.Show(folder, tracks);
+        SwapViews();
+    }
+
+    private void SwapViews()
+    {
+        var overview = _sel.Count == 0 && _folder is not null;
+        _overviewScroll.Hidden = !overview;
+        _editScroll.Hidden = _bottom.Hidden = _line.Hidden = overview;
+    }
+
     public void Show(List<AudioTrack> sel)
     {
         _sel = sel;
+        if (_overviewScroll is not null) SwapViews();
         _pendingCover = null;
         var any = sel.Count > 0;
         var single = sel.Count == 1;
