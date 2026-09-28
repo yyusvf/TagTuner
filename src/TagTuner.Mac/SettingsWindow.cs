@@ -16,13 +16,14 @@ internal static class SettingsWindow
     {
         if (_window is null)
         {
-            _window = new NSWindow(new CGRect(0, 0, 520, 420),
+            _window = new NSWindow(new CGRect(0, 0, 560, 600),
                 NSWindowStyle.Titled | NSWindowStyle.Closable, NSBackingStore.Buffered, false)
             {
                 Title = Strings.T("Settings"),
                 ReleasedWhenClosed = false,
             };
             _window.ContentView = Build();
+            _window.SetContentSize(_window.ContentView.FittingSize);
             _window.Center();
         }
         _window.MakeKeyAndOrderFront(null);
@@ -53,6 +54,26 @@ internal static class SettingsWindow
         var combine = Check(Strings.T("Disc and track in one column"), S.CombineDiscAndTrack,
             on => S.CombineDiscAndTrack = on);
 
+        // Standardprofil: greift nur, wenn ein Ordner leer oder gemischt ist.
+        var fmt = new NSPopUpButton();
+        fmt.AddItems([.. Core.Audio.AudioFormats.Targets]);
+        fmt.SelectItem(S.DefaultFormat.ToUpperInvariant());
+        fmt.Activated += (_, _) => { S.DefaultFormat = fmt.TitleOfSelectedItem!; S.Save(); };
+        int[] rates = [44100, 48000, 88200, 96000, 176400, 192000];
+        var rate = new NSPopUpButton();
+        rate.AddItems([.. rates.Select(r => r % 1000 == 0 ? $"{r / 1000} kHz" : $"{r / 1000.0:0.0} kHz")]);
+        rate.SelectItem(Math.Max(0, Array.IndexOf(rates, S.DefaultSampleRate)));
+        rate.Activated += (_, _) => { S.DefaultSampleRate = rates[(int)rate.IndexOfSelectedItem]; S.Save(); };
+        var profile = new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 8 }.Arranged(fmt, rate);
+
+        // Was beim Ablegen und im Album-Modus gilt, solange ein Ordner nichts Eigenes hat.
+        var conform = Check(Strings.T("Align format and sample rate"), S.DefaultAutoConform, on => S.DefaultAutoConform = on);
+        var album = Check(Strings.T("Album mode"), S.DefaultAlbumMode, on => S.DefaultAlbumMode = on);
+        var baseTags = Check(Strings.T("Base metadata"), S.DefaultBaseTags, on => S.DefaultBaseTags = on);
+        var cover = Check(Strings.T("Cover"), S.DefaultCover, on => S.DefaultCover = on);
+        var numbering = Check(Strings.T("Track numbering"), S.DefaultNumbering, on => S.DefaultNumbering = on);
+        var names = Check(Strings.T("File names follow"), S.DefaultRenameFiles, on => S.DefaultRenameFiles = on);
+
         // Tags einfügen
         var paste = new NSPopUpButton();
         paste.AddItems([Strings.T("Everything"), Strings.T("Everything except title and track number")]);
@@ -80,6 +101,9 @@ internal static class SettingsWindow
             [Head(Strings.T("Language")), Stack(lang, langNote)],
             [Head(Strings.T("Library")), onlyAudio],
             [Head(Strings.T("Track list")), Stack(discFirst, combine)],
+            [Head(Strings.T("Default profile")), profile],
+            [Head(Strings.T("On drop")), Stack(conform, album, Indent(1, baseTags), Indent(1, cover),
+                                               Indent(1, numbering), Indent(2, names))],
             [Head(Strings.T("Paste tags")), paste],
             [Head(Strings.T("Delete automatically")), keep],
             [Head(Strings.T("Backups")), Stack(info, open)],
@@ -100,6 +124,13 @@ internal static class SettingsWindow
         ]);
         return root;
     }
+
+    /// <summary>Unterpunkte eingerückt, Kästchen samt Text.</summary>
+    private static NSView Indent(int level, NSView v) => new NSStackView
+    {
+        Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+        EdgeInsets = new NSEdgeInsets(0, 20 * level, 0, 0),
+    }.Arranged(v);
 
     private static NSTextField Head(string text) => NSTextField.CreateLabel(text + ":");
 

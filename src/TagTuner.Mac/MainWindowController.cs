@@ -16,19 +16,18 @@ public sealed partial class MainWindowController : NSWindowController
     private readonly LibraryController _library = new();
     private readonly TrackListController _tracks = new();
     private readonly InspectorController _inspector = new();
-    private readonly Player _player;
+    private static Player _player => AppDelegate.Player;
     private readonly ToolbarDelegate _toolbarDelegate;
     private NSSearchToolbarItem? _search;
     private NSTimer? _ticker;
 
     private static AppSettings Settings => AppDelegate.Settings;
 
-    public MainWindowController() : base(NewWindow())
+    public MainWindowController(bool first = true) : base(NewWindow())
     {
-        _player = new Player(Settings.Volume);
 
         var side = NSSplitViewItem.CreateSidebar(_library);
-        side.MinimumThickness = 180;
+        side.MinimumThickness = 210;
         side.MaximumThickness = 360;
         side.PreferredThicknessFraction = 0.17f;
         var list = NSSplitViewItem.CreateContentList(_tracks);
@@ -43,8 +42,8 @@ public sealed partial class MainWindowController : NSWindowController
         _split.SplitView.AutosaveName = "MainSplit";
 
         Window.ContentViewController = _split;
-        Window.FrameAutosaveName = "MainWindow";
-        if (!Window.SetFrameUsingName("MainWindow"))
+        if (first) Window.FrameAutosaveName = "MainWindow";
+        if (!first || !Window.SetFrameUsingName("MainWindow"))
         {
             Window.SetContentSize(new CGSize(1320, 780));
             Window.Center();
@@ -73,7 +72,7 @@ public sealed partial class MainWindowController : NSWindowController
             "align", Strings.T("Align folder"));
         _inspector.ApplyRequested += (jobs, label) => _ = WriteAsync(jobs, "batch", label);
         _player.Changed += UpdatePlayer;
-        _player.Finished += () => BeginInvokeOnMainThread(() => Step(+1, onlyIfPlaying: false));
+        _player.Finished += OnFinished;
 
         _ticker = NSTimer.CreateRepeatingScheduledTimer(0.5, _ => Tick());
 
@@ -81,6 +80,8 @@ public sealed partial class MainWindowController : NSWindowController
     }
 
     /// <summary>Beim Start: den Ordner vom letzten Mal wieder öffnen.</summary>
+    public string? Folder => _tracks.Folder;
+
     public void OpenLastFolder()
     {
         if (Settings.LastFolder is { } last && Directory.Exists(last)) OpenFolder(last);
@@ -95,7 +96,8 @@ public sealed partial class MainWindowController : NSWindowController
         {
             Title = "TagTuner",
             TitlebarAppearsTransparent = false,
-            TabbingMode = NSWindowTabbingMode.Disallowed,
+            TabbingMode = NSWindowTabbingMode.Preferred,
+            TabbingIdentifier = "TagTuner",
         };
         w.MinSize = new CGSize(900, 480);
         return w;
@@ -222,19 +224,30 @@ public sealed partial class MainWindowController : NSWindowController
         Settings.Save();
     }
 
+    public event Action<MainWindowController>? Closed;
+
     [Export("windowWillClose:")]
     public void WindowWillClose(NSNotification n)
     {
         _ticker?.Invalidate();
-        _player.Stop();
+        _player.Changed -= UpdatePlayer;
+        _player.Finished -= OnFinished;
+        if (_player.Owner == this) _player.Stop();
         SaveState();
+        Closed?.Invoke(this);
+    }
+
+    /// <summary>Am Ende eines Lieds weiter, aber nur im Fenster, aus dem es kam.</summary>
+    private void OnFinished()
+    {
+        if (_player.Owner == this) BeginInvokeOnMainThread(() => Step(+1, onlyIfPlaying: false));
     }
 
     // ── Wiedergabe ───────────────────────────────────────────────
 
     private void Play(AudioTrack track)
     {
-        var err = _player.Play(track);
+        var err = _player.Play(track, this);
         if (err is not null)
         {
             var a = new NSAlert
@@ -254,7 +267,7 @@ public sealed partial class MainWindowController : NSWindowController
 
     private void UpdatePlayer()
     {
-        _tracks.PlayingPath = _player.Track?.Path;
+        _tracks.PlayingPath = _player.Owner == this ? _player.Track?.Path : null;
         _tracks.RedrawRows();
         _toolbarDelegate.UpdatePlayer(_player);
     }
@@ -520,7 +533,7 @@ public sealed partial class MainWindowController : NSWindowController
             };
             _progress.Activated += (_, _) =>
             {
-                owner._player.Seek(_progress.DoubleValue * owner._player.Duration);
+                AppDelegate.Player.Seek(_progress.DoubleValue * AppDelegate.Player.Duration);
                 _dragging = false;
             };
 
@@ -537,8 +550,8 @@ public sealed partial class MainWindowController : NSWindowController
 
             var vol = NSImageView.FromImage(NSImage.GetSystemSymbol("speaker.wave.2.fill", null)!);
             vol.ContentTintColor = NSColor.SecondaryLabel;
-            var volume = new NSSlider { MinValue = 0, MaxValue = 1, DoubleValue = owner._player.Volume, ControlSize = NSControlSize.Mini };
-            volume.Activated += (_, _) => owner._player.Volume = (float)volume.DoubleValue;
+            var volume = new NSSlider { MinValue = 0, MaxValue = 1, DoubleValue = AppDelegate.Player.Volume, ControlSize = NSControlSize.Mini };
+            volume.Activated += (_, _) => AppDelegate.Player.Volume = (float)volume.DoubleValue;
             volume.WidthAnchor.ConstraintEqualTo(70).Active = true;
 
             var stack = new NSStackView
@@ -550,7 +563,7 @@ public sealed partial class MainWindowController : NSWindowController
             stack.SetCustomSpacing(14, right);
             stack.SetCustomSpacing(4, vol);
             right.WidthAnchor.ConstraintEqualTo(260).Active = true;
-            UpdatePlayer(owner._player);
+            UpdatePlayer(AppDelegate.Player);
             return stack;
         }
 

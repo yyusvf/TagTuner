@@ -35,6 +35,7 @@ internal static class MainMenu
 
         // ── Ablage ───────────────────────────────────────────────
         var file = Sub(bar, Strings.T("File"));
+        Item(file, Strings.T("New Tab"), "newWindowForTab:", "t");
         Item(file, Strings.T("Open Folder…"), "openFolder:", "o");
         Item(file, Strings.T("Add folder…"), "addLibraryFolder:", "o",
              NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ShiftKeyMask);

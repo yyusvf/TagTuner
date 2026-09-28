@@ -10,6 +10,11 @@ public sealed class AppDelegate : NSApplicationDelegate
     public static AppSettings Settings { get; private set; } = null!;
     public static HistoryStore History { get; private set; } = null!;
 
+    /// <summary>Ein Player für alle Fenster und Tabs.</summary>
+    internal static Player Player { get; private set; } = null!;
+
+    /// <summary>Die offenen Fenster. Hier gehalten, sonst räumt sie der GC weg.</summary>
+    private readonly List<MainWindowController> _windows = [];
     private MainWindowController? _main;
 
     public override void WillFinishLaunching(NSNotification notification)
@@ -25,6 +30,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         Strings.Use(Settings.Language);
         AudioProbe.Configure();
         History = new HistoryStore();
+        Player = new Player(Settings.Volume);
 
         // Abgelaufene Sicherungen wie unter Windows beim Start wegräumen,
         // und den Verlauf von Verweisen auf verschwundene Dateien befreien.
@@ -41,7 +47,7 @@ public sealed class AppDelegate : NSApplicationDelegate
     {
         try
         {
-            _main = new MainWindowController();
+            _main = Track(new MainWindowController());
         }
         catch (Exception ex)
         {
@@ -66,15 +72,44 @@ public sealed class AppDelegate : NSApplicationDelegate
 #endif
     }
 
+    private MainWindowController Track(MainWindowController w)
+    {
+        _windows.Add(w);
+        w.Closed += c => _windows.Remove(c);
+        return w;
+    }
+
+    /// <summary>Das Fenster vorn, oder das erste.</summary>
+    private MainWindowController? Front =>
+        NSApplication.SharedApplication.KeyWindow?.WindowController as MainWindowController ?? _windows.FirstOrDefault();
+
+    /// <summary>
+    /// Neuer Tab (⌘T oder das Plus in der Tab-Leiste), wie im Finder mit dem
+    /// Ordner, der gerade offen ist.
+    /// </summary>
+    [Export("newWindowForTab:")]
+    public void NewWindowForTab(NSObject? sender)
+    {
+        var from = Front;
+        var tab = Track(new MainWindowController(first: false));
+        if (from is not null) from.Window.AddTabbedWindow(tab.Window, NSWindowOrderingMode.Above);
+        tab.Window.MakeKeyAndOrderFront(this);
+        if (from?.Folder is { } f) tab.OpenFolder(f);
+    }
+
     public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender) => true;
 
-    public override void WillTerminate(NSNotification notification) => _main?.SaveState();
+    public override void WillTerminate(NSNotification notification)
+    {
+        Settings.Volume = Player.Volume;
+        Settings.Save();
+    }
 
     /// <summary>Ordner aus dem Finder aufs Dock-Symbol gezogen.</summary>
     public override void OpenUrls(NSApplication application, NSUrl[] urls)
     {
         var folder = urls.Select(u => u.Path).FirstOrDefault(p => p is not null && Directory.Exists(p));
-        if (folder is not null) _main?.OpenFolder(folder);
+        if (folder is not null) Front?.OpenFolder(folder);
     }
 
     public MainWindowController? Main => _main;

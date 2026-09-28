@@ -40,6 +40,7 @@ public sealed partial class MainWindowController
                     case "album!": AlbumSheet.AutoConfirm = true; ApplyAlbumMode(Window); break;
                     case "rule": ToggleRule(new NSMenuItem { Tag = int.Parse(parts[1]) }); break;
                     case "rename": RenameFiles(Window); break;
+                    case "newtab": ((AppDelegate)NSApplication.SharedApplication.Delegate).NewWindowForTab(null); break;
                     case "confirm": AlbumSheet.AutoConfirm = true; break;
                     case "drop": OnFilesDropped([.. parts[2].Split('|')], int.Parse(parts[1]), false); break;
                     case "copytags": CopyTags(Window); break;
@@ -52,12 +53,34 @@ public sealed partial class MainWindowController
                         Console.Error.WriteLine("STATE " + string.Join(" | ", _tracks.Tracks.Select(t =>
                             $"{t.TrackLabel}.{t.Title}/{t.Artist}/{t.Album}/{(t.HasCover ? "cover" : "-")}")));
                         break;
+                    case "snap": Snap(NSApplication.SharedApplication.KeyWindow ?? Window, parts[1]); break;
+                    case "snapall":
+                        var n = 0;
+                        var list = new List<NSWindow>();
+                        NSApplication.SharedApplication.EnumerateWindows(NSWindowListOptions.OrderedFrontToBack,
+                            (NSWindow w, ref bool stop) => list.Add(w));
+                        foreach (var w in list.Where(w => w.IsVisible && w.Frame.Height > 100)) Snap(w, $"{parts[1]}-{n++}.png");
+                        break;
                     case "quit": NSApplication.SharedApplication.Terminate(Window); return;
                 }
             }
             catch (Exception ex) { Console.Error.WriteLine($"SCRIPT FAILED {step}: {ex}"); }
             await Task.Delay(700);
         }
+    }
+}
+
+public sealed partial class MainWindowController
+{
+    /// <summary>Das eigene Fenster als PNG, ohne Bildschirmaufnahme.</summary>
+    private static void Snap(NSWindow w, string path)
+    {
+        var view = w.ContentView!.Superview ?? w.ContentView!;
+        var rep = view.BitmapImageRepForCachingDisplayInRect(view.Bounds)!;
+        view.CacheDisplay(view.Bounds, rep);
+        var png = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
+        png!.Save(path, true);
+        Console.Error.WriteLine($"SNAP {path}");
     }
 }
 

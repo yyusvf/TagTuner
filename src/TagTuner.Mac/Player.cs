@@ -21,6 +21,12 @@ internal sealed class Player
     private float _volume;
 
     public AudioTrack? Track { get; private set; }
+
+    /// <summary>
+    /// Das Fenster, aus dem gerade gespielt wird. Es gibt einen Player für
+    /// alle Tabs; weiter zum nächsten Lied geht es in der Liste dieses Fensters.
+    /// </summary>
+    public object? Owner { get; private set; }
     public bool IsPlaying => _player?.Playing == true;
     public double Position => _player?.CurrentTime ?? 0;
     public double Duration => _player?.Duration ?? 0;
@@ -49,9 +55,11 @@ internal sealed class Player
     }
 
     /// <returns>Eine Fehlermeldung, wenn es nicht abspielbar ist.</returns>
-    public string? Play(AudioTrack track)
+    public string? Play(AudioTrack track, object? owner = null)
     {
+        owner ??= Owner;
         Stop();
+        Owner = owner;
         var p = AVAudioPlayer.FromUrl(NSUrl.FromFilename(track.Path), out var error);
         if (p is null) return error?.LocalizedDescription ?? "?";
         p.Volume = _volume;
@@ -98,6 +106,7 @@ internal sealed class Player
         _player?.Dispose();
         _player = null;
         Track = null;
+        Owner = null;
         MPNowPlayingInfoCenter.DefaultCenter.NowPlaying = new MPNowPlayingInfo();
         MPNowPlayingInfoCenter.DefaultCenter.PlaybackState = MPNowPlayingPlaybackState.Stopped;
         Changed?.Invoke();
@@ -112,11 +121,12 @@ internal sealed class Player
         if (Track is not { } t || !paths.Contains(t.Path)) return null;
         var at = Position;
         var was = IsPlaying;
+        var owner = Owner;
         Stop();
         return () =>
         {
             if (!File.Exists(t.Path)) return;
-            if (Play(t) is null)
+            if (Play(t, owner) is null)
             {
                 Seek(at);
                 if (!was) Pause();
