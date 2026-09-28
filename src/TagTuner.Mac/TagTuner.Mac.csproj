@@ -27,7 +27,11 @@
          Auslieferung später osx-arm64;osx-x64 (Universal). -->
     <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
 
-    <TrimMode Condition="'$(Configuration)' == 'Release'">partial</TrimMode>
+    <!-- Nicht trimmen: Einstellungen und Verlauf gehen per Reflection durch
+         System.Text.Json, und getrimmt fehlten die Eigenschaften still. Erst
+         mit JSON-Quellgenerierung in Core wieder einschalten. -->
+    <LinkMode>None</LinkMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>

@@ -79,7 +79,7 @@ immer auch die Windows-Dateien enthalten.
 - `DispatcherQueueTimer` als Feld halten, als lokale Variable kann er vor dem Feuern verschwinden.
 - `ItemContainerTransitions` der Trackliste nicht zur Laufzeit austauschen.
 
-## Die macOS-App (Plan)
+## Die macOS-App
 
 Entscheidung: **C# mit AppKit (.NET für macOS, `net10.0-macos`)**, nicht Swift. Grund: dieselben
 nativen Bedienelemente (NSWindow, NSSplitView, NSOutlineView, NSTableView, NSToolbar, Liquid Glass)
@@ -110,6 +110,40 @@ Shell: `export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
    (`FfmpegLocator` sucht dort), Signieren/Notarisieren (Apple-Entwicklerkonto nötig),
    dritte Download-Karte auf der Website.
 
+### Stand und Arbeitsweise auf dem Mac
+
+`src/TagTuner.Mac` steht (Schritte 1 und 2 größtenteils, siehe Tabelle unten). AppKit ganz im Code,
+kein Storyboard. Aufbau: `MainWindowController` verbindet `LibraryController` (Seitenleiste),
+`TrackListController` (NSTableView) und `InspectorController` (Felder, Cover, `FolderOverview` ohne
+Auswahl) über ein `NSSplitViewController` mit Sidebar/Inspector-Items (Liquid Glass von selbst).
+Geschrieben wird immer über `Batch` (Sicherung, Verlauf), Übernehmen über `FolderImport` aus Core.
+
+```
+export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
+dotnet test tests/TagTuner.Tests
+dotnet build src/TagTuner.Mac                  # App: src/TagTuner.Mac/bin/Debug/net10.0-macos/osx-arm64/TagTuner.app
+tools/make-demo-albums.sh                      # Demo-Alben nach demo/ (ignoriert), danach wieder so erzeugen
+python3 tools/build-strings.py                 # Sprachdateien ohne PowerShell, gleiche Prüfungen
+```
+
+- **Ohne Maus testen:** Der Debug-Build nimmt Bedienschritte als Argumente, z. B.
+  `TagTuner.app/Contents/MacOS/TagTuner <ordner> --do "select:0,1" --do "set:genre:X" --do apply --do state`
+  (Liste in `DebugScript.cs`: select, set, apply, undo, album!, move, drop, rename, confirm, newtab,
+  snapall:<pfad> …). `snapall` speichert die eigenen Fenster als PNG, auch wenn `screencapture` nicht geht.
+- Die Bildschirmaufnahme `screencapture -l <id>` klappt nur, solange der Bildschirm aktiv ist.
+- Release wird nicht getrimmt (`LinkMode None`): Einstellungen und Verlauf laufen per Reflection durch
+  System.Text.Json. Erst mit JSON-Quellgenerierung in Core wieder trimmen (App dann deutlich kleiner).
+- Die Sprache kommt auf dem Mac aus `NSLocale.PreferredLanguages`; .NET meldet dort sonst Englisch.
+- Neu nach Core gewandert und von Windows noch nicht benutzt: `FolderImport` (Hereinziehen) und
+  `AlbumCover` (Mehrheits-Cover). Beim nächsten Arbeiten unter Windows `MainWindow.Import.cs` und
+  `MainWindow.AlbumApply.cs` darauf umstellen. `FileNaming.Plan` benutzt Windows schon (ungetestet
+  gebaut, weil auf dem Mac entstanden: beim nächsten Windows-Build prüfen).
+
+Offen für den Mac: Unterordner-Ansicht und geteilte Ansicht, Suche in der Bibliothek, Cover
+zuschneiden, Sicherungen-Seite, Disc-Zeilen, Finder-Integration, Sparkle, DMG mit ffmpeg,
+Signieren/Notarisieren, Universal Binary (`RuntimeIdentifier` ist noch nur `osx-arm64`),
+Mac-eigenes App-Symbol (jetzt das Windows-Symbol).
+
 Noch Windows-only in Core: `UpdateService` erwartet ein `.exe`-Setup. Für den Mac eine eigene
 Update-Strecke (Sparkle) vorsehen, nicht die Windows-Logik verbiegen.
 
@@ -119,21 +153,21 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 
 | Funktion | Windows | Mac |
 |---|---|---|
-| Ordner als Playlist, Bibliothek mit eigenen/ausgeblendeten Ordnern | ✓ | offen |
-| Metadaten-Spalte (nur Auswahl, `<mixed>`), Anwenden, Zurücksetzen | ✓ | offen |
-| Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | offen |
-| Format/Samplerate umwandeln (ffmpeg), Ordner angleichen mit Protokoll | ✓ | offen |
-| Album-Modus (Basis-Tags, Cover, Nummerierung, Dateinamen folgen) | ✓ | offen |
-| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | offen |
-| Dateien hereinziehen (Übernehmen/Verschieben, angleichen) | ✓ | offen |
-| Unterordner-Ansicht, geteilte Ansicht, Tabs | ✓ | offen |
-| Sortieren nach allen Spalten, Spalten wählen/verschieben | ✓ | offen |
-| Suche in Bibliothek und Ordner | ✓ | offen |
-| Umbenennen nach Muster (Platzhalter-Knöpfe) | ✓ | offen |
-| Tags kopieren/einfügen | ✓ | offen |
-| Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | offen |
-| Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | offen |
+| Ordner als Playlist, Bibliothek mit eigenen/ausgeblendeten Ordnern | ✓ | ✓ |
+| Metadaten-Spalte (nur Auswahl, `<mixed>`), Anwenden, Zurücksetzen | ✓ | ✓ |
+| Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | teils (kein Zuschneiden, nicht „aus dem Ordner“) |
+| Format/Samplerate umwandeln (ffmpeg), Ordner angleichen mit Protokoll | ✓ | ✓ (ohne eigenes Protokollfenster) |
+| Album-Modus (Basis-Tags, Cover, Nummerierung, Dateinamen folgen) | ✓ | ✓ |
+| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | teils (ohne Aufleuchten und Disc-Zeilen) |
+| Dateien hereinziehen (Übernehmen/Verschieben, angleichen) | ✓ | ✓ (⌘ = verschieben) |
+| Unterordner-Ansicht, geteilte Ansicht, Tabs | ✓ | teils (native Tabs, der Rest offen) |
+| Sortieren nach allen Spalten, Spalten wählen/verschieben | ✓ | ✓ |
+| Suche in Bibliothek und Ordner | ✓ | teils (nur Ordner) |
+| Umbenennen nach Muster (Platzhalter-Knöpfe) | ✓ | ✓ |
+| Tags kopieren/einfügen | ✓ | ✓ |
+| Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | teils (ohne Sicherungen-Seite) |
+| Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | ✓ |
 | Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | offen (Finder) |
-| Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | offen |
+| Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | teils (ohne Updates) |
 | Stille Updates | ✓ (Inno Setup) | offen (Sparkle) |
-| 13 Sprachen | ✓ | offen |
+| 13 Sprachen | ✓ | ✓ |
