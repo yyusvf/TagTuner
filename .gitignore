@@ -10,3 +10,6 @@ tools/ffmpeg/
 
 # Visual Studio
 .vs/
+
+# Demo-Alben (tools/make-demo-albums.sh)
+demo/

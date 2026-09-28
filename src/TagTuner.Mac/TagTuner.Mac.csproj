@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Die macOS-App: AppKit über .NET für macOS. Nur Oberfläche und was
+       nur der Mac kann, die Logik kommt aus TagTuner.Core. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>true</ImplicitUsings>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <RootNamespace>TagTuner.Mac</RootNamespace>
+    <AssemblyName>TagTuner</AssemblyName>
+    <ApplicationTitle>TagTuner</ApplicationTitle>
+    <ApplicationId>app.tagtuner.TagTuner</ApplicationId>
+    <ApplicationDisplayVersion>0.8.6</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <Product>TagTuner</Product>
+    <Company>yyusvf</Company>
+    <Version>0.8.6</Version>
+
+    <!-- Der Workload 26.5 verlangt Xcode 26.6, gebaut wird mit Xcode 27.
+         Das klappt, die Prüfung bricht nur vorsorglich ab. Entfernen, sobald
+         ein Workload für Xcode 27 da ist (dotnet workload update). -->
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
+
+    <!-- Nur Apple Silicon: kleiner und schneller gebaut. Für die
+         Auslieferung später osx-arm64;osx-x64 (Universal). -->
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+
+    <TrimMode Condition="'$(Configuration)' == 'Release'">partial</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TagTuner.Core\TagTuner.Core.csproj" />
+  </ItemGroup>
+
+</Project>
