@@ -7,81 +7,107 @@ using TagTuner.Core.Settings;
 namespace TagTuner.Mac;
 
 /// <summary>
-/// Das Hauptfenster: Bibliothek links, Trackliste in der Mitte, Metadaten
-/// rechts. Die drei Teile kennen sich nicht, verbunden werden sie hier.
+/// Das Hauptfenster, aufgebaut wie unter Windows: Metadaten links, daneben
+/// die Bibliothek, in der Mitte die Trackliste, rechts die Ordner-Analyse,
+/// unten der Player mit der Statuszeile. Oben Zurück, Vor und der Pfad.
+/// Die Teile kennen sich nicht, verbunden werden sie hier.
 /// </summary>
 public sealed partial class MainWindowController : NSWindowController
 {
     private readonly NSSplitViewController _split = new();
+    private readonly InspectorController _inspector = new();
     private readonly LibraryController _library = new();
     private readonly TrackListController _tracks = new();
-    private readonly InspectorController _inspector = new();
+    private readonly FolderPanel _panel = new();
+    private readonly PlayerBar _bar = new();
     private static Player _player => AppDelegate.Player;
     private readonly ToolbarDelegate _toolbarDelegate;
     private NSSearchToolbarItem? _search;
+    private NSPathControl? _pathControl;
     private NSTimer? _ticker;
+
+    /// <summary>Zurück und Vor, wie im Explorer: die zuletzt offenen Ordner.</summary>
+    private readonly Stack<string> _back = new(), _forward = new();
 
     private static AppSettings Settings => AppDelegate.Settings;
 
     public MainWindowController(bool first = true) : base(NewWindow())
     {
-
-        var side = NSSplitViewItem.CreateSidebar(_library);
-        side.MinimumThickness = 210;
-        side.MaximumThickness = 360;
-        side.PreferredThicknessFraction = 0.17f;
+        var meta = NSSplitViewItem.CreateSidebar(_inspector);
+        meta.MinimumThickness = 250;
+        meta.MaximumThickness = 380;
+        meta.PreferredThicknessFraction = 0.17f;
+        meta.CanCollapse = true;
+        var lib = NSSplitViewItem.FromViewController(_library);
+        lib.MinimumThickness = 200;
+        lib.MaximumThickness = 360;
+        lib.PreferredThicknessFraction = 0.15f;
+        lib.HoldingPriority = 260;
         var list = NSSplitViewItem.CreateContentList(_tracks);
-        list.MinimumThickness = 360;
-        var insp = NSSplitViewItem.CreateInspector(_inspector);
-        insp.MinimumThickness = 270;
-        insp.MaximumThickness = 440;
-        insp.PreferredThicknessFraction = 0.22f;
-        _split.AddSplitViewItem(side);
+        list.MinimumThickness = 380;
+        list.HoldingPriority = 200;
+        var panel = NSSplitViewItem.CreateInspector(_panel);
+        panel.MinimumThickness = 240;
+        panel.MaximumThickness = 380;
+        panel.PreferredThicknessFraction = 0.14f;
+        _split.AddSplitViewItem(meta);
+        _split.AddSplitViewItem(lib);
         _split.AddSplitViewItem(list);
-        _split.AddSplitViewItem(insp);
-        _split.SplitView.AutosaveName = "MainSplit";
+        _split.AddSplitViewItem(panel);
+        _split.SplitView.AutosaveName = "MainSplit5";
 
-        Window.ContentViewController = _split;
+        Window.ContentViewController = new RootController(_split, _bar);
         if (first) Window.FrameAutosaveName = "MainWindow";
         if (!first || !Window.SetFrameUsingName("MainWindow"))
         {
-            Window.SetContentSize(new CGSize(1320, 780));
+            Window.SetContentSize(new CGSize(1480, 860));
             Window.Center();
         }
         Window.WeakDelegate = this;
 
         _toolbarDelegate = new ToolbarDelegate(this);
-        var toolbar = new NSToolbar("MainToolbar")
+        Window.Toolbar = new NSToolbar("MainToolbar4")
         {
             Delegate = _toolbarDelegate,
             DisplayMode = NSToolbarDisplayMode.Icon,
             AllowsUserCustomization = false,
         };
-        Window.Toolbar = toolbar;
         Window.ToolbarStyle = NSWindowToolbarStyle.Unified;
+        Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
 
         _library.FolderChosen += path => OpenFolder(path, fromLibrary: true);
+        _library.TrackChosen += async (folder, track) =>
+        {
+            OpenFolder(folder, fromLibrary: true);
+            await Task.Delay(50);
+            while (_tracks.Folder == folder && _tracks.Tracks.Count == 0) await Task.Delay(50);
+            _tracks.Select([track]);
+        };
         _tracks.SelectionChanged += () => _inspector.Show(_tracks.SelectedTracks);
         _tracks.PlayRequested += Play;
         _tracks.Reordered += OnReordered;
         _tracks.FilesDropped += OnFilesDropped;
-        _tracks.Loaded += () => _inspector.ShowFolder(_tracks.Folder, _tracks.Tracks);
-        _inspector.Overview.AlbumRequested += () => ApplyAlbumMode(Window);
-        _inspector.Overview.AlignRequested += (outliers, target) => _ = WriteAsync(
+        _tracks.Loaded += () => _panel.Show(_tracks.Folder, _tracks.Tracks);
+        _panel.AlbumRequested += () => ApplyAlbumMode(Window);
+        _panel.RenameRequested += () => RenameFiles(Window);
+        _panel.CoverAllRequested += () => CoverForAll(Window);
+        _panel.AlignRequested += (outliers, target) => _ = WriteAsync(
             [.. outliers.Select(t => new Job(t, new TagEdit(), target.Format, target.SampleRate))],
             "align", Strings.T("Align folder"));
         _inspector.ApplyRequested += (jobs, label) => _ = WriteAsync(jobs, "batch", label);
+        _bar.Owner = this;
         _player.Changed += UpdatePlayer;
         _player.Finished += OnFinished;
+        AppDelegate.History.Added += OnHistoryAdded;
 
         _ticker = NSTimer.CreateRepeatingScheduledTimer(0.5, _ => Tick());
-
+        UpdatePlayer();
         UpdateTitle();
     }
 
-    /// <summary>Beim Start: den Ordner vom letzten Mal wieder öffnen.</summary>
     public string? Folder => _tracks.Folder;
 
+    /// <summary>Beim Start: den Ordner vom letzten Mal wieder öffnen.</summary>
     public void OpenLastFolder()
     {
         if (Settings.LastFolder is { } last && Directory.Exists(last)) OpenFolder(last);
@@ -89,53 +115,74 @@ public sealed partial class MainWindowController : NSWindowController
 
     private static NSWindow NewWindow()
     {
-        var w = new NSWindow(new CGRect(0, 0, 1320, 780),
+        var w = new NSWindow(new CGRect(0, 0, 1480, 860),
             NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Miniaturizable |
             NSWindowStyle.Resizable | NSWindowStyle.FullSizeContentView,
             NSBackingStore.Buffered, false)
         {
             Title = "TagTuner",
-            TitlebarAppearsTransparent = false,
             TabbingMode = NSWindowTabbingMode.Preferred,
             TabbingIdentifier = "TagTuner",
         };
-        w.MinSize = new CGSize(900, 480);
+        w.MinSize = new CGSize(1100, 560);
         return w;
     }
 
     private Action? _resume;
 
+    /// <summary>Meldung unten in der Statuszeile.</summary>
+    private void Status(string text) => _bar.Status(text);
+
     // ── Ordner ───────────────────────────────────────────────────
 
     public void OpenFolder(string path) => OpenFolder(path, fromLibrary: false);
 
-    private async void OpenFolder(string path, bool fromLibrary)
+    private void OpenFolder(string path, bool fromLibrary) => Navigate(path, fromLibrary, remember: true);
+
+    private async void Navigate(string path, bool fromLibrary, bool remember)
     {
         if (!Directory.Exists(path)) return;
+        if (remember && _tracks.Folder is { } previous && previous != path)
+        {
+            _back.Push(previous);
+            _forward.Clear();
+        }
         if (_search is not null) _search.SearchField.StringValue = "";
         _tracks.Filter("");
         Settings.LastFolder = path;
         Settings.Save();
         if (!fromLibrary) _library.Reveal(path);
-        Window.RepresentedUrl = NSUrl.FromFilename(path);
         UpdateTitle();
         await _tracks.LoadAsync(path);
         UpdateTitle();
     }
 
+    [Export("goBack:")]
+    public void GoBack(NSObject sender)
+    {
+        if (!_back.TryPop(out var path)) return;
+        if (_tracks.Folder is { } now) _forward.Push(now);
+        Navigate(path, fromLibrary: false, remember: false);
+    }
+
+    [Export("goForward:")]
+    public void GoForward(NSObject sender)
+    {
+        if (!_forward.TryPop(out var path)) return;
+        if (_tracks.Folder is { } now) _back.Push(now);
+        Navigate(path, fromLibrary: false, remember: false);
+    }
+
     private void UpdateTitle()
     {
-        if (_tracks.Folder is not { } folder)
-        {
-            Window.Title = "TagTuner";
-            Window.Subtitle = "";
-            return;
-        }
-        Window.Title = Path.GetFileName(folder.TrimEnd('/')) is { Length: > 0 } n ? n : folder;
-        var all = _tracks.Tracks;
-        var total = TimeSpan.FromTicks(all.Sum(t => t.Duration.Ticks));
-        var len = total.TotalHours >= 1 ? total.ToString(@"h\:mm\:ss") : total.ToString(@"m\:ss");
-        Window.Subtitle = all.Count == 0 ? "" : $"{Strings.T("{0} files", all.Count)} · {len}";
+        var folder = _tracks.Folder;
+        _toolbarDelegate.UpdateNavigation(_back.Count > 0, _forward.Count > 0);
+        // Der Titel bleibt verborgen, er zählt aber für die Tab-Leiste und das Fenster-Menü.
+        Window.Title = folder is null ? "TagTuner"
+            : Path.GetFileName(folder.TrimEnd('/')) is { Length: > 0 } n ? n : folder;
+        if (folder is null) return;
+        Window.RepresentedUrl = NSUrl.FromFilename(folder);
+        if (_pathControl is not null) _pathControl.Url = NSUrl.FromFilename(folder);
     }
 
     /// <summary>
@@ -164,12 +211,15 @@ public sealed partial class MainWindowController : NSWindowController
         var doing = converting
             ? Strings.T("Converting {0} file(s)", jobs.Count)
             : Strings.T("Writing tags to {0} file(s)", jobs.Count);
-        Window.Subtitle = doing + "…";
+        Status(doing + "…");
+        _bar.Progress(0);
 
         var r = await Batch.RunAsync(jobs, kind, label, (i, pct) => BeginInvokeOnMainThread(() =>
-            Window.Subtitle = converting
-                ? $"{doing} · {Strings.T("{0} of {1}", i + 1, jobs.Count)} · {pct} %"
-                : $"{doing} · {Strings.T("{0} of {1}", i + 1, jobs.Count)}"));
+        {
+            Status($"{doing} · {Strings.T("{0} of {1}", i + 1, jobs.Count)}" + (converting ? $" · {pct} %" : ""));
+            _bar.Progress((i * 100 + pct) / (double)jobs.Count);
+        }));
+        _bar.Progress(null);
         var errors = r.Errors;
         var status = Strings.T("{0} file(s) processed, backup created", r.Written);
 
@@ -211,12 +261,19 @@ public sealed partial class MainWindowController : NSWindowController
         var keep = _tracks.SelectedTracks
             .Select(t => moved is not null && moved.TryGetValue(t.Path, out var to) ? to : t.Path).ToList();
         if (_tracks.Folder is { } f)
+        {
+            _library.Refresh(f);
             await _tracks.LoadAsync(f, keep);
+        }
         _resume?.Invoke();
         _resume = null;
         UpdateTitle();
-        Window.Subtitle = status;
+        Status(status);
     }
+
+    /// <summary>Nach jedem Vorgang bietet die Statuszeile „Rückgängig" an, wie unter Windows.</summary>
+    private void OnHistoryAdded(Core.Safety.HistoryEntry entry) =>
+        BeginInvokeOnMainThread(() => _bar.OfferUndo(entry.CanUndo));
 
     public void SaveState()
     {
@@ -232,6 +289,7 @@ public sealed partial class MainWindowController : NSWindowController
         _ticker?.Invalidate();
         _player.Changed -= UpdatePlayer;
         _player.Finished -= OnFinished;
+        AppDelegate.History.Added -= OnHistoryAdded;
         if (_player.Owner == this) _player.Stop();
         SaveState();
         Closed?.Invoke(this);
@@ -248,14 +306,7 @@ public sealed partial class MainWindowController : NSWindowController
     private void Play(AudioTrack track)
     {
         var err = _player.Play(track, this);
-        if (err is not null)
-        {
-            var a = new NSAlert
-            {
-                MessageText = Strings.T("{0} cannot be played ({1}).", track.FileName, err),
-            };
-            a.BeginSheet(Window);
-        }
+        if (err is not null) Status(Strings.T("{0} cannot be played ({1}).", track.FileName, err));
     }
 
     private void Step(int step, bool onlyIfPlaying = true)
@@ -269,12 +320,12 @@ public sealed partial class MainWindowController : NSWindowController
     {
         _tracks.PlayingPath = _player.Owner == this ? _player.Track?.Path : null;
         _tracks.RedrawRows();
-        _toolbarDelegate.UpdatePlayer(_player);
+        _bar.Update(_player);
     }
 
     private void Tick()
     {
-        if (_player.Track is not null) _toolbarDelegate.UpdateProgress(_player);
+        if (_player.Track is not null) _bar.UpdateProgress(_player);
     }
 
     // ── Menübefehle ──────────────────────────────────────────────
@@ -329,6 +380,7 @@ public sealed partial class MainWindowController : NSWindowController
             var status = r.Failed == 0
                 ? Strings.T("Undone: {0}", entry.Description)
                 : Strings.T("{0} restored, {1} failed.", r.Restored, r.Failed);
+            _bar.OfferUndo(false);
             AfterWrite(paths, status);
         }
         catch (Exception ex)
@@ -355,12 +407,29 @@ public sealed partial class MainWindowController : NSWindowController
     [Export("removeCover:")]
     public void RemoveCover(NSObject sender) => _inspector.RemoveCover();
 
-    [Export("focusSearch:")]
-    public void FocusSearch(NSObject sender)
+    /// <summary>„Cover für alle setzen…": ein Bild wählen und in jede Datei des Ordners schreiben.</summary>
+    [Export("coverForAll:")]
+    public void CoverForAll(NSObject sender)
     {
-        if (_search is null) return;
-        _search.BeginSearchInteraction();
+        if (_tracks.Tracks.Count == 0) return;
+        var panel = NSOpenPanel.OpenPanel;
+        panel.AllowedContentTypes = [UniformTypeIdentifiers.UTTypes.Image];
+        if (_tracks.Folder is { } f) panel.DirectoryUrl = NSUrl.FromFilename(f);
+        panel.BeginSheet(Window, r =>
+        {
+            if (r != (nint)(long)NSModalResponse.OK || panel.Url is not { } url || NSData.FromUrl(url) is not { } data) return;
+            if (Covers.Prepare(data) is not { } cover) return;
+            var jobs = _tracks.Tracks.Where(t => Core.Audio.AudioFormats.CanCarryCover(t.Path))
+                .Select(t => new Job(t, new TagEdit { Cover = cover.Data, CoverMimeType = cover.Mime })).ToList();
+            _ = WriteAsync(jobs, "batch", Strings.T("Cover changed"));
+        });
     }
+
+    [Export("focusSearch:")]
+    public void FocusSearch(NSObject sender) => _search?.BeginSearchInteraction();
+
+    [Export("focusLibrarySearch:")]
+    public void FocusLibrarySearch(NSObject sender) => _library.FocusSearch();
 
     [Export("playlistOrder:")]
     public void PlaylistOrder(NSObject sender) => _tracks.PlaylistOrder();
@@ -402,7 +471,7 @@ public sealed partial class MainWindowController : NSWindowController
     {
         if (_tracks.SelectedTracks is not [var t]) return;
         _copied = t;
-        Window.Subtitle = Strings.T("Tags copied from \"{0}\"", t.FileName);
+        Status(Strings.T("Tags copied from \"{0}\"", t.FileName));
     }
 
     [Export("pasteTags:")]
@@ -447,10 +516,13 @@ public sealed partial class MainWindowController : NSWindowController
             "copyTags:" => sel.Count == 1,
             "pasteTags:" => _copied is not null && sel.Count > 0,
             "chooseCover:" or "pasteCover:" or "removeCover:" => sel.Count > 0,
+            "coverForAll:" => _tracks.Tracks.Count > 0,
             "revealInFinder:" or "reloadFolder:" => _tracks.Folder is not null,
             "renameFiles:" => _tracks.Tracks.Count > 0 && !_inspector.Busy,
             "playPause:" => _player.Track is not null || _tracks.Shown.Count > 0,
             "nextTrack:" or "previousTrack:" => _player.Track is not null,
+            "goBack:" => _back.Count > 0,
+            "goForward:" => _forward.Count > 0,
             _ => true,
         };
     }
@@ -459,133 +531,122 @@ public sealed partial class MainWindowController : NSWindowController
 
     private sealed class ToolbarDelegate(MainWindowController owner) : NSToolbarDelegate
     {
-        private const string PlayerId = "player";
+        private const string NavId = "nav";
+        private const string PathId = "path";
         private const string SearchId = "search";
+        private const string HistoryId = "history";
+        private const string SettingsId = "settings";
 
-        private NSButton? _play;
-        private NSTextField? _now;
-        private NSSlider? _progress;
-        private NSTextField? _time;
-        private bool _dragging;
+        private NSSegmentedControl? _nav;
 
         public override string[] AllowedItemIdentifiers(NSToolbar toolbar) => DefaultItemIdentifiers(toolbar);
 
         public override string[] DefaultItemIdentifiers(NSToolbar toolbar) =>
         [
-            NSToolbar.NSToolbarToggleSidebarItemIdentifier,
-            NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
-            NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
-            PlayerId,
+            NavId,
+            PathId,
             NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
             SearchId,
-            NSToolbar.NSToolbarInspectorTrackingSeparatorItemIdentifier,
-            NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
-            NSToolbar.NSToolbarToggleInspectorItemIdentifier,
+            HistoryId,
+            SettingsId,
         ];
 
         public override NSToolbarItem WillInsertItem(NSToolbar toolbar, string itemIdentifier, bool willBeInserted)
         {
-            if (itemIdentifier == SearchId)
+            switch (itemIdentifier)
             {
-                var s = new NSSearchToolbarItem(SearchId);
-                s.SearchField.PlaceholderString = Strings.T("Find in this folder…").TrimEnd('…');
-                s.SearchField.Changed += (_, _) => owner._tracks.Filter(s.SearchField.StringValue);
-                s.PreferredWidthForSearchField = 220;
-                owner._search = s;
-                return s;
+                case SearchId:
+                {
+                    var s = new NSSearchToolbarItem(SearchId);
+                    s.SearchField.PlaceholderString = Strings.T("Find in this folder…");
+                    s.SearchField.Changed += (_, _) => owner._tracks.Filter(s.SearchField.StringValue);
+                    s.PreferredWidthForSearchField = 200;
+                    owner._search = s;
+                    return s;
+                }
+                case NavId:
+                {
+                    // Zurück und Vor als ein Paar, wie im Finder.
+                    _nav = NSSegmentedControl.FromImages(
+                        [NSImage.GetSystemSymbol("chevron.left", null)!, NSImage.GetSystemSymbol("chevron.right", null)!],
+                        NSSegmentSwitchTracking.Momentary, () =>
+                        {
+                            if (_nav!.SelectedSegment == 0) owner.GoBack(owner.Window);
+                            else owner.GoForward(owner.Window);
+                        });
+                    _nav.SegmentStyle = NSSegmentStyle.Separated;
+                    _nav.SetEnabled(false, 0);
+                    _nav.SetEnabled(false, 1);
+                    return new NSToolbarItem(NavId) { View = _nav, Label = Strings.T("Back") };
+                }
+                case PathId:
+                {
+                    // Der Pfad wie oben im Explorer; ein Klick auf ein Glied öffnet es.
+                    var p = new NSPathControl { PathStyle = NSPathStyle.Standard, Editable = false };
+                    p.Font = NSFont.SystemFontOfSize(12);
+                    p.Activated += (_, _) =>
+                    {
+                        if (p.ClickedPathItem?.Url?.Path is { } path && Directory.Exists(path)) owner.OpenFolder(path);
+                    };
+                    p.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
+                    p.WidthAnchor.ConstraintGreaterThanOrEqualTo(200).Active = true;
+                    p.WidthAnchor.ConstraintLessThanOrEqualTo(620).Active = true;
+                    owner._pathControl = p;
+                    return new NSToolbarItem(PathId) { View = p, Label = Strings.T("Folder") };
+                }
+                case HistoryId:
+                    return Button(HistoryId, "clock.arrow.circlepath", Strings.T("History"), "showHistory:", owner);
+                case SettingsId:
+                    return Button(SettingsId, "gearshape", Strings.T("Settings"), "showSettings:", null);
             }
-
-            if (itemIdentifier == PlayerId)
-                return new NSToolbarItem(PlayerId) { View = BuildPlayer(), Label = Strings.T("Play") };
-
             return new NSToolbarItem(itemIdentifier);
         }
 
-        private NSView BuildPlayer()
-        {
-            NSButton Btn(string symbol, string selector)
+        private static NSToolbarItem Button(string id, string symbol, string label, string selector, NSObject? target) =>
+            new(id)
             {
-                var b = NSButton.CreateButton(NSImage.GetSystemSymbol(symbol, null)!, () => { });
-                b.Target = owner;
-                b.Action = new Selector(selector);
-                b.Bordered = false;
-                b.SymbolConfiguration = NSImageSymbolConfiguration.Create(15, NSFontWeight.Medium);
-                return b;
-            }
-
-            var prev = Btn("backward.fill", "previousTrack:");
-            _play = Btn("play.fill", "playPause:");
-            _play.SymbolConfiguration = NSImageSymbolConfiguration.Create(19, NSFontWeight.Medium);
-            var next = Btn("forward.fill", "nextTrack:");
-
-            _now = NSTextField.CreateLabel("");
-            _now.Font = NSFont.SystemFontOfSize(NSFont.SmallSystemFontSize, NSFontWeight.Medium);
-            _now.LineBreakMode = NSLineBreakMode.TruncatingTail;
-            _now.Alignment = NSTextAlignment.Center;
-
-            _time = NSTextField.CreateLabel("");
-            _time.Font = NSFont.MonospacedDigitSystemFontOfSize(NSFont.SmallSystemFontSize - 1, NSFontWeight.Regular);
-            _time.TextColor = NSColor.SecondaryLabel;
-
-            _progress = new NSSlider
-            {
-                MinValue = 0, MaxValue = 1, DoubleValue = 0, ControlSize = NSControlSize.Mini, Enabled = false,
-            };
-            _progress.Activated += (_, _) =>
-            {
-                AppDelegate.Player.Seek(_progress.DoubleValue * AppDelegate.Player.Duration);
-                _dragging = false;
+                Image = NSImage.GetSystemSymbol(symbol, null),
+                Label = label,
+                ToolTip = label,
+                Action = new Selector(selector),
+                Target = target,
+                Bordered = true,
             };
 
-            var bar = new NSStackView
-        { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 6 }.Arranged(_progress, _time);
-            var right = new NSStackView
+        public void UpdateNavigation(bool back, bool forward)
         {
-                Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-                Spacing = 0,
-                Alignment = NSLayoutAttribute.CenterX,
-            }.Arranged(_now, bar);
-            bar.WidthAnchor.ConstraintEqualTo(right.WidthAnchor).Active = true;
-            _now.WidthAnchor.ConstraintLessThanOrEqualTo(right.WidthAnchor).Active = true;
-
-            var vol = NSImageView.FromImage(NSImage.GetSystemSymbol("speaker.wave.2.fill", null)!);
-            vol.ContentTintColor = NSColor.SecondaryLabel;
-            var volume = new NSSlider { MinValue = 0, MaxValue = 1, DoubleValue = AppDelegate.Player.Volume, ControlSize = NSControlSize.Mini };
-            volume.Activated += (_, _) => AppDelegate.Player.Volume = (float)volume.DoubleValue;
-            volume.WidthAnchor.ConstraintEqualTo(70).Active = true;
-
-            var stack = new NSStackView
-        {
-                Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-                Spacing = 10,
-            }.Arranged(prev, _play, next, right, vol, volume);
-            stack.SetCustomSpacing(16, next);
-            stack.SetCustomSpacing(14, right);
-            stack.SetCustomSpacing(4, vol);
-            right.WidthAnchor.ConstraintEqualTo(260).Active = true;
-            UpdatePlayer(AppDelegate.Player);
-            return stack;
+            _nav?.SetEnabled(back, 0);
+            _nav?.SetEnabled(forward, 1);
         }
+    }
+}
 
-        public void UpdatePlayer(Player p)
+/// <summary>Der Fensterinhalt: die Spalten oben, die Player-Leiste unten.</summary>
+internal sealed class RootController(NSSplitViewController split, PlayerBar bar) : NSViewController
+{
+    public override void LoadView()
+    {
+        var root = new NSView();
+        AddChildViewController(split);
+        var line = new NSBox { BoxType = NSBoxType.NSBoxSeparator };
+        foreach (var v in new NSView[] { split.View, line, bar })
         {
-            if (_play is null || _now is null || _progress is null) return;
-            _play.Image = NSImage.GetSystemSymbol(p.IsPlaying ? "pause.fill" : "play.fill", null);
-            _now.StringValue = p.Track is { } t
-                ? (string.IsNullOrWhiteSpace(t.Title) ? Path.GetFileNameWithoutExtension(t.FileName) : t.Title)
-                  + (string.IsNullOrWhiteSpace(t.Artist) ? "" : " – " + t.Artist)
-                : "TagTuner";
-            _now.TextColor = p.Track is null ? NSColor.TertiaryLabel : NSColor.Label;
-            _progress.Enabled = p.Track is not null;
-            UpdateProgress(p);
+            v.TranslatesAutoresizingMaskIntoConstraints = false;
+            root.AddSubview(v);
         }
-
-        public void UpdateProgress(Player p)
-        {
-            if (_progress is null || _time is null || _dragging) return;
-            _progress.DoubleValue = p.Duration > 0 ? p.Position / p.Duration : 0;
-            _time.StringValue = p.Track is null ? "" : $"{Fmt(p.Position)} / {Fmt(p.Duration)}";
-            static string Fmt(double s) => TimeSpan.FromSeconds(s).ToString(@"m\:ss");
-        }
+        NSLayoutConstraint.ActivateConstraints([
+            split.View.TopAnchor.ConstraintEqualTo(root.TopAnchor),
+            split.View.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            split.View.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            split.View.BottomAnchor.ConstraintEqualTo(line.TopAnchor),
+            line.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            line.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            line.BottomAnchor.ConstraintEqualTo(bar.TopAnchor),
+            bar.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            bar.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            bar.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
+            bar.HeightAnchor.ConstraintEqualTo(50),
+        ]);
+        View = root;
     }
 }

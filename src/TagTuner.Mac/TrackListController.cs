@@ -6,9 +6,14 @@ using TagTuner.Core.Settings;
 
 namespace TagTuner.Mac;
 
+/// <summary>Eine Disc-Zeile zwischen den Liedern eines Albums mit mehreren Discs.</summary>
+internal sealed record DiscRow(uint Disc);
+
 /// <summary>
-/// Die Trackliste. Die Spalten kommen aus <see cref="TrackColumn.All"/>,
-/// genau wie unter Windows; was dort eine Spalte ist, ist es hier auch.
+/// Die Trackliste, aufgebaut wie unter Windows: oben der Ordnername mit der
+/// Zahl der Tracks, darunter die Spalten aus <see cref="TrackColumn.All"/>.
+/// Titel und Interpret stehen auf Wunsch zusammen in einer Spalte mit dem
+/// Cover davor, und ein Album mit mehreren Discs bekommt Disc-Zeilen.
 /// </summary>
 internal sealed partial class TrackListController : NSViewController
 {
@@ -21,8 +26,11 @@ internal sealed partial class TrackListController : NSViewController
     /// <summary>Audiodateien von außen abgelegt: Pfade, Stelle in der Playlist, verschieben?</summary>
     public event Action<List<string>, int, bool>? FilesDropped;
 
-    /// <summary>Zeilen wurden gezogen: die ganze Liste in der neuen Reihenfolge.</summary>
-    public event Action<List<AudioTrack>>? Reordered;
+    /// <summary>
+    /// Zeilen wurden gezogen: die Lieder in der neuen Reihenfolge und, mit
+    /// Disc-Zeilen, die Disc, unter der jedes jetzt steht.
+    /// </summary>
+    public event Action<List<AudioTrack>, uint[]?>? Reordered;
 
     private const string RowType = "app.tagtuner.track";
     private int[]? _dragRows;
@@ -35,8 +43,14 @@ internal sealed partial class TrackListController : NSViewController
 
     private readonly TrackTable _table = new();
     private readonly NSTextField _empty = NSTextField.CreateLabel("");
+    private readonly NSTextField _title = NSTextField.CreateLabel("");
+    private readonly NSTextField _count = NSTextField.CreateLabel("");
     private List<AudioTrack> _all = [];
     private List<AudioTrack> _shown = [];
+
+    /// <summary>Was die Tabelle zeigt: Lieder und, im Album mit mehreren Discs, Disc-Zeilen.</summary>
+    private List<object> _rows = [];
+    private bool _sectioned;
     private string _filter = "";
     private TrackSort _sort = TrackSort.Natural;
     private bool _descending;
@@ -46,25 +60,28 @@ internal sealed partial class TrackListController : NSViewController
     public IReadOnlyList<AudioTrack> Tracks => _all;
     public IReadOnlyList<AudioTrack> Shown => _shown;
 
-    /// <summary>Das Lied, das gerade läuft, bekommt einen Lautsprecher in der Nummernspalte.</summary>
+    /// <summary>Das Lied, das gerade läuft, bekommt ein Zeichen in der Nummernspalte.</summary>
     public string? PlayingPath { get; set; }
 
     private static AppSettings Settings => AppDelegate.Settings;
+
+    /// <summary>Titel und Interpret in einer Spalte, der Interpret klein darunter.</summary>
+    private static bool Combined => Settings.CombineTitleAndArtist;
 
     public override void LoadView()
     {
         _table.Owner = this;
         _table.Style = NSTableViewStyle.FullWidth;
-        _table.UsesAlternatingRowBackgroundColors = true;
+        _table.UsesAlternatingRowBackgroundColors = false;
+        _table.GridStyleMask = NSTableViewGridStyle.None;
         _table.AllowsMultipleSelection = true;
         _table.AllowsColumnReordering = true;
         _table.AllowsColumnResizing = true;
         _table.ColumnAutoresizingStyle = NSTableViewColumnAutoresizingStyle.Uniform;
-        _table.RowHeight = 26;
-        _table.IntercellSpacing = new CGSize(8, 0);
+        _table.IntercellSpacing = new CGSize(12, 0);
         _table.DoubleAction = new Selector("rowDoubleClicked:");
         _table.Target = this;
-        _table.AutosaveName = "TrackTable";
+        _table.AutosaveName = Combined ? "TrackTableCombined" : "TrackTable";
         _table.AutosaveTableColumns = true;
 
         foreach (var col in VisibleColumns()) _table.AddColumn(NewColumn(col));
@@ -85,46 +102,89 @@ internal sealed partial class TrackListController : NSViewController
             HasVerticalScroller = true,
             HasHorizontalScroller = true,
             AutohidesScrollers = true,
+            DrawsBackground = false,
         };
+
+        // ── Kopf: Ordnername, Zahl der Tracks, „Alle wählen" ─────
+        _title.Font = NSFont.SystemFontOfSize(20, NSFontWeight.Semibold);
+        _title.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        _title.SetContentCompressionResistancePriority(250, NSLayoutConstraintOrientation.Horizontal);
+        _count.Font = NSFont.MonospacedSystemFont(11, NSFontWeight.Regular);
+        _count.TextColor = NSColor.TertiaryLabel;
+        var selectAll = NSButton.CreateButton(Strings.T("Select all"), () => SelectAllTracks());
+        selectAll.Bordered = false;
+        selectAll.AttributedTitle = new NSAttributedString(Strings.T("Select all"), new NSStringAttributes
+        {
+            ForegroundColor = Theme.Accent,
+            Font = NSFont.SystemFontOfSize(11.5f),
+        });
 
         _empty.TextColor = NSColor.SecondaryLabel;
         _empty.Font = NSFont.SystemFontOfSize(15);
         _empty.Alignment = NSTextAlignment.Center;
 
         var root = new NSView();
-        foreach (var v in new NSView[] { scroll, _empty })
+        foreach (var v in new NSView[] { _title, _count, selectAll, scroll, _empty })
         {
             v.TranslatesAutoresizingMaskIntoConstraints = false;
             root.AddSubview(v);
         }
         NSLayoutConstraint.ActivateConstraints([
-            scroll.TopAnchor.ConstraintEqualTo(root.TopAnchor),
+            _title.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor, 10),
+            _title.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 16),
+            _count.LastBaselineAnchor.ConstraintEqualTo(_title.LastBaselineAnchor),
+            _count.LeadingAnchor.ConstraintEqualTo(_title.TrailingAnchor, 10),
+            selectAll.CenterYAnchor.ConstraintEqualTo(_title.CenterYAnchor),
+            selectAll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -14),
+            _count.TrailingAnchor.ConstraintLessThanOrEqualTo(selectAll.LeadingAnchor, -10),
+            scroll.TopAnchor.ConstraintEqualTo(_title.BottomAnchor, 8),
             scroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
             scroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
             scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            _empty.CenterXAnchor.ConstraintEqualTo(root.CenterXAnchor),
-            _empty.CenterYAnchor.ConstraintEqualTo(root.CenterYAnchor),
+            _empty.CenterXAnchor.ConstraintEqualTo(scroll.CenterXAnchor),
+            _empty.CenterYAnchor.ConstraintEqualTo(scroll.CenterYAnchor),
             _empty.WidthAnchor.ConstraintLessThanOrEqualTo(root.WidthAnchor, 0.8f),
         ]);
         View = root;
         ShowEmpty();
     }
 
+    // ── Spalten ──────────────────────────────────────────────────
+
+    private static IEnumerable<TrackColumn> VisibleColumns()
+    {
+        IEnumerable<TrackColumn> cols = Settings.TrackColumns.Count == 0
+            ? TrackColumn.All.Where(c => c.OnByDefault)
+            : Settings.TrackColumns.Where(s => s.Visible).Select(s => TrackColumn.ById(s.Id)).OfType<TrackColumn>();
+        // Vereint steckt das Cover in der Titelspalte, und der Interpret darunter.
+        return Combined ? cols.Where(c => !c.IsCover && c.Id != "artist") : cols;
+    }
+
     private static NSTableColumn NewColumn(TrackColumn col)
     {
+        var width = col.IsCover ? 36 : col.Id == "title" && Combined ? 280 : col.Width;
         var c = new NSTableColumn(col.Id)
         {
-            Title = Strings.T(col.Header),
-            Width = (nfloat)(col.IsCover ? 28 : col.Width),
-            MinWidth = col.IsCover ? 28 : 30,
+            Title = col.Id == "title" && Combined
+                ? $"{Strings.T("TITLE")} · {Strings.T("ARTIST")}"
+                : Strings.T(col.Header),
+            Width = (nfloat)width,
+            MinWidth = col.IsCover ? 36 : 30,
             Editable = false,
         };
-        if (col.IsCover) c.MaxWidth = 28;
+        if (col.IsCover) c.MaxWidth = 36;
         // Nur die Textspalten wachsen mit dem Fenster, Nummern und Kürzel bleiben schmal.
         c.ResizingMask = col.Look == ColumnLook.Text && !col.IsCover
             ? NSTableColumnResizing.Autoresizing | NSTableColumnResizing.UserResizingMask
             : NSTableColumnResizing.UserResizingMask;
         if (col.Look == ColumnLook.MonoRight) c.HeaderCell.Alignment = NSTextAlignment.Right;
+        // Die Dauer trägt eine Uhr statt eines Wortes, wie unter Windows.
+        if (col.Id == "duration")
+        {
+            c.Title = "";
+            c.HeaderCell.Image = NSImage.GetSystemSymbol("clock", null);
+            c.HeaderToolTip = Strings.T(col.Header);
+        }
         if (col.Sort is not null) c.SortDescriptorPrototype = new NSSortDescriptor(col.Id, true);
         return c;
     }
@@ -136,15 +196,14 @@ internal sealed partial class TrackListController : NSViewController
         public override void NeedsUpdate(NSMenu menu)
         {
             menu.RemoveAllItems();
-            foreach (var col in TrackColumn.All)
+            foreach (var col in TrackColumn.All.Where(c => !Combined || (!c.IsCover && c.Id != "artist")))
             {
                 var shown = owner._table.FindColumn(new NSString(col.Id)) >= 0;
                 var title = col.IsCover ? Strings.T("Cover") : Strings.T(col.Header);
-                var item = new NSMenuItem(title, (_, _) => owner.ToggleColumn(col))
+                menu.AddItem(new NSMenuItem(title, (_, _) => owner.ToggleColumn(col))
                 {
                     State = shown ? NSCellStateValue.On : NSCellStateValue.Off,
-                };
-                menu.AddItem(item);
+                });
             }
         }
     }
@@ -161,27 +220,23 @@ internal sealed partial class TrackListController : NSViewController
         {
             _table.AddColumn(NewColumn(col));
             // An ihren Platz aus dem Katalog, nicht einfach ans Ende.
-            var wanted = TrackColumn.All.ToList().IndexOf(col);
+            var all = TrackColumn.All.ToList();
+            var wanted = all.IndexOf(col);
             var target = _table.TableColumns().Count(c =>
-                TrackColumn.ById(c.Identifier) is { } other && TrackColumn.All.ToList().IndexOf(other) < wanted);
+                TrackColumn.ById(c.Identifier) is { } other && all.IndexOf(other) < wanted);
             _table.MoveColumn(_table.ColumnCount - 1, target);
         }
 
-        Settings.TrackColumns = [.. _table.TableColumns().Select(c =>
-            new TrackColumnState { Id = c.Identifier, Visible = true, Width = c.Width })];
+        // Vereint fehlen Cover und Interpret in der Tabelle, gemeint sind sie trotzdem.
+        var ids = _table.TableColumns().Select(c => c.Identifier).ToList();
+        if (Combined)
+        {
+            ids.Insert(Math.Min(1, ids.Count), "cover");
+            ids.Insert(Math.Min(3, ids.Count), "artist");
+        }
+        Settings.TrackColumns = [.. ids.Select(id => new TrackColumnState { Id = id, Visible = true })];
         Settings.Save();
         _table.ReloadData();
-    }
-
-    private static IEnumerable<TrackColumn> VisibleColumns()
-    {
-        if (Settings.TrackColumns.Count == 0)
-            return TrackColumn.All.Where(c => c.OnByDefault);
-
-        return Settings.TrackColumns
-            .Where(s => s.Visible)
-            .Select(s => TrackColumn.ById(s.Id))
-            .OfType<TrackColumn>();
     }
 
     // ── Laden ────────────────────────────────────────────────────
@@ -197,7 +252,10 @@ internal sealed partial class TrackListController : NSViewController
         {
             _all = [];
             _shown = [];
+            _rows = [];
             _table.ReloadData();
+            _title.StringValue = Path.GetFileName(folder.TrimEnd('/'));
+            _count.StringValue = "";
             _empty.StringValue = Strings.T("Reading…");
             _empty.Hidden = false;
         }
@@ -223,6 +281,7 @@ internal sealed partial class TrackListController : NSViewController
 
     private void ShowEmpty()
     {
+        _count.StringValue = Folder is null ? "" : $"{_all.Count} Track{(_all.Count == 1 ? "" : "s")}";
         _empty.StringValue = Folder is null
             ? Strings.T("Choose a folder on the left.")
             : _all.Count == 0 ? Strings.T("No audio files in this folder.")
@@ -248,13 +307,33 @@ internal sealed partial class TrackListController : NSViewController
         Refresh();
     }
 
-    /// <summary>Filtert und sortiert neu, ohne die Platte anzufassen.</summary>
-    private void Refresh()
+    /// <summary>Filtert, sortiert und setzt die Disc-Zeilen, ohne die Platte anzufassen.</summary>
+    public void Refresh()
     {
         IEnumerable<AudioTrack> list = _all;
         if (_filter.Length > 0)
             list = list.Where(t => Matches(t, _filter));
         _shown = TrackSorting.Apply(list, _sort, _descending, Settings.SortByDiscThenTrack);
+
+        // Disc-Zeilen nur im Album mit mehreren Discs und nur, solange die
+        // Discs beisammen stehen: nach Titel sortiert gehören sie nirgendwohin.
+        _sectioned = Settings.CombineDiscAndTrack
+                     && _filter.Length == 0
+                     && _sort is TrackSort.Natural or TrackSort.Disc
+                     && _all.Select(t => t.Disc).Where(d => d > 0).Distinct().Count() > 1
+                     && Folder is not null && Settings.RuleFor(Folder).AlbumMode;
+
+        _rows = [];
+        uint? current = null;
+        foreach (var t in _shown)
+        {
+            if (_sectioned && t.Disc != current)
+            {
+                current = t.Disc;
+                _rows.Add(new DiscRow(t.Disc));
+            }
+            _rows.Add(t);
+        }
         _table.ReloadData();
     }
 
@@ -265,45 +344,61 @@ internal sealed partial class TrackListController : NSViewController
     // ── Auswahl ──────────────────────────────────────────────────
 
     public List<AudioTrack> SelectedTracks =>
-        [.. _table.SelectedRows.Select(i => (int)i).Where(i => i < _shown.Count).Select(i => _shown[i])];
+        [.. _table.SelectedRows.Select(i => (int)i).Where(i => i < _rows.Count)
+                               .Select(i => _rows[i]).OfType<AudioTrack>()];
 
     public void Select(IEnumerable<string> paths)
     {
         var set = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
         var rows = new NSMutableIndexSet();
-        for (var i = 0; i < _shown.Count; i++)
-            if (set.Contains(_shown[i].Path)) rows.Add((nuint)i);
+        for (var i = 0; i < _rows.Count; i++)
+            if (_rows[i] is AudioTrack t && set.Contains(t.Path)) rows.Add((nuint)i);
         _table.SelectRows(rows, false);
         if (rows.Count > 0) _table.ScrollRowToVisible((nint)rows.FirstIndex);
         SelectionChanged?.Invoke();
     }
 
-    public void SelectAllTracks() => _table.SelectAll(this);
+    public void SelectAllTracks()
+    {
+        var rows = new NSMutableIndexSet();
+        for (var i = 0; i < _rows.Count; i++)
+            if (_rows[i] is AudioTrack) rows.Add((nuint)i);
+        _table.SelectRows(rows, false);
+        View.Window?.MakeFirstResponder(_table);
+    }
 
     /// <summary>
-    /// Verschiebt Zeilen vor die Zeile <paramref name="row"/> (in der alten
-    /// Zählung) und meldet die neue Reihenfolge. Geschrieben wird woanders.
+    /// Verschiebt die Zeilen <paramref name="block"/> vor die Zeile
+    /// <paramref name="row"/> (beides in Tabellenzeilen gezählt, Disc-Zeilen
+    /// eingeschlossen) und meldet die neue Reihenfolge. Geschrieben wird woanders.
     /// </summary>
     public bool MoveRows(int[] block, int row)
     {
         if (!CanReorder) return false;
-        var count = _shown.Count;
-        // Die Lücke zählt nur die Zeilen, die stehen bleiben.
-        var gap = RowReorder.Remaining(count, block).Count(i => i < row);
-        var order = RowReorder.Order(count, block, gap);
-        if (order.SequenceEqual(Enumerable.Range(0, count))) return false;
+        var moving = block.Where(i => i >= 0 && i < _rows.Count && _rows[i] is AudioTrack).Order().ToList();
+        if (moving.Count == 0) return false;
 
-        var before = _shown;
-        var tracks = order.Select(i => before[i]).ToList();
+        var items = moving.Select(i => _rows[i]).ToList();
+        var rest = _rows.Where((_, i) => !moving.Contains(i)).ToList();
+        var at = Math.Clamp(row - moving.Count(i => i < row), 0, rest.Count);
+        var rows = rest.Take(at).Concat(items).Concat(rest.Skip(at)).ToList();
+        if (rows.SequenceEqual(_rows)) return false;
+
+        var tracks = rows.OfType<AudioTrack>().ToList();
+        uint[]? discs = _sectioned
+            ? RowReorder.Sections([.. rows.Select(r => r is DiscRow d ? d.Disc : (uint?)null)])
+            : null;
+
+        _rows = rows;
         _shown = tracks;
         _table.ReloadData();
-        Select(block.Select(i => before[i].Path));
-        Reordered?.Invoke(tracks);
+        Select(items.OfType<AudioTrack>().Select(t => t.Path));
+        Reordered?.Invoke(tracks, discs);
         return true;
     }
 
     public void RedrawRows() =>
-        _table.ReloadData(NSIndexSet.FromNSRange(new NSRange(0, _shown.Count)),
+        _table.ReloadData(NSIndexSet.FromNSRange(new NSRange(0, _rows.Count)),
                           NSIndexSet.FromNSRange(new NSRange(0, _table.ColumnCount)));
 
     /// <summary>Das Lied nach oder vor dem laufenden, in der angezeigten Reihenfolge.</summary>
@@ -318,7 +413,7 @@ internal sealed partial class TrackListController : NSViewController
     public void RowDoubleClicked(NSObject sender)
     {
         var row = _table.ClickedRow;
-        if (row >= 0 && row < _shown.Count) PlayRequested?.Invoke(_shown[(int)row]);
+        if (row >= 0 && row < _rows.Count && _rows[(int)row] is AudioTrack t) PlayRequested?.Invoke(t);
     }
 
     public void FocusTable() => View.Window?.MakeFirstResponder(_table);
@@ -344,15 +439,15 @@ internal sealed partial class TrackListController : NSViewController
             var path = t.Path;
             Task.Run(() =>
             {
-                var small = Covers.Thumbnail(AudioProbe.ReadCover(path)?.Data, 64);
+                var small = Covers.Thumbnail(AudioProbe.ReadCover(path)?.Data, 96);
                 InvokeOnMainThread(() =>
                 {
                     _artLoading.Remove(path);
                     _art[path] = small;
-                    var row = _shown.FindIndex(x => x.Path == path);
-                    var col = _table.FindColumn(new NSString("cover"));
-                    if (row >= 0 && col >= 0)
-                        _table.ReloadData(NSIndexSet.FromIndex(row), NSIndexSet.FromIndex(col));
+                    var row = _rows.FindIndex(x => x is AudioTrack a && a.Path == path);
+                    if (row >= 0)
+                        _table.ReloadData(NSIndexSet.FromIndex(row),
+                            NSIndexSet.FromNSRange(new NSRange(0, _table.ColumnCount)));
                 });
             });
         }
@@ -363,7 +458,7 @@ internal sealed partial class TrackListController : NSViewController
 
     private sealed class Source(TrackListController owner) : NSTableViewDataSource
     {
-        public override nint GetRowCount(NSTableView tableView) => owner._shown.Count;
+        public override nint GetRowCount(NSTableView tableView) => owner._rows.Count;
 
         public override void SortDescriptorsChanged(NSTableView tableView, NSSortDescriptor[] oldDescriptors)
         {
@@ -381,12 +476,12 @@ internal sealed partial class TrackListController : NSViewController
 
         // Eine Zeile trägt ihren Pfad als Datei-URL mit: So lässt sie sich
         // auch in den Finder ziehen, und dort landet eine Kopie.
-        public override INSPasteboardWriting GetPasteboardWriterForRow(NSTableView tableView, nint row)
+        public override INSPasteboardWriting? GetPasteboardWriterForRow(NSTableView tableView, nint row)
         {
+            if (owner._rows[(int)row] is not AudioTrack t) return null;
             var item = new NSPasteboardItem();
-            var path = owner._shown[(int)row].Path;
-            item.SetStringForType(path, RowType);
-            item.SetStringForType(NSUrl.FromFilename(path).AbsoluteString!, NSPasteboard.NSPasteboardTypeFileUrl);
+            item.SetStringForType(t.Path, RowType);
+            item.SetStringForType(NSUrl.FromFilename(t.Path).AbsoluteString!, NSPasteboard.NSPasteboardTypeFileUrl);
             return item;
         }
 
@@ -424,15 +519,16 @@ internal sealed partial class TrackListController : NSViewController
                                         NSTableViewDropOperation dropOperation)
         {
             if (info.DraggingSource == tableView)
-            {
                 return owner._dragRows is { Length: > 0 } block && owner.MoveRows(block, (int)row);
-            }
 
             var audio = DroppedAudio(info);
             if (audio.Count > 0 && owner.Folder is not null)
             {
-                // Sortiert oder gefiltert gibt es keine Playlist-Stelle: ans Ende.
-                var at = owner.CanReorder ? (int)row : owner._all.Count;
+                // Die Stelle in der Playlist, ohne Disc-Zeilen gezählt. Sortiert
+                // oder gefiltert gibt es keine: ans Ende.
+                var at = owner.CanReorder
+                    ? owner._rows.Take((int)row).Count(r => r is AudioTrack)
+                    : owner._all.Count;
                 var move = NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask);
                 owner.FilesDropped?.Invoke(audio, at, move);
                 return true;
@@ -454,21 +550,42 @@ internal sealed partial class TrackListController : NSViewController
 
         private static string? DroppedFolder(INSDraggingInfo info)
         {
-            var urls = info.DraggingPasteboard.ReadObjectsForClasses(
-                [new Class(typeof(NSUrl))], null);
+            var urls = info.DraggingPasteboard.ReadObjectsForClasses([new Class(typeof(NSUrl))], null);
             return urls?.OfType<NSUrl>().Select(u => u.Path).FirstOrDefault(p => p is not null && Directory.Exists(p));
         }
     }
 
     private sealed class Delegate(TrackListController owner) : NSTableViewDelegate
     {
-        private static readonly NSFont Mono = NSFont.MonospacedDigitSystemFontOfSize(NSFont.SystemFontSize, NSFontWeight.Regular);
-        private static readonly NSFont Small = NSFont.MonospacedSystemFont(NSFont.SmallSystemFontSize, NSFontWeight.Regular);
+        private static readonly NSFont Mono = NSFont.MonospacedDigitSystemFontOfSize(12, NSFontWeight.Regular);
+        private static readonly NSFont Small = NSFont.MonospacedSystemFont(10.5f, NSFontWeight.Regular);
+
+        public override nfloat GetRowHeight(NSTableView tableView, nint row) =>
+            owner._rows[(int)row] is DiscRow ? 36 : Combined ? 46 : 28;
+
+        public override bool ShouldSelectRow(NSTableView tableView, nint row) => owner._rows[(int)row] is AudioTrack;
 
         public override NSView GetViewForItem(NSTableView tableView, NSTableColumn tableColumn, nint row)
         {
-            var track = owner._shown[(int)row];
+            if (owner._rows[(int)row] is DiscRow disc)
+            {
+                // Die Disc-Zeile steht in der ersten Spalte, die übrigen bleiben leer.
+                var dv = tableView.MakeView("disc", this) as NSTableCellView ?? NewDiscCell();
+                var first = tableView.TableColumns().FirstOrDefault() == tableColumn;
+                dv.TextField!.StringValue = first ? Strings.T("Disc {0}", disc.Disc) : "";
+                dv.ImageView!.Hidden = !first;
+                return dv;
+            }
+
+            var track = (AudioTrack)owner._rows[(int)row];
             var col = TrackColumn.ById(tableColumn.Identifier);
+
+            if (col?.Id == "title" && Combined)
+            {
+                var tc = tableView.MakeView("titleartist", this) as TitleCell ?? new TitleCell { Identifier = "titleartist" };
+                tc.Show(Title(track), track.Artist, owner.Art(track), track.HasCover, string.IsNullOrWhiteSpace(track.Title));
+                return tc;
+            }
 
             if (col?.IsCover == true)
             {
@@ -492,28 +609,33 @@ internal sealed partial class TrackListController : NSViewController
             {
                 ColumnLook.MonoRight => Mono,
                 ColumnLook.Mono => Small,
-                _ => NSFont.SystemFontOfSize(NSFont.SystemFontSize),
+                _ => NSFont.SystemFontOfSize(12),
             };
             tf.TextColor = col?.Look == ColumnLook.Text ? NSColor.Label : NSColor.SecondaryLabel;
 
-            // Der laufende Titel: Lautsprecher statt Nummer, wie in Musik.
+            // Der laufende Titel: ein grünes Zeichen statt der Nummer.
             if (col?.Id == "track" && track.Path == owner.PlayingPath)
             {
-                tf.StringValue = "\U0001F50A";
-                tf.Font = NSFont.SystemFontOfSize(10);
+                tf.StringValue = "▶";
+                tf.TextColor = Theme.Accent;
             }
-            // Ohne Titel-Tag steht der Dateiname da, aber zurückhaltend.
             if (col?.Id == "title" && string.IsNullOrWhiteSpace(track.Title))
             {
-                tf.StringValue = Path.GetFileNameWithoutExtension(track.FileName);
+                tf.StringValue = Title(track);
                 tf.TextColor = NSColor.TertiaryLabel;
             }
             return cell;
         }
 
-        private static string Value(AudioTrack t, TrackColumn c) => c.Id switch
+        private static string Title(AudioTrack t) =>
+            string.IsNullOrWhiteSpace(t.Title) ? Path.GetFileNameWithoutExtension(t.FileName) : t.Title;
+
+        private string Value(AudioTrack t, TrackColumn c) => c.Id switch
         {
-            "track" => Settings.CombineDiscAndTrack && t.Disc > 1 && t.Track > 0
+            // In Disc-Zeilen gegliedert zählt jede Disc von 1; sonst steht die
+            // Disc kompakt vor der Nummer.
+            "track" => !owner._sectioned && Settings.CombineDiscAndTrack && t.Disc > 0 && t.Track > 0
+                       && owner._all.Select(x => x.Disc).Where(d => d > 0).Distinct().Count() > 1
                 ? $"{t.Disc}-{t.Track:00}" : t.TrackLabel,
             _ => typeof(AudioTrack).GetProperty(c.Property)?.GetValue(t)?.ToString() ?? "",
         };
@@ -524,7 +646,6 @@ internal sealed partial class TrackListController : NSViewController
             var text = NSTextField.CreateLabel("");
             text.TranslatesAutoresizingMaskIntoConstraints = false;
             text.LineBreakMode = NSLineBreakMode.TruncatingTail;
-            text.Cell.Scrollable = false;
             cell.AddSubview(text);
             cell.TextField = text;
             NSLayoutConstraint.ActivateConstraints([
@@ -535,8 +656,83 @@ internal sealed partial class TrackListController : NSViewController
             return cell;
         }
 
+        private static NSTableCellView NewDiscCell()
+        {
+            var cell = new NSTableCellView { Identifier = "disc" };
+            var icon = NSImageView.FromImage(NSImage.GetSystemSymbol("opticaldisc", null)!);
+            icon.ContentTintColor = NSColor.SecondaryLabel;
+            var text = NSTextField.CreateLabel("");
+            text.Font = NSFont.SystemFontOfSize(12, NSFontWeight.Medium);
+            foreach (var v in new NSView[] { icon, text })
+            {
+                v.TranslatesAutoresizingMaskIntoConstraints = false;
+                cell.AddSubview(v);
+            }
+            cell.ImageView = icon;
+            cell.TextField = text;
+            NSLayoutConstraint.ActivateConstraints([
+                icon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 2),
+                icon.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor, 2),
+                text.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 6),
+                text.CenterYAnchor.ConstraintEqualTo(icon.CenterYAnchor),
+            ]);
+            return cell;
+        }
+
         public override void SelectionDidChange(NSNotification notification) =>
             owner.SelectionChanged?.Invoke();
+    }
+
+    /// <summary>Cover, daneben der Titel, klein darunter der Interpret.</summary>
+    private sealed class TitleCell : NSTableCellView
+    {
+        private readonly NSImageView _art = new() { ImageScaling = NSImageScale.ProportionallyUpOrDown, WantsLayer = true };
+        private readonly NSTextField _title = NSTextField.CreateLabel("");
+        private readonly NSTextField _artist = NSTextField.CreateLabel("");
+
+        public TitleCell()
+        {
+            _art.Layer!.CornerRadius = 4;
+            _art.Layer.MasksToBounds = true;
+            _title.Font = NSFont.SystemFontOfSize(13);
+            _artist.Font = NSFont.SystemFontOfSize(11);
+            _artist.TextColor = NSColor.SecondaryLabel;
+            _title.LineBreakMode = _artist.LineBreakMode = NSLineBreakMode.TruncatingTail;
+            var text = new NSStackView
+            {
+                Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+                Alignment = NSLayoutAttribute.Leading,
+                Spacing = 1,
+            }.Arranged(_title, _artist);
+            foreach (var v in new NSView[] { _art, text })
+            {
+                v.TranslatesAutoresizingMaskIntoConstraints = false;
+                AddSubview(v);
+            }
+            NSLayoutConstraint.ActivateConstraints([
+                _art.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
+                _art.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _art.WidthAnchor.ConstraintEqualTo(34),
+                _art.HeightAnchor.ConstraintEqualTo(34),
+                text.LeadingAnchor.ConstraintEqualTo(_art.TrailingAnchor, 10),
+                text.TrailingAnchor.ConstraintLessThanOrEqualTo(TrailingAnchor, -2),
+                text.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _title.WidthAnchor.ConstraintLessThanOrEqualTo(text.WidthAnchor),
+            ]);
+            TextField = _title;
+        }
+
+        public void Show(string title, string artist, NSImage? art, bool hasCover, bool guessed)
+        {
+            _title.StringValue = title;
+            _title.TextColor = guessed ? NSColor.TertiaryLabel : NSColor.Label;
+            _artist.StringValue = artist;
+            _artist.Hidden = artist.Length == 0;
+            _art.Image = art ?? (hasCover ? null : NSImage.GetSystemSymbol("music.note", null));
+            _art.ContentTintColor = NSColor.TertiaryLabel;
+            _art.ImageScaling = art is null ? NSImageScale.ProportionallyDown : NSImageScale.ProportionallyUpOrDown;
+            _art.Layer!.BackgroundColor = NSColor.FromWhite(1, 0.05f).CGColor;
+        }
     }
 
     // ── Kontextmenü ──────────────────────────────────────────────
@@ -551,7 +747,7 @@ internal sealed partial class TrackListController : NSViewController
             var t = owner._table;
 
             // Rechtsklick außerhalb der Auswahl wählt die Zeile, wie im Finder.
-            if (t.ClickedRow >= 0 && !t.IsRowSelected(t.ClickedRow))
+            if (t.ClickedRow >= 0 && !t.IsRowSelected(t.ClickedRow) && owner._rows[(int)t.ClickedRow] is AudioTrack)
                 t.SelectRow(t.ClickedRow, false);
 
             var sel = owner.SelectedTracks;

@@ -1,0 +1,273 @@
+using TagTuner.Core.Folders;
+using TagTuner.Core.Model;
+using TagTuner.Core.Settings;
+
+namespace TagTuner.Mac;
+
+/// <summary>
+/// Die rechte Spalte, wie unter Windows: Ordner-Analyse mit Befund und Ziel,
+/// darunter der Album-Modus des Ordners und was beim Ablegen geschieht. Die
+/// Schalter schreiben die Regel des Ordners sofort.
+/// </summary>
+internal sealed class FolderPanel : NSViewController
+{
+    public event Action<IReadOnlyList<AudioTrack>, FolderTarget>? AlignRequested;
+    public event Action? AlbumRequested;
+    public event Action? RenameRequested;
+    public event Action? CoverAllRequested;
+
+    private readonly FlippedStack _stack = new()
+    {
+        Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+        Alignment = NSLayoutAttribute.Leading,
+        Spacing = 8,
+        EdgeInsets = new NSEdgeInsets(10, 12, 16, 12),
+    };
+
+    private string? _folder;
+    private IReadOnlyList<AudioTrack> _tracks = [];
+
+    private static AppSettings Settings => AppDelegate.Settings;
+
+    public override void LoadView()
+    {
+        var scroll = new NSScrollView
+        {
+            HasVerticalScroller = true,
+            DrawsBackground = false,
+            AutohidesScrollers = true,
+            DocumentView = _stack,
+        };
+        _stack.TranslatesAutoresizingMaskIntoConstraints = false;
+        NSLayoutConstraint.ActivateConstraints([
+            _stack.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor),
+            _stack.TrailingAnchor.ConstraintEqualTo(scroll.ContentView.TrailingAnchor),
+            _stack.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor),
+        ]);
+        var root = new NSView();
+        scroll.TranslatesAutoresizingMaskIntoConstraints = false;
+        root.AddSubview(scroll);
+        NSLayoutConstraint.ActivateConstraints([
+            scroll.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor),
+            scroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            scroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
+            root.WidthAnchor.ConstraintGreaterThanOrEqualTo(230),
+        ]);
+        View = root;
+        Show(null, []);
+    }
+
+    public void Show(string? folder, IReadOnlyList<AudioTrack> tracks)
+    {
+        _folder = folder;
+        _tracks = tracks;
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
+        foreach (var v in _stack.ArrangedSubviews) { _stack.RemoveArrangedSubview(v); v.RemoveFromSuperview(); }
+        Add(Theme.Section(Strings.T("FOLDER ANALYSIS")));
+        if (_folder is not { } folder) return;
+
+        // ── Befund ───────────────────────────────────────────────
+        var analysis = FolderAnalysis.Of(_tracks);
+        var target = analysis.ResolveTarget(Settings.DefaultFormat, Settings.DefaultSampleRate);
+        var ok = analysis.IsUniform;
+        var verdict = Theme.Small(analysis.IsEmpty
+            ? Strings.T("The folder is empty. New files follow the default profile.")
+            : ok ? Strings.T("Uniform. All {0} tracks match the target.", analysis.Tracks.Count)
+                 : Strings.T("Mixed. The default profile from the settings applies."),
+            ok ? Theme.Accent : Theme.Warn);
+        Add(Theme.Card(verdict, ok ? Theme.AccentDim : Theme.WarnDim, 9));
+
+        var fromDefault = target.FromDefaultProfile ? Strings.T("from the default profile") : null;
+        Add(Pair(Strings.T("Target format"), target.Format, fromDefault));
+        Add(Pair(Strings.T("Target sample rate"), Rate(target.SampleRate), fromDefault));
+
+        if (!analysis.IsEmpty && !analysis.IsUniform)
+        {
+            Add(Pills(Strings.T("Formats"), analysis.FormatCounts.OrderByDescending(p => p.Value)
+                .Select(p => ($"{p.Value} {p.Key}", p.Key.Equals(target.Format, StringComparison.OrdinalIgnoreCase)))));
+            Add(Pills(Strings.T("Sample rates"), analysis.SampleRateCounts.OrderByDescending(p => p.Value)
+                .Select(p => ($"{p.Value} × {Rate(p.Key)}", p.Key == target.SampleRate))));
+        }
+
+        var outliers = analysis.Outliers(target).ToList();
+        var align = Button(outliers.Count > 0 ? Strings.T("Align folder ({0})", outliers.Count) : Strings.T("Align folder"),
+            () => AlignRequested?.Invoke(outliers, target));
+        align.Enabled = outliers.Count > 0;
+        Add(align, after: 4);
+        Add(Button(Strings.T("Rename…"), () => RenameRequested?.Invoke()), after: 4);
+        Add(Button(Strings.T("Set cover for all…"), () => CoverAllRequested?.Invoke()), after: 12);
+
+        // ── Album-Modus ──────────────────────────────────────────
+        var rule = Settings.RuleFor(folder);
+        var album = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 7,
+        };
+        // Umbrechende Texte brauchen eine feste Breite, sonst bleiben sie einzeilig schmal.
+        void Wide(NSView v) { album.AddArrangedSubview(v); album.FillWidth(v); }
+        album.AddArrangedSubview(Theme.Section(Strings.T("ALBUM MODE")));
+        album.AddArrangedSubview(NSTextField.CreateLabel(Strings.T("This folder is one release")));
+        album.AddArrangedSubview(Switch(rule.AlbumMode, on => Change(r => r.AlbumMode = on)));
+        Wide(Theme.Small(Strings.T("For an album, an EP or a single: one release with uniform metadata. "
+            + "It overwrites to make the folder consistent, so leave it off for folders where you collect mixed music.")));
+        album.AddArrangedSubview(Check(Strings.T("Base metadata"), rule.BaseTags, rule.AlbumMode, 0, on => Change(r => r.BaseTags = on)));
+        album.AddArrangedSubview(Check(Strings.T("Cover"), rule.Cover, rule.AlbumMode, 0, on => Change(r => r.Cover = on)));
+        album.AddArrangedSubview(Check(Strings.T("Track numbering"), rule.Numbering, rule.AlbumMode, 0, on => Change(r => r.Numbering = on)));
+        album.AddArrangedSubview(Check(Strings.T("File names follow"), rule.RenameFiles, rule.AlbumMode && rule.Numbering, 1,
+            on => Change(r => r.RenameFiles = on)));
+        Wide(Theme.Small(rule.AlbumMode
+            ? Strings.T("Applies when files are dropped in and when the order changes.")
+            : Strings.T("Tags, cover and track numbers stay untouched here.")));
+
+        if (rule.AlbumMode && Numbering(_tracks) is { Length: > 0 } problems)
+            Wide(Theme.Small(problems, Theme.Warn));
+
+        var apply = Button(Strings.T("Apply to existing files…"), () => AlbumRequested?.Invoke());
+        apply.Enabled = rule.AlbumMode && _tracks.Count > 0;
+        album.AddArrangedSubview(apply);
+        apply.WidthAnchor.ConstraintEqualTo(album.WidthAnchor).Active = true;
+
+        // ── Beim Ablegen ─────────────────────────────────────────
+        album.AddArrangedSubview(Theme.Section(Strings.T("ON DROP")));
+        album.SetCustomSpacing(14, apply);
+        album.AddArrangedSubview(NSTextField.CreateLabel(Strings.T("Align format and sample rate")));
+        album.AddArrangedSubview(Switch(rule.AutoConform, on => Change(r => r.AutoConform = on)));
+        var own = Settings.HasOwnRule(folder);
+        Wide(Theme.Small(own
+            ? Strings.T("Own setting for \"{0}\". It wins over the global one.", Path.GetFileName(folder))
+            : Strings.T("Follows the global setting from the settings.")));
+        if (own)
+        {
+            var reset = Button(Strings.T("Reset to the global setting"), () => { Settings.ClearRule(folder); Rebuild(); });
+            album.AddArrangedSubview(reset);
+            reset.WidthAnchor.ConstraintEqualTo(album.WidthAnchor).Active = true;
+        }
+        Add(Theme.Card(album, padding: 11), after: 10);
+
+        Add(Theme.Small(outliers.Count > 0
+            ? Strings.T("{0} file(s) deviate. Aligning converts them in place and backs them up first.", outliers.Count)
+            : Strings.T("Files dropped in are brought to this target automatically.")));
+    }
+
+    /// <summary>Die Regel ändern und sofort merken, dann neu zeichnen.</summary>
+    private void Change(Action<FolderRule> edit)
+    {
+        if (_folder is null) return;
+        var rule = Settings.RuleFor(_folder).Copy();
+        edit(rule);
+        Settings.SetRule(_folder, rule);
+        Rebuild();
+    }
+
+    /// <summary>Was an der Nummerierung auffällt, als Zeilen wie „Track 7 fehlt". Leer, wenn alles stimmt.</summary>
+    private static string Numbering(IReadOnlyList<AudioTrack> tracks)
+    {
+        var check = TrackNumberCheck.Check(tracks);
+        var lines = new List<string>();
+        foreach (var d in check.Discs)
+        {
+            var prefix = d.Disc > 0 ? Strings.T("Disc {0}", d.Disc) + ": " : "";
+            var parts = new List<string>();
+            if (d.Missing.Count == 1) parts.Add(Strings.T("track {0} missing", d.Missing[0]));
+            else if (d.Missing.Count > 1) parts.Add(Strings.T("tracks {0} missing", TrackNumberCheck.Ranges(d.Missing)));
+            parts.AddRange(d.Doubled.Select(x => Strings.T("track {0} appears {1}×", x.Track, x.Count)));
+            var text = string.Join(", ", parts);
+            lines.Add(prefix + (text.Length > 0 ? char.ToUpper(text[0]) + text[1..] : ""));
+        }
+        if (check.Unnumbered > 0) lines.Add(Strings.T("{0} file(s) without a track number", check.Unnumbered));
+        return string.Join("\n", lines);
+    }
+
+    // ── Bausteine ────────────────────────────────────────────────
+
+    private void Add(NSView v, float after = 8)
+    {
+        _stack.AddArrangedSubview(v);
+        _stack.FillWidth(v);
+        _stack.SetCustomSpacing(after, v);
+    }
+
+    private static string Rate(int hz) => hz % 1000 == 0 ? $"{hz / 1000} kHz" : $"{hz / 1000.0:0.0} kHz";
+
+    private static NSView Pair(string key, string value, string? note)
+    {
+        var l = NSTextField.CreateLabel($"{key}: {value}");
+        l.Font = NSFont.SystemFontOfSize(12);
+        var s = new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Vertical, Alignment = NSLayoutAttribute.Leading, Spacing = 1 };
+        s.AddArrangedSubview(l);
+        if (note is not null)
+        {
+            var n = Theme.Small(note);
+            n.Font = NSFont.SystemFontOfSize(10.5f);
+            n.TextColor = NSColor.TertiaryLabel;
+            s.AddArrangedSubview(n);
+        }
+        return s;
+    }
+
+    /// <summary>
+    /// Formate und Sampleraten als Pillen: grün, was schon dem Ziel entspricht,
+    /// gelb, was noch angefasst werden muss.
+    /// </summary>
+    private static NSView Pills(string caption, IEnumerable<(string Text, bool OnTarget)> items)
+    {
+        var row = new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 5 };
+        foreach (var (text, onTarget) in items)
+        {
+            var l = NSTextField.CreateLabel(text);
+            l.Font = NSFont.MonospacedSystemFont(10.5f, NSFontWeight.Regular);
+            l.TextColor = onTarget ? Theme.Accent : Theme.Warn;
+            row.AddArrangedSubview(Theme.Card(l, onTarget ? Theme.AccentDim : Theme.WarnDim, 3));
+        }
+        var c = Theme.Small(caption);
+        c.TextColor = NSColor.TertiaryLabel;
+        return new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 4,
+        }.Arranged(c, row);
+    }
+
+    private static NSButton Button(string title, Action action)
+    {
+        var b = NSButton.CreateButton(title, action);
+        b.ControlSize = NSControlSize.Large;
+        return b;
+    }
+
+    /// <summary>Schalter mit „an"/„aus" daneben, wie der ToggleSwitch unter Windows.</summary>
+    private static NSView Switch(bool on, Action<bool> changed)
+    {
+        var sw = new NSSwitch { State = on ? 1 : 0 };
+        var label = NSTextField.CreateLabel(on ? Strings.T("on") : Strings.T("off"));
+        sw.Activated += (_, _) => changed(sw.State == 1);
+        return new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 8 }.Arranged(sw, label);
+    }
+
+    private static NSView Check(string title, bool value, bool enabled, int indent, Action<bool> changed)
+    {
+        var b = NSButton.CreateCheckbox(title, () => { });
+        b.State = value ? NSCellStateValue.On : NSCellStateValue.Off;
+        b.Enabled = enabled;
+        b.Activated += (_, _) => changed(b.State == NSCellStateValue.On);
+        return new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            EdgeInsets = new NSEdgeInsets(0, 20 * indent, 0, 0),
+        }.Arranged(b);
+    }
+}
+
+/// <summary>Oben beginnend, damit der Inhalt nicht am unteren Rand klebt.</summary>
+internal class FlippedStack : NSStackView
+{
+    public override bool IsFlipped => true;
+}

@@ -290,6 +290,7 @@ public static partial class Strings
         ["Naming scheme"] = "Adlandırma şeması",
         ["Needed for converting. Without it, TagTuner only edits tags."] = "Dönüştürmek için gerekli. ffmpeg olmadan TagTuner yalnızca etiketleri düzenler.",
         ["Never"] = "Asla",
+        ["New Tab"] = "Yeni Sekme",
         ["Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it."] = "En yeniler önce. Geri yükleme dosyayı geldiği yere koyar; oradaki mevcut sürüm önce yedeklenir, böylece geçmiş bunu geri alabilir.",
         ["Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first."] = "En yeniler önce. Geri alma dosyaları önceki hâline döndürür; birden çok kayıt seçiliyse önce en yenisi geri alınır.",
         ["Next match"] = "Sonraki eşleşme",

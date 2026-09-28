@@ -88,13 +88,16 @@ public sealed class AppDelegate : NSApplicationDelegate
     /// Ordner, der gerade offen ist.
     /// </summary>
     [Export("newWindowForTab:")]
-    public void NewWindowForTab(NSObject? sender)
+    public void NewWindowForTab(NSObject? sender) => NewWindowForTab(sender, null);
+
+    /// <summary>Neuer Tab mit einem bestimmten Ordner, etwa aus dem Kontextmenü der Bibliothek.</summary>
+    public void NewWindowForTab(NSObject? sender, string? folder)
     {
         var from = Front;
         var tab = Track(new MainWindowController(first: false));
         if (from is not null) from.Window.AddTabbedWindow(tab.Window, NSWindowOrderingMode.Above);
         tab.Window.MakeKeyAndOrderFront(this);
-        if (from?.Folder is { } f) tab.OpenFolder(f);
+        if ((folder ?? from?.Folder) is { } f) tab.OpenFolder(f);
     }
 
     public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender) => true;

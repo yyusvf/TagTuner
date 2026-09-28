@@ -290,6 +290,7 @@ public static partial class Strings
         ["Naming scheme"] = "Схема імен",
         ["Needed for converting. Without it, TagTuner only edits tags."] = "Потрібен для конвертації. Без ffmpeg TagTuner лише редагує теги.",
         ["Never"] = "Ніколи",
+        ["New Tab"] = "Нова вкладка",
         ["Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it."] = "Спочатку нові. Відновлення повертає файл на попереднє місце; поточна версія спершу зберігається, тож журнал може це скасувати.",
         ["Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first."] = "Спочатку нові. Скасування повертає файли до попереднього стану; за кількох вибраних записів першим скасовується найновіший.",
         ["Next match"] = "Наступний збіг",

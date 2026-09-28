@@ -218,6 +218,7 @@
  "Naming scheme": "Schéma názvů",
  "Needed for converting. Without it, TagTuner only edits tags.": "Potřebný pro převod. Bez ffmpeg TagTuner jen upravuje tagy.",
  "Never": "Nikdy",
+ "New Tab": "Nový panel",
  "Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it.": "Nejnovější nahoře. Obnovení vrátí soubor tam, odkud pochází; současná verze se nejdřív zálohuje, takže to historie může vrátit.",
  "Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first.": "Nejnovější nahoře. Vrácení obnoví soubory do předchozího stavu; při více vybraných záznamech se nejdřív vrátí nejnovější.",
  "Next match": "Další shoda",

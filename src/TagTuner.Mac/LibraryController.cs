@@ -4,7 +4,11 @@ using TagTuner.Core.Settings;
 
 namespace TagTuner.Mac;
 
-/// <summary>Ein Ordner im Baum. Die Kinder werden erst beim Aufklappen gelesen.</summary>
+/// <summary>
+/// Ein Ordner im Baum, mit Cover und Interpret aus seinen Liedern. Beides
+/// kommt nachträglich aus dem Hintergrund: erst steht der Name da, dann
+/// schiebt sich das Bild nach (wie LibraryFolder unter Windows).
+/// </summary>
 internal sealed class FolderNode(FolderEntry entry, FolderNode? parent) : NSObject
 {
     public FolderEntry Entry { get; } = entry;
@@ -21,64 +25,145 @@ internal sealed class FolderNode(FolderEntry entry, FolderNode? parent) : NSObje
     public void Forget() { _children = null; _expandable = null; }
 }
 
+/// <summary>Cover und Interpret je Ordner, einmal gelesen und gemerkt.</summary>
+internal static class FolderLook
+{
+    private static readonly Dictionary<string, (NSImage? Cover, string Artist)> Known = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> Loading = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Nur wenige Ordner gleichzeitig lesen. Ein Verzeichnis mit zweihundert
+    /// Unterordnern würde sonst zweihundert Dateizugriffe auf einmal auslösen.
+    /// </summary>
+    private static readonly SemaphoreSlim Gate = new(3);
+
+    public static bool TryGet(string path, out (NSImage? Cover, string Artist) look) => Known.TryGetValue(path, out look);
+
+    /// <summary>Lädt im Hintergrund und meldet sich auf dem Hauptfaden.</summary>
+    public static void Load(string path, Action done)
+    {
+        if (Known.ContainsKey(path) || !Loading.Add(path)) return;
+        Task.Run(async () =>
+        {
+            NSImage? cover = null;
+            string? artist = null;
+            await Gate.WaitAsync();
+            try
+            {
+                // In einer Zeile sind 32 Punkte zu sehen, auf Retina das Doppelte.
+                cover = Covers.Thumbnail(FolderCover.Read(path), 96);
+                artist = FolderArtist.Of(path);
+            }
+            catch { }
+            finally { Gate.Release(); }
+
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+            {
+                Loading.Remove(path);
+                if (Known.Count > 2000) Known.Clear();
+                Known[path] = (cover, artist ?? "");
+                done();
+            });
+        });
+    }
+
+    /// <summary>Nach dem Schreiben kann sich Cover oder Interpret geändert haben.</summary>
+    public static void Forget(string path) => Known.Remove(path.TrimEnd('/'));
+}
+
 /// <summary>
-/// Die Seitenleiste: eigene Ordner, Musik, Downloads und die Laufwerke.
-/// Ein Klick öffnet den Ordner als Playlist.
+/// Die Bibliothek: eigene Ordner, Musik, Downloads, Benutzerordner und die
+/// Laufwerke, darüber die Suche nach Ordnern und Liedern.
 /// </summary>
 internal sealed class LibraryController : NSViewController
 {
     public event Action<string>? FolderChosen;
 
+    /// <summary>Ein Lied aus der Suche: seinen Ordner öffnen und es darin wählen.</summary>
+    public event Action<string, string>? TrackChosen;
+
     private readonly NSOutlineView _outline = new();
+    private readonly NSTableView _results = new();
+    private readonly NSScrollView _treeScroll = new();
+    private readonly NSScrollView _resultScroll = new();
+    private readonly NSSearchField _search = new();
+    private readonly NSTextField _searchInfo = Theme.Small("");
     private List<FolderNode> _roots = [];
+    private IReadOnlyList<SearchHit> _hits = [];
+    private Task<LibraryIndex>? _index;
+    private CancellationTokenSource? _searching;
     private bool _quiet;
 
     private static AppSettings Settings => AppDelegate.Settings;
 
     public override void LoadView()
     {
+        // ── Kopf: BIBLIOTHEK und Plus ────────────────────────────
+        var head = Theme.Section(Strings.T("LIBRARY"));
+        var add = NSButton.CreateButton(NSImage.GetSystemSymbol("plus", null)!, () => AddLibraryFolder(this));
+        add.Bordered = false;
+        add.ToolTip = Strings.T("Add folder…");
+
+        _search.PlaceholderString = Strings.T("Search folders and songs…");
+        _search.Changed += (_, _) => Search(_search.StringValue);
+        _search.SendsSearchStringImmediately = true;
+
+        // ── Baum ─────────────────────────────────────────────────
         _outline.Style = NSTableViewStyle.SourceList;
         _outline.HeaderView = null;
-        _outline.FloatsGroupRows = false;
-        _outline.RowSizeStyle = NSTableViewRowSizeStyle.Default;
+        _outline.RowHeight = 44;
+        _outline.IndentationPerLevel = 14;
         _outline.AutosaveExpandedItems = false;
-        _outline.IndentationPerLevel = 13;
-
         var column = new NSTableColumn("name") { Editable = false };
         _outline.AddColumn(column);
         _outline.OutlineTableColumn = column;
         _outline.Delegate = new Delegate(this);
         _outline.DataSource = new Source(this);
-        _outline.Menu = BuildMenu();
+        _outline.Menu = new NSMenu { AutoEnablesItems = false, Delegate = new MenuDelegate(this) };
+        _treeScroll.DocumentView = _outline;
+        _treeScroll.HasVerticalScroller = true;
+        _treeScroll.DrawsBackground = false;
+        _treeScroll.AutohidesScrollers = true;
 
-        var scroll = new NSScrollView
-        {
-            DocumentView = _outline,
-            HasVerticalScroller = true,
-            DrawsBackground = false,
-            AutohidesScrollers = true,
-        };
-
-        // Unten eine kleine Leiste zum Hinzufügen, wie in Finder und Mail.
-        var add = NSButton.CreateButton(NSImage.GetSystemSymbol("plus", null)!, () => AddLibraryFolder(this));
-        add.Bordered = false;
-        add.ToolTip = Strings.T("Add folder…");
+        // ── Suchtreffer ──────────────────────────────────────────
+        _results.Style = NSTableViewStyle.SourceList;
+        _results.HeaderView = null;
+        _results.RowHeight = 36;
+        _results.AddColumn(new NSTableColumn("hit") { Editable = false });
+        _results.DataSource = new HitSource(this);
+        _results.Delegate = new HitDelegate(this);
+        _resultScroll.DocumentView = _results;
+        _resultScroll.HasVerticalScroller = true;
+        _resultScroll.DrawsBackground = false;
+        _resultScroll.AutohidesScrollers = true;
+        _resultScroll.Hidden = true;
+        _searchInfo.Hidden = true;
 
         var root = new NSView();
-        foreach (var v in new NSView[] { scroll, add })
+        foreach (var v in new NSView[] { head, add, _search, _searchInfo, _treeScroll, _resultScroll })
         {
             v.TranslatesAutoresizingMaskIntoConstraints = false;
             root.AddSubview(v);
         }
         NSLayoutConstraint.ActivateConstraints([
-            scroll.TopAnchor.ConstraintEqualTo(root.TopAnchor),
-            scroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
-            scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            scroll.BottomAnchor.ConstraintEqualTo(add.TopAnchor, -4),
-            add.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 14),
-            add.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -10),
-            add.WidthAnchor.ConstraintEqualTo(22),
-            add.HeightAnchor.ConstraintEqualTo(22),
+            head.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor, 10),
+            head.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 12),
+            add.CenterYAnchor.ConstraintEqualTo(head.CenterYAnchor),
+            add.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -10),
+            _search.TopAnchor.ConstraintEqualTo(head.BottomAnchor, 8),
+            _search.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 10),
+            _search.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -10),
+            _searchInfo.TopAnchor.ConstraintEqualTo(_search.BottomAnchor, 6),
+            _searchInfo.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 12),
+            _searchInfo.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -12),
+            _treeScroll.TopAnchor.ConstraintEqualTo(_search.BottomAnchor, 8),
+            _treeScroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            _treeScroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            _treeScroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
+            _resultScroll.TopAnchor.ConstraintEqualTo(_searchInfo.BottomAnchor, 4),
+            _resultScroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            _resultScroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            _resultScroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
         ]);
         View = root;
         Reload();
@@ -88,6 +173,17 @@ internal sealed class LibraryController : NSViewController
     {
         _roots = [.. FolderScanner.Roots(Settings.LibraryPaths, Settings.HiddenRoots).Select(r => new FolderNode(r, null))];
         _outline.ReloadData();
+        _index = null;
+    }
+
+    /// <summary>Nach dem Schreiben: Cover und Interpret dieses Ordners neu lesen.</summary>
+    public void Refresh(string folder)
+    {
+        FolderLook.Forget(folder);
+        _index = null;
+        for (nint i = 0; i < _outline.RowCount; i++)
+            if (_outline.ItemAtRow(i) is FolderNode n && Same(n.Entry.Path, folder))
+                _outline.ReloadItem(n);
     }
 
     /// <summary>
@@ -133,14 +229,79 @@ internal sealed class LibraryController : NSViewController
         : _outline.SelectedRow >= 0 ? _outline.ItemAtRow(_outline.SelectedRow) as FolderNode
         : null;
 
-    // ── Kontextmenü ──────────────────────────────────────────────
+    public void FocusSearch() => View.Window?.MakeFirstResponder(_search);
 
-    private NSMenu BuildMenu()
+    // ── Suche ────────────────────────────────────────────────────
+
+    /// <summary>Alles, worin gesucht wird: eigene Pfade plus die Systemwurzeln ohne Laufwerke.</summary>
+    private static List<string> SearchRoots()
     {
-        var menu = new NSMenu { AutoEnablesItems = false };
-        menu.Delegate = new MenuDelegate(this);
-        return menu;
+        var roots = new List<string>(Settings.LibraryPaths);
+        // Laufwerke bleiben draußen, sie abzusuchen dauert ewig.
+        foreach (var entry in FolderScanner.Roots())
+            if (!entry.Path.StartsWith("/Volumes/", StringComparison.Ordinal))
+                roots.Add(entry.Path);
+        return [.. roots.Distinct(StringComparer.OrdinalIgnoreCase)];
     }
+
+    private async void Search(string text)
+    {
+        _searching?.Cancel();
+        var query = text.Trim();
+        var on = query.Length >= 2;
+        _treeScroll.Hidden = on;
+        _resultScroll.Hidden = _searchInfo.Hidden = !on;
+        if (!on) { _hits = []; _results.ReloadData(); return; }
+
+        var cts = _searching = new CancellationTokenSource();
+        try
+        {
+            // Nur so lange warten, dass zügiges Tippen nicht jeden Buchstaben einzeln durchreicht.
+            await Task.Delay(120, cts.Token);
+            if (_index is null) _searchInfo.StringValue = Strings.T("Reading the library once…");
+            var roots = SearchRoots();
+            var onlyAudio = Settings.OnlyAudioFolders;
+            var index = await (_index ??= Task.Run(() => LibraryIndex.Build(roots, onlyAudio)));
+            if (cts.IsCancellationRequested) return;
+
+            _hits = LibrarySearch.Find(index, query);
+            _results.ReloadData();
+            var folders = _hits.Count(h => h.Kind == HitKind.Folder);
+            _searchInfo.StringValue = _hits.Count == 0
+                ? Strings.T("Nothing found for \"{0}\".", query)
+                : Strings.T("{0} folders, {1} songs", folders, _hits.Count - folders)
+                  + (_hits.Count >= LibrarySearch.DefaultLimit ? Strings.T(" (more available)") : "");
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private sealed class HitSource(LibraryController owner) : NSTableViewDataSource
+    {
+        public override nint GetRowCount(NSTableView tableView) => owner._hits.Count;
+    }
+
+    private sealed class HitDelegate(LibraryController owner) : NSTableViewDelegate
+    {
+        public override NSView GetViewForItem(NSTableView tableView, NSTableColumn tableColumn, nint row)
+        {
+            var hit = owner._hits[(int)row];
+            var cell = tableView.MakeView("hit", this) as FolderCell ?? new FolderCell { Identifier = "hit" };
+            cell.Show(hit.Name, hit.Context,
+                NSImage.GetSystemSymbol(hit.Kind == HitKind.Folder ? "folder" : "music.note", null), 24);
+            return cell;
+        }
+
+        public override void SelectionDidChange(NSNotification notification)
+        {
+            var row = owner._results.SelectedRow;
+            if (row < 0 || row >= owner._hits.Count) return;
+            var hit = owner._hits[(int)row];
+            if (hit.Kind == HitKind.Folder) owner.FolderChosen?.Invoke(hit.Path);
+            else if (Path.GetDirectoryName(hit.Path) is { } folder) owner.TrackChosen?.Invoke(folder, hit.Path);
+        }
+    }
+
+    // ── Kontextmenü ──────────────────────────────────────────────
 
     private sealed class MenuDelegate(LibraryController owner) : NSMenuDelegate
     {
@@ -151,6 +312,9 @@ internal sealed class LibraryController : NSViewController
             menu.RemoveAllItems();
             if (owner.Clicked is not { } node) return;
 
+            menu.AddItem(new NSMenuItem(Strings.T("Open in a new tab"), (_, _) =>
+                ((AppDelegate)NSApplication.SharedApplication.Delegate).NewWindowForTab(null, node.Entry.Path)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
             menu.AddItem(new NSMenuItem(Strings.T("Show in Finder"), (_, _) =>
                 NSWorkspace.SharedWorkspace.ActivateFileViewer([NSUrl.FromFilename(node.Entry.Path)])));
             menu.AddItem(new NSMenuItem(Strings.T("Copy path"), (_, _) =>
@@ -159,18 +323,13 @@ internal sealed class LibraryController : NSViewController
                 NSPasteboard.GeneralPasteboard.SetStringForType(node.Entry.Path, NSPasteboard.NSPasteboardTypeString);
             }));
 
+            menu.AddItem(NSMenuItem.SeparatorItem);
             if (node.Parent is null)
-            {
-                menu.AddItem(NSMenuItem.SeparatorItem);
                 menu.AddItem(new NSMenuItem(node.Entry.IsCustomRoot
                     ? Strings.T("Remove from the library")
                     : Strings.T("Hide from the library"), (_, _) => owner.RemoveRoot(node)));
-            }
             else
-            {
-                menu.AddItem(NSMenuItem.SeparatorItem);
                 menu.AddItem(new NSMenuItem(Strings.T("Add to the library"), (_, _) => owner.AddRoot(node.Entry.Path)));
-            }
 
             if (Settings.HiddenRoots.Count > 0)
             {
@@ -222,7 +381,7 @@ internal sealed class LibraryController : NSViewController
         });
     }
 
-    // ── Datenquelle und Darstellung ──────────────────────────────
+    // ── Baum: Datenquelle und Zeilen ─────────────────────────────
 
     private sealed class Source(LibraryController owner) : NSOutlineViewDataSource
     {
@@ -241,43 +400,41 @@ internal sealed class LibraryController : NSViewController
         public override NSView GetView(NSOutlineView outlineView, NSTableColumn? tableColumn, NSObject item)
         {
             var node = (FolderNode)item;
-            var cell = outlineView.MakeView("folder", this) as NSTableCellView ?? NewCell();
-            cell.TextField!.StringValue = node.Entry.Name;
-            cell.ImageView!.Image = NSImage.GetSystemSymbol(Symbol(node), null);
+            var cell = outlineView.MakeView("folder", this) as FolderCell ?? new FolderCell { Identifier = "folder" };
+            var path = node.Entry.Path;
+
+            // Die Wurzeln sind Orte, keine Alben: dafür nur ihr Symbol.
+            if (node.Parent is null)
+            {
+                cell.Show(node.Entry.Name, "", NSImage.GetSystemSymbol(Symbol(node), null), 32);
+                return cell;
+            }
+
+            if (FolderLook.TryGet(path, out var look))
+            {
+                cell.Show(node.Entry.Name, look.Artist, look.Cover ?? NSImage.GetSystemSymbol("folder", null), 32,
+                          isCover: look.Cover is not null);
+            }
+            else
+            {
+                cell.Show(node.Entry.Name, "", NSImage.GetSystemSymbol("folder", null), 32);
+                FolderLook.Load(path, () =>
+                {
+                    var row = outlineView.RowForItem(node);
+                    if (row >= 0) outlineView.ReloadData(NSIndexSet.FromIndex(row), NSIndexSet.FromIndex(0));
+                });
+            }
             return cell;
         }
 
         private static string Symbol(FolderNode node)
         {
-            if (node.Parent is not null) return "folder";
             if (node.Entry.Path.StartsWith("/Volumes/", StringComparison.Ordinal)) return "externaldrive";
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (node.Entry.Path == Path.Combine(home, "Music")) return "music.note";
             if (node.Entry.Path == Path.Combine(home, "Downloads")) return "arrow.down.circle";
             if (node.Entry.Path == home) return "house";
-            return "folder.badge.person.crop";
-        }
-
-        private static NSTableCellView NewCell()
-        {
-            var cell = new NSTableCellView { Identifier = "folder" };
-            var image = new NSImageView { TranslatesAutoresizingMaskIntoConstraints = false };
-            var text = NSTextField.CreateLabel("");
-            text.TranslatesAutoresizingMaskIntoConstraints = false;
-            text.LineBreakMode = NSLineBreakMode.TruncatingTail;
-            cell.AddSubview(image);
-            cell.AddSubview(text);
-            cell.ImageView = image;
-            cell.TextField = text;
-            NSLayoutConstraint.ActivateConstraints([
-                image.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 2),
-                image.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
-                image.WidthAnchor.ConstraintEqualTo(18),
-                text.LeadingAnchor.ConstraintEqualTo(image.TrailingAnchor, 6),
-                text.TrailingAnchor.ConstraintEqualTo(cell.TrailingAnchor, -2),
-                text.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
-            ]);
-            return cell;
+            return "folder";
         }
 
         public override void SelectionDidChange(NSNotification notification)
@@ -286,5 +443,65 @@ internal sealed class LibraryController : NSViewController
             if (owner._outline.ItemAtRow(owner._outline.SelectedRow) is FolderNode n)
                 owner.FolderChosen?.Invoke(n.Entry.Path);
         }
+    }
+}
+
+/// <summary>Eine Zeile der Bibliothek: Bild, Name, darunter klein der Interpret.</summary>
+internal sealed class FolderCell : NSTableCellView
+{
+    private readonly NSImageView _image = new() { ImageScaling = NSImageScale.ProportionallyUpOrDown, WantsLayer = true };
+    private readonly NSTextField _name = NSTextField.CreateLabel("");
+    private readonly NSTextField _artist = NSTextField.CreateLabel("");
+    private readonly NSLayoutConstraint _size;
+    private readonly NSStackView _text;
+
+    public FolderCell()
+    {
+        _image.Layer!.CornerRadius = 4;
+        _image.Layer.MasksToBounds = true;
+        _name.LineBreakMode = _artist.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        _name.Font = NSFont.SystemFontOfSize(13);
+        _artist.Font = NSFont.SystemFontOfSize(11);
+        _artist.TextColor = NSColor.SecondaryLabel;
+        _text = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 1,
+        }.Arranged(_name, _artist);
+
+        foreach (var v in new NSView[] { _image, _text })
+        {
+            v.TranslatesAutoresizingMaskIntoConstraints = false;
+            AddSubview(v);
+        }
+        _size = _image.WidthAnchor.ConstraintEqualTo(32);
+        NSLayoutConstraint.ActivateConstraints([
+            _image.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 2),
+            _image.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+            _size,
+            _image.HeightAnchor.ConstraintEqualTo(_image.WidthAnchor),
+            _text.LeadingAnchor.ConstraintEqualTo(_image.TrailingAnchor, 9),
+            _text.TrailingAnchor.ConstraintLessThanOrEqualTo(TrailingAnchor, -4),
+            _text.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+            _name.WidthAnchor.ConstraintLessThanOrEqualTo(_text.WidthAnchor),
+        ]);
+        ImageView = _image;
+        TextField = _name;
+    }
+
+    public void Show(string name, string artist, NSImage? image, float size, bool isCover = false)
+    {
+        _name.StringValue = name;
+        _artist.StringValue = artist;
+        _artist.Hidden = artist.Length == 0;
+        _size.Constant = size;
+        _image.Image = image;
+        // Ein Symbol wird klein und grau gezeichnet, ein Cover füllt das Feld.
+        _image.ImageScaling = isCover ? NSImageScale.ProportionallyUpOrDown : NSImageScale.ProportionallyDown;
+        _image.ContentTintColor = isCover ? null : NSColor.SecondaryLabel;
+        _image.SymbolConfiguration = NSImageSymbolConfiguration.Create(17, NSFontWeight.Regular);
+        _image.Layer!.BackgroundColor = isCover ? null : NSColor.FromWhite(1, 0.05f).CGColor;
+        ToolTip = artist.Length > 0 ? $"{name}\n{artist}" : name;
     }
 }

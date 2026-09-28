@@ -24,8 +24,8 @@ public sealed partial class MainWindowController
         if ((RuleSwitch)(int)item.Tag == RuleSwitch.Reset)
         {
             Settings.ClearRule(folder);
-            _inspector.ShowFolder(folder, _tracks.Tracks);
-            Window.Subtitle = Strings.T("\"{0}\" follows the global setting again", Path.GetFileName(folder));
+            _panel.Show(folder, _tracks.Tracks);
+            Status(Strings.T("\"{0}\" follows the global setting again", Path.GetFileName(folder)));
             return;
         }
 
@@ -39,7 +39,7 @@ public sealed partial class MainWindowController
             case RuleSwitch.RenameFiles: rule.RenameFiles = !rule.RenameFiles; break;
         }
         Settings.SetRule(folder, rule);
-        _inspector.ShowFolder(folder, _tracks.Tracks);
+        _panel.Show(folder, _tracks.Tracks);
     }
 
     /// <summary>Häkchen und Ausgrauen der Regel-Einträge, aus ValidateMenuItem.</summary>
@@ -158,12 +158,12 @@ public sealed partial class MainWindowController
         _inspector.Busy = true;
         if (move) _resume = _player.Release(incoming.Select(t => t.Path));
         var doing = Strings.T(move ? "Move {0} file(s)" : "Take in {0} file(s)", incoming.Count);
-        Window.Subtitle = doing + "…";
+        Status(doing + "…");
 
         var backups = new BackupStore(Settings.ResolvedBackupFolder);
         var svc = new ConversionService(new FfmpegRunner(FfmpegLocator.Find(Settings.FfmpegPath) ?? "ffmpeg"), backups);
         var r = await Task.Run(() => FolderImport.RunAsync(req, svc, backups, (i, pct) => BeginInvokeOnMainThread(() =>
-            Window.Subtitle = $"{doing} · {Strings.T("{0} of {1}", i + 1, incoming.Count)}" + (pct > 0 ? $" · {pct} %" : ""))));
+            Status($"{doing} · {Strings.T("{0} of {1}", i + 1, incoming.Count)}" + (pct > 0 ? $" · {pct} %" : "")))));
 
         if (r.Files.Count > 0)
             AppDelegate.History.Add(move ? "move" : "import",
@@ -230,21 +230,26 @@ public sealed partial class MainWindowController
     /// Ohne Rückfrage, wie unter Windows: Wer eine Zeile zieht, meint die
     /// neue Reihenfolge, und der Verlauf holt es zurück.
     /// </summary>
-    private async void OnReordered(List<AudioTrack> order)
+    private async void OnReordered(List<AudioTrack> order, uint[]? discs)
     {
         if (_tracks.Folder is not { } folder) return;
         if (!Settings.RuleFor(folder).WritesNumbers)
         {
-            Window.Subtitle = Strings.T("Order changed. Track numbers unchanged "
-                + "(track numbering is off for this folder)");
+            Status(Strings.T("Order changed. Track numbers unchanged "
+                + "(track numbering is off for this folder)"));
             return;
         }
 
-        var numbers = AlbumPlanner.Numbers(order);
-        var jobs = order.Select((t, i) => (t, numbers[i]))
-                        .Where(x => x.t.Track != x.Item2)
-                        .Select(x => new Job(x.t, new TagEdit { Track = x.Item2 }))
-                        .ToList();
+        // Mit Disc-Zeilen zählt jede Disc von 1, und ein Lied, das in eine
+        // andere Disc gezogen wurde, bekommt deren Nummer (wie unter Windows).
+        var numbers = discs is not null ? RowReorder.Numbers(discs) : AlbumPlanner.Numbers(order);
+        var jobs = new List<Job>();
+        for (var i = 0; i < order.Count; i++)
+        {
+            uint? disc = discs is not null && order[i].Disc != discs[i] ? discs[i] : null;
+            if (order[i].Track == numbers[i] && disc is null) continue;
+            jobs.Add(new Job(order[i], new TagEdit { Track = numbers[i], Disc = disc }));
+        }
         if (jobs.Count == 0) return;
 
         await WriteAsync(jobs, "tracknumbers", Strings.T("Order changed"),

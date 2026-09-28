@@ -1,5 +1,6 @@
 #if DEBUG
 using ObjCRuntime;
+using TagTuner.Core.Model;
 
 namespace TagTuner.Mac;
 
@@ -86,10 +87,12 @@ public sealed partial class MainWindowController
 
 internal sealed partial class TrackListController
 {
-    public void SelectRows(IEnumerable<int> rows)
+    /// <summary>Wählt Lieder nach ihrer Stelle in der Liste, Disc-Zeilen nicht mitgezählt.</summary>
+    public void SelectRows(IEnumerable<int> tracks)
     {
+        var tr = _rows.Select((r, i) => (r, i)).Where(x => x.r is AudioTrack).Select(x => x.i).ToList();
         var set = new NSMutableIndexSet();
-        foreach (var r in rows) set.Add((nuint)r);
+        foreach (var t in tracks) if (t < tr.Count) set.Add((nuint)tr[t]);
         _table.SelectRows(set, false);
     }
 

@@ -218,6 +218,7 @@
  "Naming scheme": "Namensschema",
  "Needed for converting. Without it, TagTuner only edits tags.": "Nötig zum Konvertieren. Ohne ffmpeg bearbeitet TagTuner nur Tags.",
  "Never": "Nie",
+ "New Tab": "Neuer Tab",
  "Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it.": "Die neueste zuerst. Wiederherstellen legt die Datei dorthin zurück, woher sie kam. Die Fassung, die jetzt dort liegt, wird vorher gesichert, so kann der Verlauf es zurücknehmen.",
  "Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first.": "Der neueste zuerst. Rückgängig legt die Dateien so zurück, wie sie vorher waren; bei mehreren gewählten Einträgen wird der neueste zuerst zurückgenommen.",
  "Next match": "Nächster Treffer",

@@ -68,4 +68,18 @@ song "$C/track1.ogg"              262 5 44100 "" "Neon"         "Mira Vale"     
 song "$C/track2.wav"              294 4 44100 "" "Streetlight"  "Oskar Lind"    "Late Night Mix" 2023 2 Electronic
 song "$C/track3.mp3"              330 5 44100 "" "Taxi Home"    "Mira Vale"     "Late Night Mix" 2023 3 Electronic
 
+# Zwei Discs: für Disc-Zeilen und Umsortieren über die Disc-Grenze.
+D="$OUT/Brandung - Tidewater"
+mkdir -p "$D"; cover "$D/cover.jpg" 0x1d4e4a
+disc() { # datei frequenz titel track disc
+  song "$1" "$2" 4 44100 "$D/cover.jpg" "$3" "Brandung" "Tidewater" 2022 "$4" Post-Rock
+  "$FFMPEG" -v error -y -i "$1" -map 0 -c copy -metadata disc="$5" "$1.tmp.mp3" && mv "$1.tmp.mp3" "$1"
+}
+disc "$D/1-01 Undertow.mp3"   330 "Undertow"   1 1
+disc "$D/1-02 Breakwater.mp3" 349 "Breakwater" 2 1
+disc "$D/1-03 Salt Marsh.mp3" 370 "Salt Marsh" 3 1
+disc "$D/2-01 Driftwood.mp3"  392 "Driftwood"  1 2
+disc "$D/2-02 Ebb.mp3"        415 "Ebb"        2 2
+disc "$D/2-03 Harbour.mp3"    440 "Harbour"    3 2
+
 echo "Demo-Alben liegen in $OUT"

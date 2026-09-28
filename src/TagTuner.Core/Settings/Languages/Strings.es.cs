@@ -290,6 +290,7 @@ public static partial class Strings
         ["Naming scheme"] = "Esquema de nombres",
         ["Needed for converting. Without it, TagTuner only edits tags."] = "Necesario para convertir. Sin ffmpeg, TagTuner solo edita etiquetas.",
         ["Never"] = "Nunca",
+        ["New Tab"] = "Nueva pestaña",
         ["Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it."] = "Las más recientes primero. Restaurar devuelve el archivo a su lugar de origen; la versión actual se respalda antes, así el historial puede deshacerlo.",
         ["Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first."] = "Los más recientes primero. Deshacer devuelve los archivos a su estado anterior; con varias entradas elegidas, se deshace primero la más reciente.",
         ["Next match"] = "Coincidencia siguiente",

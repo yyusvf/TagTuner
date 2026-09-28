@@ -290,6 +290,7 @@ public static partial class Strings
         ["Naming scheme"] = "Naamschema",
         ["Needed for converting. Without it, TagTuner only edits tags."] = "Nodig om te converteren. Zonder ffmpeg bewerkt TagTuner alleen tags.",
         ["Never"] = "Nooit",
+        ["New Tab"] = "Nieuw tabblad",
         ["Newest first. Restoring puts the file back where it came from; the version there now is backed up first, so the history can undo it."] = "Nieuwste eerst. Herstellen zet het bestand terug waar het vandaan kwam; de huidige versie wordt eerst geback-upt, zodat de geschiedenis het kan terugdraaien.",
         ["Newest first. Undo puts the files back as they were before; with several entries chosen, the newest is undone first."] = "Nieuwste eerst. Ongedaan maken zet de bestanden terug zoals ze waren; bij meerdere gekozen items wordt de nieuwste eerst teruggedraaid.",
         ["Next match"] = "Volgende treffer",

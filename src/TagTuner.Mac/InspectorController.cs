@@ -8,7 +8,7 @@ using TagTuner.Core.Settings;
 namespace TagTuner.Mac;
 
 /// <summary>
-/// Die Metadaten der Auswahl, rechts im Fenster. Wie unter Windows zeigt ein
+/// Die Metadaten der Auswahl, links im Fenster wie unter Windows. Wie unter Windows zeigt ein
 /// Feld nur dann einen Wert, wenn sich alle gewählten Dateien einig sind,
 /// sonst „&lt;verschieden&gt;". Geschrieben wird nur, was man angefasst hat.
 /// </summary>
@@ -50,21 +50,24 @@ internal sealed partial class InspectorController : NSViewController
 
     private bool _busy;
 
+    /// <summary>„kodiert neu", wie unter Windows neben AUDIO, sobald umgewandelt würde.</summary>
+    private readonly NSTextField _reencodes = NSTextField.CreateLabel(Strings.T("re-encodes"));
+
     public override void LoadView()
     {
         _title = Field(); _artist = Field(); _album = Field(); _albumArtist = Field();
-        _genre = Field(); _year = Field(numeric: true); _track = Field(numeric: true);
-        _disc = Field(numeric: true); _composer = Field(); _comment = Field();
+        _genre = Field(); _year = Field(); _track = Field(); _disc = Field();
+        _composer = Field(); _comment = Field();
 
-        _head.Font = NSFont.BoldSystemFontOfSize(NSFont.SmallSystemFontSize);
+        _head.Font = NSFont.SystemFontOfSize(10.5f, NSFontWeight.Semibold);
         _head.TextColor = NSColor.SecondaryLabel;
 
-        // ── Cover ────────────────────────────────────────────────
+        // ── Cover links, Angaben rechts daneben ──────────────────
         _cover.Owner = this;
-        _cover.TranslatesAutoresizingMaskIntoConstraints = false;
-        _coverInfo.Font = NSFont.SystemFontOfSize(NSFont.SmallSystemFontSize);
+        _coverInfo.Font = NSFont.SystemFontOfSize(11);
         _coverInfo.TextColor = NSColor.SecondaryLabel;
-        _coverInfo.Alignment = NSTextAlignment.Center;
+        _coverInfo.MaximumNumberOfLines = 4;
+        _coverInfo.LineBreakMode = NSLineBreakMode.ByWordWrapping;
 
         var coverMenu = NSButton.CreateButton(NSImage.GetSystemSymbol("ellipsis.circle", null)!, () => { });
         coverMenu.Bordered = false;
@@ -80,61 +83,84 @@ internal sealed partial class InspectorController : NSViewController
             m.AddItem(new NSMenuItem(Strings.T("Remove cover"), (_, _) => RemoveCover()));
             m.PopUpMenu(null, new CGPoint(0, coverMenu.Bounds.Height + 4), coverMenu);
         };
-
+        var coverSide = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 6,
+        }.Arranged(_coverInfo, coverMenu);
         var coverRow = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Spacing = 6,
-        }.Arranged(_coverInfo, coverMenu);
+            Alignment = NSLayoutAttribute.Top,
+            Spacing = 10,
+        }.Arranged(_cover, coverSide);
+        _cover.WidthAnchor.ConstraintEqualTo(84).Active = true;
+        _cover.HeightAnchor.ConstraintEqualTo(84).Active = true;
 
-        // ── Felder ───────────────────────────────────────────────
-        var trackDisc = new NSStackView
+        // ── Felder: Beschriftung über dem Feld ───────────────────
+        NSView Labeled(string label, NSView field) => new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 3,
+        }.ArrangedFill(Theme.FieldLabel(label), field);
+
+        var numbers = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Spacing = 8,
-        }.Arranged(_track, Label(Strings.T("Disc")), _disc);
-        _track.WidthAnchor.ConstraintEqualTo(_disc.WidthAnchor).Active = true;
+            Distribution = NSStackViewDistribution.Fill,
+            Spacing = 6,
+        }.Arranged(Labeled(Strings.T("Year"), _year), Labeled(Strings.T("Track"), _track),
+                   Labeled(Strings.T("Disc"), _disc), Labeled(Strings.T("Genre"), _genre));
+        _year.WidthAnchor.ConstraintEqualTo(52).Active = true;
+        _track.WidthAnchor.ConstraintEqualTo(40).Active = true;
+        _disc.WidthAnchor.ConstraintEqualTo(40).Active = true;
 
-        var grid = NSGridView.Create(new NSView[][]
-        {
-            [Label(Strings.T("Title")), _title],
-            [Label(Strings.T("Artist")), _artist],
-            [Label(Strings.T("Album")), _album],
-            [Label(Strings.T("Album artist")), _albumArtist],
-            [Label(Strings.T("Genre")), _genre],
-            [Label(Strings.T("Year")), _year],
-            [Label(Strings.T("Track")), trackDisc],
-            [Label(Strings.T("Composer")), _composer],
-            [Label(Strings.T("Comment")), _comment],
-            [Label(Strings.T("Format")), _format],
-            [Label(Strings.T("Sample rate")), _rate],
-        });
-        grid.GetRow(9).TopPadding = 14;
+        // ── AUDIO: Format und Samplerate im Kasten ───────────────
+        _reencodes.Font = NSFont.SystemFontOfSize(9.5f, NSFontWeight.Medium);
+        _reencodes.TextColor = Theme.Warn;
+        _reencodes.WantsLayer = true;
+        _reencodes.Layer!.BackgroundColor = Theme.WarnDim.CGColor;
+        _reencodes.Layer.CornerRadius = 4;
+        _reencodes.Hidden = true;
+        var audioHead = new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 6 }
+            .Arranged(Theme.Section(Strings.T("AUDIO")), _reencodes);
         _format.Activated += (_, _) => UpdatePlan();
         _rate.Activated += (_, _) => UpdatePlan();
-        grid.RowSpacing = 7;
-        grid.ColumnSpacing = 8;
-        grid.GetColumn(0).X = NSGridCellPlacement.Trailing;
-        grid.RowAlignment = NSGridRowAlignment.FirstBaseline;
-        grid.GetRow(5).GetCell(1).X = NSGridCellPlacement.Leading;
-        _year.WidthAnchor.ConstraintEqualTo(70).Active = true;
-
-        var techHead = NSTextField.CreateLabel(Strings.T("AUDIO"));
-        techHead.Font = NSFont.BoldSystemFontOfSize(NSFont.SmallSystemFontSize);
-        techHead.TextColor = NSColor.SecondaryLabel;
+        var popups = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Distribution = NSStackViewDistribution.FillEqually,
+            Spacing = 8,
+        }.Arranged(Labeled(Strings.T("File format"), _format), Labeled(Strings.T("Sample rate"), _rate));
+        var audio = Theme.Card(new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 8,
+        }.ArrangedFill(audioHead, popups));
 
         var content = new FlippedStack
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-            Alignment = NSLayoutAttribute.CenterX,
-            Spacing = 10,
-            EdgeInsets = new NSEdgeInsets(14, 16, 16, 16),
-        }.Arranged(_head, _cover, coverRow, grid, techHead, _tech);
-        content.SetCustomSpacing(18, coverRow);
-        content.SetCustomSpacing(20, grid);
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 9,
+            EdgeInsets = new NSEdgeInsets(10, 12, 16, 12),
+        }.ArrangedFill(_head, coverRow,
+                   Labeled(Strings.T("Title"), _title),
+                   Labeled(Strings.T("Artist"), _artist),
+                   Labeled(Strings.T("Album"), _album),
+                   numbers,
+                   Labeled(Strings.T("Album artist"), _albumArtist),
+                   Labeled(Strings.T("Composer"), _composer),
+                   Labeled(Strings.T("Comment"), _comment),
+                   audio, _tech);
+        content.SetCustomSpacing(12, coverRow);
+        content.SetCustomSpacing(16, _comment.Superview!);
         content.TranslatesAutoresizingMaskIntoConstraints = false;
 
-        var scroll = _editScroll = new NSScrollView
+        var scroll = new NSScrollView
         {
             HasVerticalScroller = true,
             DrawsBackground = false,
@@ -146,57 +172,37 @@ internal sealed partial class InspectorController : NSViewController
             content.LeadingAnchor.ConstraintEqualTo(clip.LeadingAnchor),
             content.TrailingAnchor.ConstraintEqualTo(clip.TrailingAnchor),
             content.TopAnchor.ConstraintEqualTo(clip.TopAnchor),
-            _head.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 16),
-            _cover.WidthAnchor.ConstraintEqualTo(content.WidthAnchor, 1, -64),
-            _cover.HeightAnchor.ConstraintEqualTo(_cover.WidthAnchor),
-            grid.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 16),
-            grid.TrailingAnchor.ConstraintEqualTo(content.TrailingAnchor, -16),
-            techHead.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 16),
-            _tech.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 16),
-            _tech.TrailingAnchor.ConstraintLessThanOrEqualTo(content.TrailingAnchor, -16),
         ]);
 
-        // ── Leiste unten ─────────────────────────────────────────
-        _plan.Font = NSFont.SystemFontOfSize(NSFont.SmallSystemFontSize);
+        // ── Leiste unten: Zurücksetzen | Anwenden ────────────────
+        _plan.Font = NSFont.SystemFontOfSize(11);
         _plan.TextColor = NSColor.SecondaryLabel;
         _plan.MaximumNumberOfLines = 3;
 
         _apply.KeyEquivalent = "\r";
-        _apply.BezelColor = NSColor.ControlAccent;
+        Theme.MakePrimary(_apply);
         _apply.Activated += (_, _) => Apply();
         _reset.Activated += (_, _) => Show(_sel);
 
         var buttons = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Distribution = NSStackViewDistribution.FillEqually,
             Spacing = 8,
-        }.Arranged(_spinner, new NSView(), _reset, _apply);
-        var bottom = _bottom = new NSStackView
+        }.Arranged(_reset, _apply);
+        var planRow = new NSStackView { Orientation = NSUserInterfaceLayoutOrientation.Horizontal, Spacing = 6 }
+            .Arranged(_spinner, _plan);
+        var bottom = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 8,
-            EdgeInsets = new NSEdgeInsets(10, 16, 14, 16),
-        }.Arranged(_plan, buttons);
+            EdgeInsets = new NSEdgeInsets(10, 12, 12, 12),
+        }.ArrangedFill(planRow, buttons);
         var line = new NSBox { BoxType = NSBoxType.NSBoxSeparator };
 
         var root = new NSView();
-        _line = line;
-        var overviewScroll = _overviewScroll = new NSScrollView
-        {
-            HasVerticalScroller = true,
-            DrawsBackground = false,
-            AutohidesScrollers = true,
-            DocumentView = Overview,
-        };
-        Overview.TranslatesAutoresizingMaskIntoConstraints = false;
-        NSLayoutConstraint.ActivateConstraints([
-            Overview.LeadingAnchor.ConstraintEqualTo(overviewScroll.ContentView.LeadingAnchor),
-            Overview.TrailingAnchor.ConstraintEqualTo(overviewScroll.ContentView.TrailingAnchor),
-            Overview.TopAnchor.ConstraintEqualTo(overviewScroll.ContentView.TopAnchor),
-        ]);
-
-        foreach (var v in new NSView[] { scroll, line, bottom, overviewScroll })
+        foreach (var v in new NSView[] { scroll, line, bottom })
         {
             v.TranslatesAutoresizingMaskIntoConstraints = false;
             root.AddSubview(v);
@@ -212,19 +218,13 @@ internal sealed partial class InspectorController : NSViewController
             bottom.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
             bottom.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
             bottom.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
-            buttons.TrailingAnchor.ConstraintEqualTo(bottom.TrailingAnchor, -16),
-            _plan.TrailingAnchor.ConstraintEqualTo(bottom.TrailingAnchor, -16),
-            root.WidthAnchor.ConstraintGreaterThanOrEqualTo(260),
-            overviewScroll.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor),
-            overviewScroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
-            overviewScroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            overviewScroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
+            root.WidthAnchor.ConstraintGreaterThanOrEqualTo(240),
         ]);
         View = root;
         Show([]);
     }
 
-    private NSTextField Field(bool numeric = false)
+    private NSTextField Field()
     {
         var f = new NSTextField
         {
@@ -235,7 +235,6 @@ internal sealed partial class InspectorController : NSViewController
         f.Cell.Scrollable = true;
         f.Cell.Wraps = false;
         f.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
-        if (numeric) f.Alignment = NSTextAlignment.Right;
         f.Changed += (_, _) => UpdatePlan();
         return f;
     }
@@ -256,31 +255,9 @@ internal sealed partial class InspectorController : NSViewController
     public bool HasChanges => Fields().Any(f => _loaded.TryGetValue(f, out var was) && f.StringValue != was)
                               || _pendingCover is not null || WantedFormat is not null || WantedRate is not null;
 
-    /// <summary>Ohne Auswahl zeigt der Inspektor den Ordner.</summary>
-    public FolderOverview Overview { get; } = new();
-
-    private NSScrollView _editScroll = null!, _overviewScroll = null!;
-    private NSView _bottom = null!, _line = null!;
-    private string? _folder;
-
-    public void ShowFolder(string? folder, IReadOnlyList<AudioTrack> tracks)
-    {
-        _folder = folder;
-        Overview.Show(folder, tracks);
-        SwapViews();
-    }
-
-    private void SwapViews()
-    {
-        var overview = _sel.Count == 0 && _folder is not null;
-        _overviewScroll.Hidden = !overview;
-        _editScroll.Hidden = _bottom.Hidden = _line.Hidden = overview;
-    }
-
     public void Show(List<AudioTrack> sel)
     {
         _sel = sel;
-        if (_overviewScroll is not null) SwapViews();
         _pendingCover = null;
         var any = sel.Count > 0;
         var single = sel.Count == 1;
@@ -407,7 +384,7 @@ internal sealed partial class InspectorController : NSViewController
     {
         var kind = mime.Replace("image/", "").ToUpperInvariant().Replace("JPEG", "JPG");
         var kb = $"{data.Length / 1024.0:0.#} KB";
-        return Covers.Size(data) is { } s ? $"{kind} · {s.Width} × {s.Height} · {kb}" : $"{kind} · {kb}";
+        return Covers.Size(data) is { } s ? $"{kind}\n{s.Width} × {s.Height}\n{kb}" : $"{kind}\n{kb}";
     }
 
     private void ShowTech()
@@ -462,6 +439,7 @@ internal sealed partial class InspectorController : NSViewController
             jobs.Add(Strings.T("write tags"));
         if (_pendingCover is { } pc)
             jobs.Add(pc.Data.Length == 0 ? Strings.T("Remove cover") : Strings.T("Set cover"));
+        _reencodes.Hidden = WantedFormat is null && WantedRate is null;
         if (WantedFormat is { } wf) jobs.Add(Strings.T("convert to {0}", wf));
         if (WantedRate is { } wr) jobs.Add(Strings.T("bring to {0}", RateLabel(wr)));
 
@@ -621,12 +599,6 @@ internal sealed partial class InspectorController : NSViewController
     private static void NSBeep() => AppKitFramework.NSBeep();
 
     // ── Hilfsklassen ─────────────────────────────────────────────
-
-    /// <summary>Oben beginnend, damit der Inhalt nicht am unteren Rand klebt.</summary>
-    private sealed class FlippedStack : NSStackView
-    {
-        public override bool IsFlipped => true;
-    }
 
     /// <summary>
     /// Das Cover-Feld: zeigt das Bild und nimmt Bilder oder Bilddateien per
