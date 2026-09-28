@@ -98,7 +98,7 @@ public sealed partial class MainWindowController
             var edit = c.Edit;
             if (cover is not null && c.Changes.Any(x => x.Field == "Cover"))
                 edit = edit with { Cover = cover.Data, CoverMimeType = cover.MimeType };
-            return (c.Track, edit);
+            return new Job(c.Track, edit);
         }).ToList();
 
         await WriteAsync(jobs, "album", Strings.T("Album mode applied to \"{0}\"", Path.GetFileName(folder)),
@@ -125,7 +125,7 @@ public sealed partial class MainWindowController
         var numbers = AlbumPlanner.Numbers(order);
         var jobs = order.Select((t, i) => (t, numbers[i]))
                         .Where(x => x.t.Track != x.Item2)
-                        .Select(x => (x.t, new TagEdit { Track = x.Item2 }))
+                        .Select(x => new Job(x.t, new TagEdit { Track = x.Item2 }))
                         .ToList();
         if (jobs.Count == 0) return;
 

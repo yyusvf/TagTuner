@@ -7,7 +7,22 @@ using TagTuner.Core.Settings;
 
 namespace TagTuner.Mac;
 
-internal sealed record BatchResult(int Written, List<string> Errors);
+/// <summary>
+/// Was mit einer Datei geschehen soll. Format und Samplerate null heißt: nicht
+/// umwandeln, nur Tags schreiben.
+/// </summary>
+internal sealed record Job(AudioTrack Track, TagEdit Edit, string? Format = null, int? Rate = null)
+{
+    public bool Converts =>
+        (Format is not null && !AudioFormats.TargetExtension(Track.Format)
+            .Equals(AudioFormats.TargetExtension(Format), StringComparison.OrdinalIgnoreCase))
+        || (Rate is int hz && Track.SampleRate != hz);
+}
+
+internal sealed record BatchResult(List<HistoryFile> Files, List<string> Errors, List<string> Notes)
+{
+    public int Written => Files.Count;
+}
 
 /// <summary>
 /// Schreibt mehrere Dateien im Hintergrund, jede mit Sicherung davor, und
@@ -18,25 +33,50 @@ internal static class Batch
 {
     private static AppSettings Settings => AppDelegate.Settings;
 
-    public static Task<BatchResult> WriteTagsAsync(
-        IReadOnlyList<(AudioTrack Track, TagEdit Edit)> jobs, string kind, string label) =>
-        Task.Run(() =>
+    /// <param name="progress">Datei (ab 0) und Prozent darin; kommt aus dem Hintergrund.</param>
+    public static Task<BatchResult> RunAsync(
+        IReadOnlyList<Job> jobs, string kind, string label, Action<int, int>? progress = null) =>
+        Task.Run(async () =>
         {
             var svc = new ConversionService(
                 new FfmpegRunner(FfmpegLocator.Find(Settings.FfmpegPath) ?? "ffmpeg"),
                 new BackupStore(Settings.ResolvedBackupFolder));
             var files = new List<HistoryFile>();
             var errors = new List<string>();
-            foreach (var (t, edit) in jobs)
+            var notes = new List<string>();
+
+            for (var i = 0; i < jobs.Count; i++)
             {
-                if (edit.IsEmpty) continue;
-                var r = svc.WriteTagsOnly(t, edit);
+                var job = jobs[i];
+                var slot = i;
+                progress?.Invoke(i, 0);
+                ConversionOutcome r;
+                if (job.Converts)
+                {
+                    r = await svc.ConvertAsync(new ConversionRequest
+                    {
+                        Track = job.Track,
+                        Options = new EncodeOptions { Format = job.Format ?? job.Track.Format, SampleRate = job.Rate },
+                        Tags = job.Edit.IsEmpty ? null : job.Edit,
+                    }, pct => progress?.Invoke(slot, pct));
+                }
+                else if (!job.Edit.IsEmpty)
+                {
+                    r = svc.WriteTagsOnly(job.Track, job.Edit);
+                }
+                else continue;
+
                 if (r.Success && r.History is not null) files.Add(r.History);
-                else if (!r.Success) errors.Add($"{t.FileName}: {r.Error}");
+                else if (!r.Success) errors.Add($"{job.Track.FileName}: {r.Error}");
+                notes.AddRange(r.Notes.Select(n => $"{job.Track.FileName}: {n}"));
             }
             if (files.Count > 0) AppDelegate.History.Add(kind, label, files);
-            return new BatchResult(files.Count, errors);
+            return new BatchResult(files, errors, notes);
         });
+
+    /// <summary>Braucht einer der Aufträge ffmpeg, ist es aber nicht da?</summary>
+    public static bool MissingFfmpeg(IEnumerable<Job> jobs) =>
+        jobs.Any(j => j.Converts) && FfmpegLocator.Find(Settings.FfmpegPath) is null;
 
     /// <summary>
     /// Zieht die Nummer vorn im Dateinamen der Track-Nummer nach, wenn die
@@ -46,13 +86,13 @@ internal static class Batch
     public static Task<BatchResult> RenameToNumbersAsync(string folder, IReadOnlyList<AudioTrack> tracks) =>
         Task.Run(() =>
         {
-            if (!Settings.RuleFor(folder).WritesFileNames) return new BatchResult(0, []);
-
-            var existing = Directory.EnumerateFiles(folder).ToList();
-            var (plan, skipped) = FileNumbering.Plan(tracks, existing);
-            var backups = new BackupStore(Settings.ResolvedBackupFolder);
             var files = new List<HistoryFile>();
             var errors = new List<string>();
+            if (!Settings.RuleFor(folder).WritesFileNames) return new BatchResult(files, errors, []);
+
+            var existing = Directory.EnumerateFiles(folder).ToList();
+            var (plan, _) = FileNumbering.Plan(tracks, existing);
+            var backups = new BackupStore(Settings.ResolvedBackupFolder);
             foreach (var (track, target) in plan)
             {
                 try
@@ -66,6 +106,6 @@ internal static class Batch
             if (files.Count > 0)
                 AppDelegate.History.Add("rename", Strings.T("{0} file name(s) numbered in \"{1}\"",
                     files.Count, Path.GetFileName(folder)), files);
-            return new BatchResult(files.Count, errors);
+            return new BatchResult(files, errors, []);
         });
 }

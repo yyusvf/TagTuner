@@ -135,17 +135,39 @@ public sealed partial class MainWindowController : NSWindowController
     /// betroffene Dateien vorher los und macht danach an derselben Stelle weiter.
     /// </summary>
     /// <param name="renameAfter">Danach die Dateinamen den Nummern nachziehen, wenn der Ordner das will.</param>
-    private async Task WriteAsync(IReadOnlyList<(AudioTrack Track, TagEdit Edit)> jobs, string kind, string label,
-                                  bool renameAfter = false)
+    private async Task WriteAsync(IReadOnlyList<Job> jobs, string kind, string label, bool renameAfter = false)
     {
         if (_inspector.Busy || jobs.Count == 0) return;
+        if (Batch.MissingFfmpeg(jobs))
+        {
+            new NSAlert
+            {
+                MessageText = Strings.T("ffmpeg is missing"),
+                InformativeText = Strings.T("Converting needs ffmpeg. Install it with Homebrew: brew install ffmpeg"),
+            }.BeginSheet(Window);
+            return;
+        }
+
         _inspector.Busy = true;
         var paths = jobs.Select(j => j.Track.Path).ToList();
         _resume = _player.Release(paths);
 
-        var r = await Batch.WriteTagsAsync(jobs, kind, label);
+        var converting = jobs.Any(j => j.Converts);
+        var doing = converting
+            ? Strings.T("Converting {0} file(s)", jobs.Count)
+            : Strings.T("Writing tags to {0} file(s)", jobs.Count);
+        Window.Subtitle = doing + "…";
+
+        var r = await Batch.RunAsync(jobs, kind, label, (i, pct) => BeginInvokeOnMainThread(() =>
+            Window.Subtitle = converting
+                ? $"{doing} · {Strings.T("{0} of {1}", i + 1, jobs.Count)} · {pct} %"
+                : $"{doing} · {Strings.T("{0} of {1}", i + 1, jobs.Count)}"));
         var errors = r.Errors;
         var status = Strings.T("{0} file(s) processed, backup created", r.Written);
+
+        // Umgewandelte Dateien haben eine neue Endung: Die Auswahl zieht mit.
+        var moved = r.Files.Where(f => f.OutputPath is not null)
+                           .ToDictionary(f => f.Original, f => f.OutputPath!, StringComparer.OrdinalIgnoreCase);
 
         if (renameAfter && _tracks.Folder is { } folder)
         {
@@ -154,23 +176,34 @@ public sealed partial class MainWindowController : NSWindowController
             _resume ??= _player.Release(fresh.Select(t => t.Path));
             var renamed = await Batch.RenameToNumbersAsync(folder, fresh);
             errors.AddRange(renamed.Errors);
+            foreach (var f in renamed.Files)
+            {
+                var from = moved.FirstOrDefault(kv => kv.Value == f.Original).Key ?? f.Original;
+                moved[from] = f.OutputPath!;
+            }
             if (renamed.Written > 0)
                 status += " · " + Strings.T("{0} file name(s) numbered in \"{1}\"", renamed.Written, Path.GetFileName(folder));
         }
 
         _inspector.Busy = false;
-        if (errors.Count > 0)
-            new NSAlert { MessageText = Strings.T("Finished with errors"), InformativeText = string.Join("\n", errors.Take(8)) }
-                .BeginSheet(Window);
-        AfterWrite(paths, status);
+        if (errors.Count > 0 || r.Notes.Count > 0)
+            new NSAlert
+            {
+                MessageText = errors.Count > 0 ? Strings.T("Finished with errors") : Strings.T("Finished"),
+                InformativeText = string.Join("\n", errors.Concat(r.Notes).Take(10)),
+            }.BeginSheet(Window);
+        AfterWrite(paths, status, moved);
     }
 
-    private async void AfterWrite(IReadOnlyList<string> paths, string status)
+    private async void AfterWrite(IReadOnlyList<string> paths, string status,
+                                  IReadOnlyDictionary<string, string>? moved = null)
     {
         FolderScanner.ForgetAudioScan();
         _tracks.ForgetArt(paths);
+        var keep = _tracks.SelectedTracks
+            .Select(t => moved is not null && moved.TryGetValue(t.Path, out var to) ? to : t.Path).ToList();
         if (_tracks.Folder is { } f)
-            await _tracks.LoadAsync(f, [.. _tracks.SelectedTracks.Select(t => t.Path)]);
+            await _tracks.LoadAsync(f, keep);
         _resume?.Invoke();
         _resume = null;
         UpdateTitle();
@@ -378,7 +411,7 @@ public sealed partial class MainWindowController : NSWindowController
             Cover = cover is not null && Core.Audio.AudioFormats.CanCarryCover(t.Path) ? cover.Data : null,
             CoverMimeType = cover?.MimeType,
         };
-        _ = WriteAsync([.. targets.Select(t => (t, For(t)))], "batch",
+        _ = WriteAsync([.. targets.Select(t => new Job(t, For(t)))], "batch",
             Strings.T("From \"{0}\": {1}", src.FileName, Strings.T("Paste tags")));
     }
 

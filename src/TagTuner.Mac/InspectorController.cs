@@ -15,7 +15,17 @@ namespace TagTuner.Mac;
 internal sealed partial class InspectorController : NSViewController
 {
     /// <summary>„Anwenden": was in welche Datei soll, und wie es im Verlauf heißt.</summary>
-    public event Action<IReadOnlyList<(AudioTrack Track, TagEdit Edit)>, string>? ApplyRequested;
+    public event Action<IReadOnlyList<Job>, string>? ApplyRequested;
+
+    /// <summary>Die Sampleraten zur Auswahl, wie unter Windows.</summary>
+    private static readonly int[] Rates = [44100, 48000, 88200, 96000, 176400, 192000];
+
+    private readonly NSPopUpButton _format = new();
+    private readonly NSPopUpButton _rate = new();
+
+    /// <summary>Was die Auswahl beim Laden hatte; null bei uneinigen Dateien.</summary>
+    private string? _loadedFormat;
+    private int? _loadedRate;
 
     private List<AudioTrack> _sel = [];
     private readonly Dictionary<NSTextField, string> _loaded = [];
@@ -96,7 +106,12 @@ internal sealed partial class InspectorController : NSViewController
             [Label(Strings.T("Track")), trackDisc],
             [Label(Strings.T("Composer")), _composer],
             [Label(Strings.T("Comment")), _comment],
+            [Label(Strings.T("Format")), _format],
+            [Label(Strings.T("Sample rate")), _rate],
         });
+        grid.GetRow(9).TopPadding = 14;
+        _format.Activated += (_, _) => UpdatePlan();
+        _rate.Activated += (_, _) => UpdatePlan();
         grid.RowSpacing = 7;
         grid.ColumnSpacing = 8;
         grid.GetColumn(0).X = NSGridCellPlacement.Trailing;
@@ -220,7 +235,7 @@ internal sealed partial class InspectorController : NSViewController
     // ── Anzeigen ─────────────────────────────────────────────────
 
     public bool HasChanges => Fields().Any(f => _loaded.TryGetValue(f, out var was) && f.StringValue != was)
-                              || _pendingCover is not null;
+                              || _pendingCover is not null || WantedFormat is not null || WantedRate is not null;
 
     public void Show(List<AudioTrack> sel)
     {
@@ -252,6 +267,12 @@ internal sealed partial class InspectorController : NSViewController
         _loaded.Clear();
         foreach (var f in Fields()) _loaded[f] = f.StringValue;
 
+        _loadedFormat = any ? Agree(t => AudioFormats.TargetExtension(t.Format).ToUpperInvariant()) : null;
+        var rate = any ? Agree(t => t.SampleRate.ToString()) : null;
+        _loadedRate = int.TryParse(rate, out var hz) ? hz : null;
+        FillPopup(_format, [.. AudioFormats.Targets], _loadedFormat, any);
+        FillPopup(_rate, [.. Rates.Select(RateLabel)], _loadedRate is { } r ? RateLabel(r) : null, any);
+
         ShowCover();
         ShowTech();
         UpdatePlan();
@@ -260,6 +281,41 @@ internal sealed partial class InspectorController : NSViewController
         {
             f.StringValue = any ? value ?? "" : "";
             f.PlaceholderString = any && value is null && f.Enabled ? Strings.T("<mixed>") : "";
+        }
+    }
+
+    private static string RateLabel(int hz) =>
+        hz % 1000 == 0 ? $"{hz / 1000} kHz" : $"{hz / 1000.0:0.0} kHz";
+
+    /// <summary>
+    /// Füllt eine Auswahl. Sind sich die Dateien uneinig oder ist der Wert
+    /// keiner der Einträge, steht oben „&lt;verschieden&gt;" bzw. der Wert
+    /// selbst und ist gewählt; so ändert sich nichts, solange man nichts wählt.
+    /// </summary>
+    private void FillPopup(NSPopUpButton p, string[] items, string? current, bool enabled)
+    {
+        p.RemoveAllItems();
+        if (!enabled) { p.Enabled = false; return; }
+        if (current is null || !items.Contains(current))
+        {
+            p.AddItem(current ?? Strings.T("<mixed>"));
+            p.Menu!.AddItem(NSMenuItem.SeparatorItem);
+        }
+        p.AddItems(items);
+        p.SelectItem(current ?? Strings.T("<mixed>"));
+        p.Enabled = !_busy;
+    }
+
+    /// <summary>Gewähltes Zielformat, oder null wenn es beim Alten bleibt.</summary>
+    private string? WantedFormat =>
+        _format.TitleOfSelectedItem is { } f && AudioFormats.Targets.Contains(f) && f != _loadedFormat ? f : null;
+
+    private int? WantedRate
+    {
+        get
+        {
+            var i = Array.FindIndex(Rates, r => RateLabel(r) == _rate.TitleOfSelectedItem);
+            return i >= 0 && Rates[i] != _loadedRate ? Rates[i] : null;
         }
     }
 
@@ -365,6 +421,8 @@ internal sealed partial class InspectorController : NSViewController
             jobs.Add(Strings.T("write tags"));
         if (_pendingCover is { } pc)
             jobs.Add(pc.Data.Length == 0 ? Strings.T("Remove cover") : Strings.T("Set cover"));
+        if (WantedFormat is { } wf) jobs.Add(Strings.T("convert to {0}", wf));
+        if (WantedRate is { } wr) jobs.Add(Strings.T("bring to {0}", RateLabel(wr)));
 
         var files = Strings.T("{0} file(s)", _sel.Count);
         _plan.StringValue = jobs.Count > 0 ? $"{files}: {string.Join(" · ", jobs)}" : files;
@@ -474,8 +532,18 @@ internal sealed partial class InspectorController : NSViewController
         if (_busy || _sel.Count == 0) return;
         View.Window?.MakeFirstResponder(null);   // laufende Eingabe übernehmen
         var edit = BuildEdit();
-        if (edit.IsEmpty) return;
-        ApplyRequested?.Invoke([.. _sel.Select(t => (t, edit))], Describe(edit));
+        var format = WantedFormat;
+        var rate = WantedRate;
+        var jobs = _sel.Select(t => new Job(t, edit, format, rate)).Where(j => j.Converts || !edit.IsEmpty).ToList();
+        if (jobs.Count == 0) return;
+
+        var label = Describe(edit);
+        if (format is not null || rate is not null)
+        {
+            var conv = string.Join(" · ", new[] { format, rate is { } r ? RateLabel(r) : null }.OfType<string>());
+            label = label.Length > 0 ? $"{label}, {conv}" : conv;
+        }
+        ApplyRequested?.Invoke(jobs, label);
     }
 
     /// <summary>Für den Verlauf: welche Felder, nicht nur wie viele Dateien.</summary>
@@ -498,6 +566,7 @@ internal sealed partial class InspectorController : NSViewController
         _busy = on;
         if (on) _spinner.StartAnimation(this); else _spinner.StopAnimation(this);
         foreach (var f in Fields()) f.Enabled = !on && _sel.Count > 0;
+        _format.Enabled = _rate.Enabled = !on && _sel.Count > 0;
         if (!on) _title.Enabled = _track.Enabled = _sel.Count == 1;
         UpdatePlan();
     }

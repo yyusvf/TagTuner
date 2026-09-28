@@ -81,6 +81,8 @@ internal sealed partial class InspectorController
             "genre" => _genre, "year" => _year, "track" => _track, "disc" => _disc,
             "composer" => _composer, _ => _comment,
         };
+        if (name == "format") { _format.SelectItem(value); UpdatePlan(); return; }
+        if (name == "rate") { _rate.SelectItem(value); UpdatePlan(); return; }
         f.StringValue = value;
         UpdatePlan();
     }

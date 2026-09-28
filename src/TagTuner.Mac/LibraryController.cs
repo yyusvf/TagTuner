@@ -164,7 +164,7 @@ internal sealed class LibraryController : NSViewController
                 menu.AddItem(NSMenuItem.SeparatorItem);
                 menu.AddItem(new NSMenuItem(node.Entry.IsCustomRoot
                     ? Strings.T("Remove from the library")
-                    : Strings.T("Hidden from the library"), (_, _) => owner.RemoveRoot(node)));
+                    : Strings.T("Hide from the library"), (_, _) => owner.RemoveRoot(node)));
             }
             else
             {
