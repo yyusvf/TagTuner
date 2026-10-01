@@ -43,6 +43,7 @@ public sealed partial class MainWindowController
                     case "rename": RenameFiles(Window); break;
                     case "resizecover": _inspector.DebugCover("resize"); break;
                     case "fromfolder": _inspector.DebugCover("folder"); break;
+                    case "glow": _tracks.Glow(_tracks.Tracks.Select(t => t.Path)); break;
                     case "split": ToggleSplit(Window); break;
                     case "pane": Activate(parts[1] == "b" && _paneB is not null ? _paneB : _paneA); break;
                     case "backups": BackupsWindow.Show(); break;

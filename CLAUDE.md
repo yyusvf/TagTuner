@@ -151,9 +151,13 @@ python3 tools/build-strings.py                 # Sprachdateien ohne PowerShell, 
   `MainWindow.AlbumApply.cs` darauf umstellen. `FileNaming.Plan` benutzt Windows schon (ungetestet
   gebaut, weil auf dem Mac entstanden: beim nächsten Windows-Build prüfen).
 
-Offen für den Mac: Aufleuchten nach dem Umsortieren, Finder-Integration, Sparkle, DMG mit ffmpeg,
-Signieren/Notarisieren, Universal Binary (`RuntimeIdentifier` ist noch nur `osx-arm64`),
-Mac-eigenes App-Symbol (jetzt das Windows-Symbol).
+**DMG:** `tools/build-mac.sh [Version]` baut Universal (arm64 + x64), signiert ad hoc und legt
+`dist/TagTuner-<Version>-macOS.dmg` an. Das Paket liegt bei zwei Architekturen unter
+`bin/Release/net10.0-macos/TagTuner.app`, nicht im `-o`-Ordner. ffmpeg liegt noch nicht bei.
+
+Offen für den Mac: Finder-Integration, Sparkle, ffmpeg im Paket (Universal, unter
+`Contents/Resources`), Signieren/Notarisieren (Entwicklerkonto), Mac-eigenes App-Symbol
+(jetzt das Windows-Symbol), dritte Download-Karte auf der Website.
 
 Noch Windows-only in Core: `UpdateService` erwartet ein `.exe`-Setup. Für den Mac eine eigene
 Update-Strecke (Sparkle) vorsehen, nicht die Windows-Logik verbiegen.
@@ -169,7 +173,7 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 | Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | ✓ |
 | Format/Samplerate umwandeln (ffmpeg), Ordner angleichen mit Protokoll | ✓ | ✓ (ohne eigenes Protokollfenster) |
 | Album-Modus (Basis-Tags, Cover, Nummerierung, Dateinamen folgen) | ✓ | ✓ |
-| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | teils (ohne Aufleuchten) |
+| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | ✓ |
 | Dateien hereinziehen (Übernehmen/Verschieben, angleichen) | ✓ | ✓ (⌘ = verschieben) |
 | Unterordner-Ansicht, geteilte Ansicht, Tabs | ✓ | ✓ (Tabs nativ) |
 | Sortieren nach allen Spalten, Spalten wählen/verschieben | ✓ | ✓ |

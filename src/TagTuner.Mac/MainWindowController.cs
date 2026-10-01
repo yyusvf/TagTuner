@@ -204,6 +204,9 @@ public sealed partial class MainWindowController : NSWindowController
 
     private Action? _resume;
 
+    /// <summary>Lieder, die nach dem nächsten Neulesen aufleuchten sollen.</summary>
+    private List<string>? _glowAfterWrite;
+
     /// <summary>Meldung unten in der Statuszeile.</summary>
     private void Status(string text) => _bar.Status(text);
 
@@ -338,6 +341,11 @@ public sealed partial class MainWindowController : NSWindowController
         {
             _library.Refresh(f);
             await _tracks.LoadAsync(f, keep);
+            if (_glowAfterWrite is { } glow)
+            {
+                _glowAfterWrite = null;
+                _tracks.Glow(glow.Select(p => moved is not null && moved.TryGetValue(p, out var to) ? to : p));
+            }
         }
         ReloadOther();
         _resume?.Invoke();

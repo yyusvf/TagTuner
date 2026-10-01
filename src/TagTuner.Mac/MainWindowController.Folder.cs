@@ -252,6 +252,8 @@ public sealed partial class MainWindowController
         }
         if (jobs.Count == 0) return;
 
+        // Nach dem Neulesen leuchten genau diese Lieder kurz auf.
+        _glowAfterWrite = [.. jobs.Select(j => j.Track.Path)];
         await WriteAsync(jobs, "tracknumbers", Strings.T("Order changed"),
                          renameAfter: Settings.RuleFor(folder).WritesFileNames);
     }

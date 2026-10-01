@@ -485,6 +485,29 @@ internal sealed partial class TrackListController : NSViewController
         return true;
     }
 
+    /// <summary>
+    /// Lässt Zeilen kurz grün aufleuchten, wie unter Windows nach dem
+    /// Umsortieren: nur die Lieder, deren Nummer oder Disc sich geändert hat.
+    /// </summary>
+    public void Glow(IEnumerable<string> paths)
+    {
+        var set = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < _rows.Count; i++)
+        {
+            if (_rows[i] is not AudioTrack t || !set.Contains(t.Path)) continue;
+            if (_table.GetRowView(i, false) is not { } rowView) continue;
+            var glow = new NSView(rowView.Bounds) { WantsLayer = true, AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable };
+            glow.Layer!.BackgroundColor = Theme.Accent.ColorWithAlphaComponent(0.28f).CGColor;
+            glow.Layer.CornerRadius = 6;
+            rowView.AddSubview(glow, NSWindowOrderingMode.Below, null);
+            NSAnimationContext.RunAnimation(ctx =>
+            {
+                ctx.Duration = 1.6;
+                ((NSView)glow.Animator).AlphaValue = 0;
+            }, glow.RemoveFromSuperview);
+        }
+    }
+
     public void RedrawRows() =>
         _table.ReloadData(NSIndexSet.FromNSRange(new NSRange(0, _rows.Count)),
                           NSIndexSet.FromNSRange(new NSRange(0, _table.ColumnCount)));
