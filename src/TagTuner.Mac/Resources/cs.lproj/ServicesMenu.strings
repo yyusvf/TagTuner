@@ -1,2 +1,3 @@
-/* Aus translations/cs.json, Schlüssel „Open in TagTuner". */
+/* Aus translations/cs.json. */
 "Open in TagTuner" = "Otevřít v TagTuneru";
+"Edit metadata" = "Upravit metadata";

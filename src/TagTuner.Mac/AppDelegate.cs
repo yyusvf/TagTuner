@@ -131,6 +131,16 @@ public sealed class AppDelegate : NSApplicationDelegate
         NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
     }
 
+    /// <summary>„Metadaten bearbeiten" im Finder: das kleine Fenster nur mit der Metadaten-Spalte.</summary>
+    [Export("editInTagTuner:userData:error:")]
+    public void EditInTagTuner(NSPasteboard pasteboard, string userData, out NSString? error)
+    {
+        error = null;
+        var urls = pasteboard.ReadObjectsForClasses([new ObjCRuntime.Class(typeof(NSUrl))], null);
+        QuickEditWindow.Show([.. (urls?.OfType<NSUrl>() ?? []).Select(u => u.Path).OfType<string>()]);
+        NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+    }
+
     /// <summary>Der Dienst im Finder-Kontextmenü, unter Dienste.</summary>
     [Export("openInTagTuner:userData:error:")]
     public void OpenInTagTuner(NSPasteboard pasteboard, string userData, out NSString? error)

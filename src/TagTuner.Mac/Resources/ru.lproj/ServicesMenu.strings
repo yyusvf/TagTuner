@@ -1,2 +1,3 @@
-/* Aus translations/ru.json, Schlüssel „Open in TagTuner". */
+/* Aus translations/ru.json. */
 "Open in TagTuner" = "Открыть в TagTuner";
+"Edit metadata" = "Изменить метаданные";

@@ -1,2 +1,3 @@
-/* Aus translations/sv.json, Schlüssel „Open in TagTuner". */
+/* Aus translations/sv.json. */
 "Open in TagTuner" = "Öppna i TagTuner";
+"Edit metadata" = "Redigera metadata";

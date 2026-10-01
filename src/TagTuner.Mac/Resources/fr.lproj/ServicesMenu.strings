@@ -1,2 +1,3 @@
-/* Aus translations/fr.json, Schlüssel „Open in TagTuner". */
+/* Aus translations/fr.json. */
 "Open in TagTuner" = "Ouvrir dans TagTuner";
+"Edit metadata" = "Modifier les métadonnées";

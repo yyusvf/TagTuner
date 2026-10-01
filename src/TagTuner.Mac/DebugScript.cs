@@ -46,6 +46,7 @@ public sealed partial class MainWindowController
                     case "glow": _tracks.Glow(_tracks.Tracks.Select(t => t.Path)); break;
                     case "openwith": OpenFolder(Path.GetDirectoryName(parts[1].Split('|')[0])!, parts[1].Split('|')); break;
                     case "selected": Console.Error.WriteLine("SELECTED " + string.Join(",", _tracks.SelectedTracks.Select(t => t.FileName))); break;
+                    case "quickedit": QuickEditWindow.Show(parts[1].Split('|')); break;
                     case "split": ToggleSplit(Window); break;
                     case "pane": Activate(parts[1] == "b" && _paneB is not null ? _paneB : _paneA); break;
                     case "backups": BackupsWindow.Show(); break;

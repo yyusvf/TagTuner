@@ -160,7 +160,7 @@ die Dienst-Namen je Sprache in `Resources/<lang>.lproj/ServicesMenu.strings` (au
 Der Dienst erscheint erst, wenn macOS die App kennt (einmal aus /Programme starten,
 notfalls `/System/Library/CoreServices/pbs -update`). Nach Änderungen an der Info.plist `obj/` löschen.
 
-Offen für den Mac: kleines Bearbeiten-Fenster aus dem Finder, Sparkle, ffmpeg im Paket (Universal, unter
+Offen für den Mac: Sparkle, ffmpeg im Paket (Universal, unter
 `Contents/Resources`), Signieren/Notarisieren (Entwicklerkonto), dritte Download-Karte auf der Website.
 
 Das App-Symbol zeichnet `swift tools/make-mac-icon.swift src/TagTuner.Mac/Assets.xcassets/AppIcon.appiconset`
@@ -189,7 +189,7 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 | Tags kopieren/einfügen | ✓ | ✓ |
 | Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | ✓ |
 | Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | ✓ |
-| Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | teils (Finder: Dienst „In TagTuner öffnen“, „Öffnen mit“, Dock; ohne kleines Fenster) |
+| Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | ✓ (Finder-Dienste „In TagTuner öffnen“ und „Metadaten bearbeiten“, „Öffnen mit“, Dock) |
 | Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | teils (ohne Updates) |
 | Stille Updates | ✓ (Inno Setup) | offen (Sparkle) |
 | 13 Sprachen | ✓ | ✓ |

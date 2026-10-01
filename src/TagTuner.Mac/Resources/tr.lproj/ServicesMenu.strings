@@ -1,2 +1,3 @@
-/* Aus translations/tr.json, Schlüssel „Open in TagTuner". */
+/* Aus translations/tr.json. */
 "Open in TagTuner" = "TagTuner'da aç";
+"Edit metadata" = "Meta verileri düzenle";
