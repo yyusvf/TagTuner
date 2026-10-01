@@ -161,8 +161,10 @@ Der Dienst erscheint erst, wenn macOS die App kennt (einmal aus /Programme start
 notfalls `/System/Library/CoreServices/pbs -update`). Nach Änderungen an der Info.plist `obj/` löschen.
 
 Offen für den Mac: kleines Bearbeiten-Fenster aus dem Finder, Sparkle, ffmpeg im Paket (Universal, unter
-`Contents/Resources`), Signieren/Notarisieren (Entwicklerkonto), Mac-eigenes App-Symbol
-(jetzt das Windows-Symbol), dritte Download-Karte auf der Website.
+`Contents/Resources`), Signieren/Notarisieren (Entwicklerkonto), dritte Download-Karte auf der Website.
+
+Das App-Symbol zeichnet `swift tools/make-mac-icon.swift src/TagTuner.Mac/Assets.xcassets/AppIcon.appiconset`
+aus derselben Form wie `site/favicon.svg`, im macOS-Raster (824 auf 1024, Schatten).
 
 Noch Windows-only in Core: `UpdateService` erwartet ein `.exe`-Setup. Für den Mac eine eigene
 Update-Strecke (Sparkle) vorsehen, nicht die Windows-Logik verbiegen.
