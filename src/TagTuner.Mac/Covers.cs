@@ -68,4 +68,54 @@ internal static class Covers
             new NSDictionary(NSBitmapImageRep.CompressionFactor, NSNumber.FromDouble(0.9)));
         return jpeg is null ? null : (jpeg.ToArray(), "image/jpeg");
     }
+
+    /// <summary>Das volle Bild als CGImage, Drehung aus den EXIF-Angaben schon angewandt.</summary>
+    public static CGImage? Decode(byte[] data)
+    {
+        try
+        {
+            using var src = CGImageSource.FromData(NSData.FromArray(data));
+            if (src is null) return null;
+            var size = Size(data);
+            var opts = new CGImageThumbnailOptions
+            {
+                CreateThumbnailFromImageAlways = true,
+                MaxPixelSize = Math.Max(size?.Width ?? 4000, size?.Height ?? 4000),
+                CreateThumbnailWithTransform = true,
+            };
+            return src.CreateThumbnail(0, opts);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Ein Quadrat aus dem Bild, auf höchstens <paramref name="maxEdge"/>
+    /// Pixel verkleinert und neu kodiert. PNG bleibt PNG (Transparenz),
+    /// alles andere wird JPEG.
+    /// </summary>
+    public static (byte[] Data, string Mime)? Render(CGImage image, CGRect source, int maxEdge, bool asPng, double quality = 0.92)
+    {
+        var edge = (int)Math.Min(maxEdge, Math.Round(Math.Max(source.Width, source.Height)));
+        var w = (int)Math.Round(source.Width * edge / Math.Max(source.Width, source.Height));
+        var h = (int)Math.Round(source.Height * edge / Math.Max(source.Width, source.Height));
+        if (w < 1 || h < 1) return null;
+
+        using var cropped = image.WithImageInRect(source);
+        if (cropped is null) return null;
+        using var space = CGColorSpace.CreateSrgb();
+        using var ctx = new CGBitmapContext(null, w, h, 8, 0, space, CGImageAlphaInfo.PremultipliedLast);
+        ctx.InterpolationQuality = CGInterpolationQuality.High;
+        ctx.DrawImage(new CGRect(0, 0, w, h), cropped);
+        using var result = ctx.ToImage();
+        if (result is null) return null;
+
+        var rep = new NSBitmapImageRep(result);
+        var bytes = asPng
+            ? rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary())
+            : rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Jpeg,
+                new NSDictionary(NSBitmapImageRep.CompressionFactor, NSNumber.FromDouble(quality)));
+        return bytes is null ? null : (bytes.ToArray(), asPng ? "image/png" : "image/jpeg");
+    }
+
+    public static bool IsPng(byte[] data) => data.Length > 8 && data[0] == 0x89 && data[1] == 0x50;
 }

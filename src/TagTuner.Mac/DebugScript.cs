@@ -41,6 +41,8 @@ public sealed partial class MainWindowController
                     case "album!": AlbumSheet.AutoConfirm = true; ApplyAlbumMode(Window); break;
                     case "rule": ToggleRule(new NSMenuItem { Tag = int.Parse(parts[1]) }); break;
                     case "rename": RenameFiles(Window); break;
+                    case "resizecover": _inspector.DebugCover("resize"); break;
+                    case "fromfolder": _inspector.DebugCover("folder"); break;
                     case "libsearch": _library.DebugSearch(parts[1]); break;
                     case "back": GoBack(Window); break;
                     case "forward": GoForward(Window); break;
@@ -110,6 +112,11 @@ internal sealed partial class LibraryController
 
 internal sealed partial class InspectorController
 {
+    public void DebugCover(string what)
+    {
+        if (what == "resize") ResizeCover(); else ChooseFromFolder();
+    }
+
     public void SetField(string name, string value)
     {
         var f = name switch

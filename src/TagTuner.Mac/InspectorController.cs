@@ -73,16 +73,7 @@ internal sealed partial class InspectorController : NSViewController
         coverMenu.Bordered = false;
         coverMenu.ToolTip = Strings.T("Cover");
         coverMenu.Activated += (_, _) =>
-        {
-            var m = new NSMenu();
-            m.AddItem(new NSMenuItem(Strings.T("Choose a file…"), (_, _) => ChooseCover()));
-            m.AddItem(new NSMenuItem(Strings.T("Paste cover"), (_, _) => PasteCover()));
-            if (_fileCover is not null)
-                m.AddItem(new NSMenuItem(Strings.T("Copy cover"), (_, _) => CopyCover()));
-            m.AddItem(NSMenuItem.SeparatorItem);
-            m.AddItem(new NSMenuItem(Strings.T("Remove cover"), (_, _) => RemoveCover()));
-            m.PopUpMenu(null, new CGPoint(0, coverMenu.Bounds.Height + 4), coverMenu);
-        };
+            CoverMenu().PopUpMenu(null, new CGPoint(0, coverMenu.Bounds.Height + 4), coverMenu);
         var coverSide = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -450,11 +441,80 @@ internal sealed partial class InspectorController : NSViewController
 
     // ── Cover ────────────────────────────────────────────────────
 
-    public void SetPendingCover(NSData data)
+    /// <summary>Was man mit dem Cover tun kann, wie im Rechtsklickmenü unter Windows.</summary>
+    private NSMenu CoverMenu()
+    {
+        var m = new NSMenu { AutoEnablesItems = false };
+        NSMenuItem Item(string title, Action run, bool enabled = true)
+        {
+            var i = new NSMenuItem(title, (_, _) => run()) { Enabled = enabled && _sel.Count > 0 };
+            m.AddItem(i);
+            return i;
+        }
+        var many = _sel.Count > 1;
+        Item(many ? Strings.T("Set cover for {0}…", _sel.Count) : Strings.T("Set cover…"), ChooseCover);
+        Item(Strings.T("Choose from this folder…"), ChooseFromFolder, FolderSource?.Invoke().Tracks.Any(t => t.HasCover) == true);
+        Item(Strings.T("Copy cover"), CopyCover, _fileCover is not null);
+        Item(many ? Strings.T("Paste cover into {0}", _sel.Count) : Strings.T("Paste cover"), PasteCover);
+        m.AddItem(NSMenuItem.SeparatorItem);
+        Item(Strings.T("Resize…"), ResizeCover, _fileCover is not null);
+        Item(Strings.T("Extract cover…"), ExtractCover, _fileCover is not null);
+        Item(many ? Strings.T("Remove cover from {0}", _sel.Count) : Strings.T("Remove cover"), RemoveCover,
+             _sel.Any(t => t.HasCover));
+        return m;
+    }
+
+    /// <summary>Der Ordner und seine Lieder, für „Aus diesem Ordner wählen".</summary>
+    public Func<(string? Folder, IReadOnlyList<AudioTrack> Tracks)>? FolderSource { get; set; }
+
+    private async void ChooseFromFolder()
+    {
+        if (FolderSource?.Invoke() is not ({ } folder, var tracks) || View.Window is not { } w) return;
+        if (await CoverTools.FromFolderAsync(w, folder, tracks) is { } chosen)
+            Pending(chosen);
+    }
+
+    private async void ResizeCover()
+    {
+        if (_fileCover is null || View.Window is not { } w) return;
+        if (await CoverTools.ResizeAsync(w, _fileCover.Data) is { } smaller) Pending(smaller);
+    }
+
+    private void ExtractCover()
+    {
+        if (_fileCover is not { } c || View.Window is not { } w) return;
+        var panel = NSSavePanel.SavePanel;
+        var ext = c.MimeType.Contains("png") ? "png" : "jpg";
+        panel.NameFieldStringValue = $"cover.{ext}";
+        if (_sel.Count > 0) panel.DirectoryUrl = NSUrl.FromFilename(Path.GetDirectoryName(_sel[0].Path)!);
+        panel.BeginSheet(w, r =>
+        {
+            if (r != (nint)(long)NSModalResponse.OK || panel.Url?.Path is not { } path) return;
+            try { File.WriteAllBytes(path, c.Data); }
+            catch (Exception ex) { Alert(Strings.T("Failed"), ex.Message); }
+        });
+    }
+
+    /// <summary>
+    /// Ein neues Bild fürs Cover. Ist es nicht quadratisch, wird erst
+    /// zugeschnitten, wie unter Windows: Ein Cover ist ein Quadrat, und ein
+    /// Player, der es streckt, zeigt sonst verzerrte Gesichter.
+    /// </summary>
+    public async void SetPendingCover(NSData data)
     {
         if (_sel.Count == 0) return;
         var prepared = Covers.Prepare(data);
         if (prepared is null) { NSBeep(); return; }
+        if (Covers.Size(prepared.Value.Data) is { } size && size.Width != size.Height && View.Window is { } w)
+        {
+            prepared = await CoverTools.CropAsync(w, prepared.Value.Data);
+            if (prepared is null) return;
+        }
+        Pending(prepared.Value);
+    }
+
+    private void Pending((byte[] Data, string Mime) prepared)
+    {
         var cannot = _sel.FirstOrDefault(t => !AudioFormats.CanCarryCover(t.Path));
         if (cannot is not null)
         {
@@ -462,9 +522,9 @@ internal sealed partial class InspectorController : NSViewController
             return;
         }
         _pendingCover = prepared;
-        _cover.Image = Covers.Thumbnail(prepared.Value.Data, 800);
+        _cover.Image = Covers.Thumbnail(prepared.Data, 800);
         _cover.Mixed = false;
-        _coverInfo.StringValue = Describe(prepared.Value.Data, prepared.Value.Mime);
+        _coverInfo.StringValue = Describe(prepared.Data, prepared.Mime);
         UpdatePlan();
     }
 
@@ -672,14 +732,7 @@ internal sealed partial class InspectorController : NSViewController
         public override void RightMouseDown(NSEvent theEvent)
         {
             if (Owner is null) return;
-            var m = new NSMenu();
-            m.AddItem(new NSMenuItem(Strings.T("Choose a file…"), (_, _) => Owner.ChooseCover()));
-            m.AddItem(new NSMenuItem(Strings.T("Paste cover"), (_, _) => Owner.PasteCover()));
-            if (Owner._fileCover is not null)
-                m.AddItem(new NSMenuItem(Strings.T("Copy cover"), (_, _) => Owner.CopyCover()));
-            m.AddItem(NSMenuItem.SeparatorItem);
-            m.AddItem(new NSMenuItem(Strings.T("Remove cover"), (_, _) => Owner.RemoveCover()));
-            NSMenu.PopUpContextMenu(m, theEvent, this);
+            NSMenu.PopUpContextMenu(Owner.CoverMenu(), theEvent, this);
         }
 
         public override void MouseDown(NSEvent theEvent)

@@ -95,6 +95,7 @@ public sealed partial class MainWindowController : NSWindowController
             [.. outliers.Select(t => new Job(t, new TagEdit(), target.Format, target.SampleRate))],
             "align", Strings.T("Align folder"));
         _inspector.ApplyRequested += (jobs, label) => _ = WriteAsync(jobs, "batch", label);
+        _inspector.FolderSource = () => (_tracks.Folder, _tracks.Tracks);
         _bar.Owner = this;
         _player.Changed += UpdatePlayer;
         _player.Finished += OnFinished;
