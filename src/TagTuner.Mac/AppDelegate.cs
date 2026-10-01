@@ -63,7 +63,9 @@ public sealed class AppDelegate : NSApplicationDelegate
         // Zum Ausprobieren: ein Ordner als Argument öffnet ihn gleich.
         var args = Environment.GetCommandLineArgs().Skip(1)
             .FirstOrDefault(a => !a.StartsWith('-') && Directory.Exists(a));
-        if (args is not null) _main.OpenFolder(args);
+        NSApplication.SharedApplication.ServicesProvider = this;
+        if (_pendingOpen is { } pending) { _pendingOpen = null; Open(pending); }
+        else if (args is not null) _main.OpenFolder(args);
         else _main.OpenLastFolder();
 #if DEBUG
         var all = Environment.GetCommandLineArgs();
@@ -109,10 +111,33 @@ public sealed class AppDelegate : NSApplicationDelegate
     }
 
     /// <summary>Ordner aus dem Finder aufs Dock-Symbol gezogen.</summary>
-    public override void OpenUrls(NSApplication application, NSUrl[] urls)
+    /// <summary>
+    /// Ordner oder Audiodateien aus dem Finder: aufs Dock-Symbol gezogen,
+    /// über „Öffnen mit" oder den Dienst „In TagTuner öffnen". Ein Ordner
+    /// öffnet sich, Dateien öffnen ihren Ordner und sind darin ausgewählt.
+    /// Kommt das vor dem ersten Fenster, wird es danach nachgeholt.
+    /// </summary>
+    public override void OpenUrls(NSApplication application, NSUrl[] urls) =>
+        Open([.. urls.Select(u => u.Path).OfType<string>()]);
+
+    private List<string>? _pendingOpen;
+
+    public void Open(IReadOnlyList<string> paths)
     {
-        var folder = urls.Select(u => u.Path).FirstOrDefault(p => p is not null && Directory.Exists(p));
-        if (folder is not null) Front?.OpenFolder(folder);
+        if (Front is not { } w) { _pendingOpen = [.. paths]; return; }
+        if (paths.FirstOrDefault(Directory.Exists) is { } folder) { w.OpenFolder(folder); return; }
+        var files = paths.Where(File.Exists).ToList();
+        if (files.Count > 0 && Path.GetDirectoryName(files[0]) is { } dir) w.OpenFolder(dir, files);
+        NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+    }
+
+    /// <summary>Der Dienst im Finder-Kontextmenü, unter Dienste.</summary>
+    [Export("openInTagTuner:userData:error:")]
+    public void OpenInTagTuner(NSPasteboard pasteboard, string userData, out NSString? error)
+    {
+        error = null;
+        var urls = pasteboard.ReadObjectsForClasses([new ObjCRuntime.Class(typeof(NSUrl))], null);
+        Open([.. (urls?.OfType<NSUrl>() ?? []).Select(u => u.Path).OfType<string>()]);
     }
 
     public MainWindowController? Main => _main;

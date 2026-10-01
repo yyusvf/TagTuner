@@ -214,6 +214,14 @@ public sealed partial class MainWindowController : NSWindowController
 
     public void OpenFolder(string path) => OpenFolder(path, fromLibrary: false);
 
+    /// <summary>Den Ordner öffnen und darin bestimmte Dateien wählen, etwa aus dem Finder.</summary>
+    public async void OpenFolder(string path, IReadOnlyList<string> select)
+    {
+        OpenFolder(path, fromLibrary: false);
+        for (var i = 0; i < 100 && (_tracks.Folder != path || _tracks.Tracks.Count == 0); i++) await Task.Delay(50);
+        _tracks.Select(select);
+    }
+
     private void OpenFolder(string path, bool fromLibrary) => Navigate(path, fromLibrary, remember: true);
 
     private async void Navigate(string path, bool fromLibrary, bool remember)

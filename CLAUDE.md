@@ -155,7 +155,12 @@ python3 tools/build-strings.py                 # Sprachdateien ohne PowerShell, 
 `dist/TagTuner-<Version>-macOS.dmg` an. Das Paket liegt bei zwei Architekturen unter
 `bin/Release/net10.0-macos/TagTuner.app`, nicht im `-o`-Ordner. ffmpeg liegt noch nicht bei.
 
-Offen für den Mac: Finder-Integration, Sparkle, ffmpeg im Paket (Universal, unter
+**Finder:** Dienst `openInTagTuner` und `CFBundleDocumentTypes` (Ordner, Audio) in der Info.plist;
+die Dienst-Namen je Sprache in `Resources/<lang>.lproj/ServicesMenu.strings` (aus translations/).
+Der Dienst erscheint erst, wenn macOS die App kennt (einmal aus /Programme starten,
+notfalls `/System/Library/CoreServices/pbs -update`). Nach Änderungen an der Info.plist `obj/` löschen.
+
+Offen für den Mac: kleines Bearbeiten-Fenster aus dem Finder, Sparkle, ffmpeg im Paket (Universal, unter
 `Contents/Resources`), Signieren/Notarisieren (Entwicklerkonto), Mac-eigenes App-Symbol
 (jetzt das Windows-Symbol), dritte Download-Karte auf der Website.
 
@@ -182,7 +187,7 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 | Tags kopieren/einfügen | ✓ | ✓ |
 | Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | ✓ |
 | Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | ✓ |
-| Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | offen (Finder) |
+| Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | teils (Finder: Dienst „In TagTuner öffnen“, „Öffnen mit“, Dock; ohne kleines Fenster) |
 | Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | teils (ohne Updates) |
 | Stille Updates | ✓ (Inno Setup) | offen (Sparkle) |
 | 13 Sprachen | ✓ | ✓ |
