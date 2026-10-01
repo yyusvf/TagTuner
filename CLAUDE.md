@@ -112,6 +112,12 @@ Shell: `export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
 
 ### Stand und Arbeitsweise auf dem Mac
 
+**Die Mac-App lebt auf dem Zweig `mac`, getrennt von `master`** (Wunsch des Nutzers, „eigener Fork im
+TagTuner-Repo“). `master` bleibt die Windows-App und wird von dort veröffentlicht. Auf dem Mac auf `mac`
+arbeiten und dorthin pushen; Neues von `master` mit `git merge master` hereinholen. Was auf `mac` in
+Core gewandert ist (`AlbumCover`, `FolderImport`, `FileNaming.Plan`, `build-strings.py`, neue
+Übersetzungen), ist auf `master` noch nicht; nur auf Wunsch zurück nach `master` bringen.
+
 `src/TagTuner.Mac` steht (Schritte 1 und 2 größtenteils, siehe Tabelle unten). AppKit ganz im Code,
 kein Storyboard. **Visuell wie die Windows-App aufgebaut** (Wunsch des Nutzers): `MainWindowController`
 legt vier Spalten in ein `NSSplitViewController` – `InspectorController` (Metadaten, links, als
