@@ -27,6 +27,18 @@ internal sealed partial class TrackListController : NSViewController
 
     /// <summary>Der Ordner ist (neu) eingelesen.</summary>
     public event Action? Loaded;
+
+    /// <summary>In die Liste geklickt: Sie wird die aktive Hälfte.</summary>
+    public event Action? Clicked;
+
+    /// <summary>
+    /// In der geteilten Ansicht die Hälfte, auf die sich alles bezieht. Sie
+    /// trägt ihren Titel in Grün, wie unter Windows die Markierung am Rand.
+    /// </summary>
+    public bool Active
+    {
+        set { if (_title is not null) _title.TextColor = value ? Theme.Accent : NSColor.Label; }
+    }
     public event Action<AudioTrack>? PlayRequested;
 
     /// <summary>Audiodateien von außen abgelegt: Pfade, Stelle in der Playlist, verschieben?</summary>
@@ -404,6 +416,7 @@ internal sealed partial class TrackListController : NSViewController
     [Export("rowClicked:")]
     public void RowClicked(NSObject sender)
     {
+        Clicked?.Invoke();
         var row = _table.ClickedRow;
         if (row >= 0 && row < _rows.Count && _rows[(int)row] is SubfolderRow sub) Toggle(sub);
     }
@@ -587,9 +600,7 @@ internal sealed partial class TrackListController : NSViewController
             {
                 if (dropOperation == NSTableViewDropOperation.On)
                     tableView.SetDropRowDropOperation(row, NSTableViewDropOperation.Above);
-                // Wie im Finder: kopieren, mit ⌘ verschieben.
-                return NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask)
-                    ? NSDragOperation.Move : NSDragOperation.Copy;
+                return Moves(info) ? NSDragOperation.Move : NSDragOperation.Copy;
             }
             // Ordner aus dem Finder öffnen sich.
             return DroppedFolder(info) is null ? NSDragOperation.None : NSDragOperation.Generic;
@@ -609,14 +620,25 @@ internal sealed partial class TrackListController : NSViewController
                 var at = owner.CanReorder && row <= owner._ownEnd
                     ? owner._rows.Take((int)row).Count(r => r is AudioTrack)
                     : owner._all.Count;
-                var move = NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask);
-                owner.FilesDropped?.Invoke(audio, at, move);
+                owner.FilesDropped?.Invoke(audio, at, Moves(info));
                 return true;
             }
 
             if (DroppedFolder(info) is not { } folder) return false;
             (owner.View.Window?.WindowController as MainWindowController)?.OpenFolder(folder);
             return true;
+        }
+
+        /// <summary>
+        /// Aus der anderen Hälfte wird verschoben, mit ⌥ kopiert, wie unter
+        /// Windows mit Strg. Aus dem Finder wird kopiert, mit ⌘ verschoben.
+        /// </summary>
+        private static bool Moves(INSDraggingInfo info)
+        {
+            var mods = NSEvent.CurrentModifierFlags;
+            return info.DraggingSource is TrackTable
+                ? !mods.HasFlag(NSEventModifierMask.AlternateKeyMask)
+                : mods.HasFlag(NSEventModifierMask.CommandKeyMask);
         }
 
         /// <summary>Abgelegte Audiodateien, die nicht schon in diesem Ordner liegen.</summary>
@@ -959,6 +981,12 @@ internal sealed partial class TrackListController : NSViewController
     private sealed class TrackTable : NSTableView
     {
         public TrackListController? Owner;
+
+        public override void MouseDown(NSEvent theEvent)
+        {
+            Owner?.Clicked?.Invoke();
+            base.MouseDown(theEvent);
+        }
 
         public override void KeyDown(NSEvent theEvent)
         {

@@ -17,7 +17,16 @@ public sealed partial class MainWindowController : NSWindowController
     private readonly NSSplitViewController _split = new();
     private readonly InspectorController _inspector = new();
     private readonly LibraryController _library = new();
-    private readonly TrackListController _tracks = new();
+    // ── Geteilte Ansicht, wie unter Windows: zwei Hälften übereinander ──
+    private readonly TrackListController _paneA = new();
+    private TrackListController? _paneB;
+    private readonly NSSplitViewController _center = new();
+
+    /// <summary>
+    /// Die Hälfte, in der zuletzt gearbeitet wurde. Metadaten, Ordner-Analyse,
+    /// Menübefehle und die Bibliothek beziehen sich auf sie.
+    /// </summary>
+    private TrackListController _tracks;
     private readonly FolderPanel _panel = new();
     private readonly PlayerBar _bar = new();
     private static Player _player => AppDelegate.Player;
@@ -43,7 +52,13 @@ public sealed partial class MainWindowController : NSWindowController
         lib.MaximumThickness = 360;
         lib.PreferredThicknessFraction = 0.15f;
         lib.HoldingPriority = 260;
-        var list = NSSplitViewItem.CreateContentList(_tracks);
+        _tracks = _paneA;
+        _center.SplitView.IsVertical = false;
+        _center.SplitView.DividerStyle = NSSplitViewDividerStyle.Thin;
+        var top = NSSplitViewItem.FromViewController(_paneA);
+        top.MinimumThickness = 160;
+        _center.AddSplitViewItem(top);
+        var list = NSSplitViewItem.CreateContentList(_center);
         list.MinimumThickness = 380;
         list.HoldingPriority = 200;
         var panel = NSSplitViewItem.CreateInspector(_panel);
@@ -83,11 +98,7 @@ public sealed partial class MainWindowController : NSWindowController
             while (_tracks.Folder == folder && _tracks.Tracks.Count == 0) await Task.Delay(50);
             _tracks.Select([track]);
         };
-        _tracks.SelectionChanged += () => _inspector.Show(_tracks.SelectedTracks);
-        _tracks.PlayRequested += Play;
-        _tracks.Reordered += OnReordered;
-        _tracks.FilesDropped += OnFilesDropped;
-        _tracks.Loaded += () => _panel.Show(_tracks.Folder, _tracks.Tracks);
+        Wire(_paneA);
         _panel.AlbumRequested += () => ApplyAlbumMode(Window);
         _panel.RenameRequested += () => RenameFiles(Window);
         _panel.CoverAllRequested += () => CoverForAll(Window);
@@ -108,6 +119,67 @@ public sealed partial class MainWindowController : NSWindowController
     }
 
     public string? Folder => _tracks.Folder;
+
+    /// <summary>Die Ereignisse einer Hälfte. Wer etwas in ihr tut, macht sie zur aktiven.</summary>
+    private void Wire(TrackListController pane)
+    {
+        pane.SelectionChanged += () =>
+        {
+            if (pane.SelectedTracks.Count > 0) Activate(pane);
+            if (pane == _tracks) _inspector.Show(pane.SelectedTracks);
+        };
+        pane.PlayRequested += t => { Activate(pane); Play(t); };
+        pane.Reordered += (order, discs) => { Activate(pane); OnReordered(order, discs); };
+        pane.FilesDropped += (paths, at, move) => { Activate(pane); OnFilesDropped(paths, at, move); };
+        pane.Loaded += () => { if (pane == _tracks) _panel.Show(pane.Folder, pane.Tracks); };
+        pane.Clicked += () => Activate(pane);
+    }
+
+    private void Activate(TrackListController pane)
+    {
+        if (_tracks == pane) return;
+        _tracks = pane;
+        _paneA.Active = pane == _paneA && _paneB is not null;
+        if (_paneB is not null) _paneB.Active = pane == _paneB;
+        _inspector.Show(pane.SelectedTracks);
+        _panel.Show(pane.Folder, pane.Tracks);
+        if (pane.Folder is { } f) _library.Reveal(f);
+        UpdateTitle();
+    }
+
+    /// <summary>Geteilte Ansicht an oder aus. Die untere Hälfte öffnet zunächst denselben Ordner.</summary>
+    [Export("toggleSplit:")]
+    public void ToggleSplit(NSObject sender)
+    {
+        if (_paneB is { } b)
+        {
+            Activate(_paneA);
+            _center.RemoveSplitViewItem(_center.SplitViewItems[1]);
+            _paneB = null;
+            _paneA.Active = false;
+        }
+        else
+        {
+            var pane = _paneB = new TrackListController();
+            Wire(pane);
+            var item = NSSplitViewItem.FromViewController(pane);
+            item.MinimumThickness = 160;
+            _center.AddSplitViewItem(item);
+            // Hälfte-hälfte, sobald die neue Liste ihre Größe kennt.
+            BeginInvokeOnMainThread(() =>
+                _center.SplitView.SetPositionOfDivider(_center.SplitView.Bounds.Height / 2, 0));
+            if (_paneA.Folder is { } f) _ = pane.LoadAsync(f);
+            Activate(pane);
+        }
+        _toolbarDelegate.UpdateSplit(_paneB is not null);
+    }
+
+    /// <summary>Nach dem Schreiben: auch die andere Hälfte neu lesen, falls sie betroffen sein kann.</summary>
+    private async void ReloadOther()
+    {
+        var other = _tracks == _paneA ? _paneB : _paneA;
+        if (other?.Folder is { } f) await other.LoadAsync(f, [.. other.SelectedTracks.Select(t => t.Path)]);
+    }
 
     /// <summary>Beim Start: den Ordner vom letzten Mal wieder öffnen.</summary>
     public void OpenLastFolder()
@@ -267,6 +339,7 @@ public sealed partial class MainWindowController : NSWindowController
             _library.Refresh(f);
             await _tracks.LoadAsync(f, keep);
         }
+        ReloadOther();
         _resume?.Invoke();
         _resume = null;
         UpdateTitle();
@@ -321,15 +394,19 @@ public sealed partial class MainWindowController : NSWindowController
 
     private void Step(int step, bool onlyIfPlaying = true)
     {
-        var next = _tracks.Neighbour(_player.Track?.Path, step);
+        var next = _tracks.Neighbour(_player.Track?.Path, step)
+                   ?? (_tracks == _paneA ? _paneB : _paneA)?.Neighbour(_player.Track?.Path, step);
         if (next is null) { if (!onlyIfPlaying) _player.Stop(); return; }
         Play(next);
     }
 
     private void UpdatePlayer()
     {
-        _tracks.PlayingPath = _player.Owner == this ? _player.Track?.Path : null;
-        _tracks.RedrawRows();
+        foreach (var pane in new[] { _paneA, _paneB }.OfType<TrackListController>())
+        {
+            pane.PlayingPath = _player.Owner == this ? _player.Track?.Path : null;
+            pane.RedrawRows();
+        }
         _bar.Update(_player);
     }
 
@@ -545,6 +622,8 @@ public sealed partial class MainWindowController : NSWindowController
         private const string PathId = "path";
         private const string SearchId = "search";
         private const string HistoryId = "history";
+        private const string SplitId = "split";
+        private NSToolbarItem? _split;
         private const string SettingsId = "settings";
 
         private NSSegmentedControl? _nav;
@@ -557,6 +636,7 @@ public sealed partial class MainWindowController : NSWindowController
             PathId,
             NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
             SearchId,
+            SplitId,
             HistoryId,
             SettingsId,
         ];
@@ -604,6 +684,8 @@ public sealed partial class MainWindowController : NSWindowController
                     owner._pathControl = p;
                     return new NSToolbarItem(PathId) { View = p, Label = Strings.T("Folder") };
                 }
+                case SplitId:
+                    return _split = Button(SplitId, "rectangle.split.1x2", Strings.T("Split the view"), "toggleSplit:", owner);
                 case HistoryId:
                     return Button(HistoryId, "clock.arrow.circlepath", Strings.T("History"), "showHistory:", owner);
                 case SettingsId:
@@ -622,6 +704,12 @@ public sealed partial class MainWindowController : NSWindowController
                 Target = target,
                 Bordered = true,
             };
+
+        public void UpdateSplit(bool on)
+        {
+            if (_split is null) return;
+            _split.Image = NSImage.GetSystemSymbol(on ? "rectangle.split.1x2.fill" : "rectangle.split.1x2", null);
+        }
 
         public void UpdateNavigation(bool back, bool forward)
         {

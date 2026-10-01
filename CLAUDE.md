@@ -151,8 +151,7 @@ python3 tools/build-strings.py                 # Sprachdateien ohne PowerShell, 
   `MainWindow.AlbumApply.cs` darauf umstellen. `FileNaming.Plan` benutzt Windows schon (ungetestet
   gebaut, weil auf dem Mac entstanden: beim nächsten Windows-Build prüfen).
 
-Offen für den Mac: Unterordner-Ansicht und geteilte Ansicht, Suche in der Bibliothek, Cover
-zuschneiden, Sicherungen-Seite, Disc-Zeilen, Finder-Integration, Sparkle, DMG mit ffmpeg,
+Offen für den Mac: Aufleuchten nach dem Umsortieren, Finder-Integration, Sparkle, DMG mit ffmpeg,
 Signieren/Notarisieren, Universal Binary (`RuntimeIdentifier` ist noch nur `osx-arm64`),
 Mac-eigenes App-Symbol (jetzt das Windows-Symbol).
 
@@ -167,17 +166,17 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 |---|---|---|
 | Ordner als Playlist, Bibliothek mit eigenen/ausgeblendeten Ordnern | ✓ | ✓ |
 | Metadaten-Spalte (nur Auswahl, `<mixed>`), Anwenden, Zurücksetzen | ✓ | ✓ |
-| Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | teils (kein Zuschneiden, nicht „aus dem Ordner“) |
+| Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | ✓ |
 | Format/Samplerate umwandeln (ffmpeg), Ordner angleichen mit Protokoll | ✓ | ✓ (ohne eigenes Protokollfenster) |
 | Album-Modus (Basis-Tags, Cover, Nummerierung, Dateinamen folgen) | ✓ | ✓ |
-| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | teils (ohne Aufleuchten und Disc-Zeilen) |
+| Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | teils (ohne Aufleuchten) |
 | Dateien hereinziehen (Übernehmen/Verschieben, angleichen) | ✓ | ✓ (⌘ = verschieben) |
-| Unterordner-Ansicht, geteilte Ansicht, Tabs | ✓ | teils (native Tabs, der Rest offen) |
+| Unterordner-Ansicht, geteilte Ansicht, Tabs | ✓ | ✓ (Tabs nativ) |
 | Sortieren nach allen Spalten, Spalten wählen/verschieben | ✓ | ✓ |
-| Suche in Bibliothek und Ordner | ✓ | teils (nur Ordner) |
+| Suche in Bibliothek und Ordner | ✓ | ✓ |
 | Umbenennen nach Muster (Platzhalter-Knöpfe) | ✓ | ✓ |
 | Tags kopieren/einfügen | ✓ | ✓ |
-| Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | teils (ohne Sicherungen-Seite) |
+| Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | ✓ |
 | Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | ✓ |
 | Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | offen (Finder) |
 | Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | teils (ohne Updates) |

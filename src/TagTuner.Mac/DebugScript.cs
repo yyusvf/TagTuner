@@ -43,6 +43,8 @@ public sealed partial class MainWindowController
                     case "rename": RenameFiles(Window); break;
                     case "resizecover": _inspector.DebugCover("resize"); break;
                     case "fromfolder": _inspector.DebugCover("folder"); break;
+                    case "split": ToggleSplit(Window); break;
+                    case "pane": Activate(parts[1] == "b" && _paneB is not null ? _paneB : _paneA); break;
                     case "backups": BackupsWindow.Show(); break;
                     case "libsearch": _library.DebugSearch(parts[1]); break;
                     case "back": GoBack(Window); break;
@@ -50,6 +52,7 @@ public sealed partial class MainWindowController
                     case "newtab": ((AppDelegate)NSApplication.SharedApplication.Delegate).NewWindowForTab(null); break;
                     case "confirm": AlbumSheet.AutoConfirm = true; break;
                     case "drop": OnFilesDropped([.. parts[2].Split('|')], int.Parse(parts[1]), false); break;
+                    case "dropmove": OnFilesDropped([.. parts[2].Split('|')], int.Parse(parts[1]), true); break;
                     case "copytags": CopyTags(Window); break;
                     case "pastetags": PasteTags(Window); break;
                     case "settings": SettingsWindow.Show(); break;

@@ -91,6 +91,7 @@ internal static class MainMenu
              NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask);
         Item(view, Strings.T("Show Inspector"), "toggleInspector:", "i",
              NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask);
+        Item(view, Strings.T("Split the view"), "toggleSplit:", "\\");
         view.AddItem(NSMenuItem.SeparatorItem);
         Item(view, Strings.T("Back in playlist order"), "playlistOrder:", "0");
         view.AddItem(NSMenuItem.SeparatorItem);
