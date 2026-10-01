@@ -100,6 +100,7 @@ public sealed partial class MainWindowController : NSWindowController
         _player.Changed += UpdatePlayer;
         _player.Finished += OnFinished;
         AppDelegate.History.Added += OnHistoryAdded;
+        BackupsWindow.Restored += OnRestored;
 
         _ticker = NSTimer.CreateRepeatingScheduledTimer(0.5, _ => Tick());
         UpdatePlayer();
@@ -276,6 +277,13 @@ public sealed partial class MainWindowController : NSWindowController
     private void OnHistoryAdded(Core.Safety.HistoryEntry entry) =>
         BeginInvokeOnMainThread(() => _bar.OfferUndo(entry.CanUndo));
 
+    /// <summary>Aus der Sicherungen-Seite wiederhergestellt: betrifft es diesen Ordner, neu lesen.</summary>
+    private void OnRestored(IReadOnlyList<string> paths)
+    {
+        if (_tracks.Folder is { } f && paths.Any(p => string.Equals(Path.GetDirectoryName(p), f.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
+            AfterWrite(paths, Strings.T("{0} backup(s) restored", paths.Count));
+    }
+
     public void SaveState()
     {
         Settings.Volume = _player.Volume;
@@ -291,6 +299,7 @@ public sealed partial class MainWindowController : NSWindowController
         _player.Changed -= UpdatePlayer;
         _player.Finished -= OnFinished;
         AppDelegate.History.Added -= OnHistoryAdded;
+        BackupsWindow.Restored -= OnRestored;
         if (_player.Owner == this) _player.Stop();
         SaveState();
         Closed?.Invoke(this);

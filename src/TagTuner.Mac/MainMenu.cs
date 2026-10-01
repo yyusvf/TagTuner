@@ -111,6 +111,8 @@ internal static class MainMenu
         Item(window, Strings.T("Zoom"), "performZoom:");
         window.AddItem(NSMenuItem.SeparatorItem);
         Item(window, Strings.T("History"), "showHistory:", "y");
+        Item(window, Strings.T("Backups"), "showBackups:", "b",
+             NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask);
         window.AddItem(NSMenuItem.SeparatorItem);
         Item(window, Strings.T("Bring All to Front"), "arrangeInFront:");
         NSApplication.SharedApplication.WindowsMenu = window;

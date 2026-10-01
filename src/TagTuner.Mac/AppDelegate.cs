@@ -122,6 +122,9 @@ public sealed class AppDelegate : NSApplicationDelegate
     [Export("showSettings:")]
     public void ShowSettings(NSObject sender) => SettingsWindow.Show();
 
+    [Export("showBackups:")]
+    public void ShowBackups(NSObject sender) => BackupsWindow.Show();
+
     [Export("openProjectPage:")]
     public void OpenProjectPage(NSObject sender) =>
         NSWorkspace.SharedWorkspace.OpenUrl(new NSUrl("https://tagtuner.app"));

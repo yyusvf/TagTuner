@@ -43,6 +43,7 @@ public sealed partial class MainWindowController
                     case "rename": RenameFiles(Window); break;
                     case "resizecover": _inspector.DebugCover("resize"); break;
                     case "fromfolder": _inspector.DebugCover("folder"); break;
+                    case "backups": BackupsWindow.Show(); break;
                     case "libsearch": _library.DebugSearch(parts[1]); break;
                     case "back": GoBack(Window); break;
                     case "forward": GoForward(Window); break;

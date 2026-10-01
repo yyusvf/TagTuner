@@ -90,11 +90,7 @@ internal static class SettingsWindow
         var store = new BackupStore(S.ResolvedBackupFolder);
         var (count, bytes) = store.Info();
         var info = Note($"{Strings.T("Stored backups")}: {count} · {bytes / 1024.0 / 1024.0:0.#} MB");
-        var open = NSButton.CreateButton(Strings.T("Open backup folder"), () =>
-        {
-            Directory.CreateDirectory(store.Folder);
-            NSWorkspace.SharedWorkspace.OpenUrl(NSUrl.FromFilename(store.Folder));
-        });
+        var open = NSButton.CreateButton(Strings.T("Stored backups") + "…", BackupsWindow.Show);
 
         var grid = NSGridView.Create(new NSView[][]
         {
