@@ -9,6 +9,12 @@ namespace TagTuner.Mac;
 /// <summary>Eine Disc-Zeile zwischen den Liedern eines Albums mit mehreren Discs.</summary>
 internal sealed record DiscRow(uint Disc);
 
+/// <summary>Die Leiste „UNTERORDNER n" über den Abschnitten.</summary>
+internal sealed record SubfoldersTitle(int Count);
+
+/// <summary>Der Kopf eines Unterordner-Abschnitts, aufklappbar.</summary>
+internal sealed record SubfolderRow(string Path, string Name, int Count);
+
 /// <summary>
 /// Die Trackliste, aufgebaut wie unter Windows: oben der Ordnername mit der
 /// Zahl der Tracks, darunter die Spalten aus <see cref="TrackColumn.All"/>.
@@ -51,6 +57,14 @@ internal sealed partial class TrackListController : NSViewController
     /// <summary>Was die Tabelle zeigt: Lieder und, im Album mit mehreren Discs, Disc-Zeilen.</summary>
     private List<object> _rows = [];
     private bool _sectioned;
+
+    // ── Unterordner, wie unter Windows unter der Liste ───────────
+    private List<(string Path, string Name, int Count)> _subfolders = [];
+    private readonly HashSet<string> _expanded = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<AudioTrack>> _subTracks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Zeilen bis hierher gehören zum Ordner selbst, danach kommen die Unterordner.</summary>
+    private int _ownEnd;
     private string _filter = "";
     private TrackSort _sort = TrackSort.Natural;
     private bool _descending;
@@ -80,7 +94,9 @@ internal sealed partial class TrackListController : NSViewController
         _table.ColumnAutoresizingStyle = NSTableViewColumnAutoresizingStyle.Uniform;
         _table.IntercellSpacing = new CGSize(12, 0);
         _table.DoubleAction = new Selector("rowDoubleClicked:");
+        _table.Action = new Selector("rowClicked:");
         _table.Target = this;
+        _table.FloatsGroupRows = false;
         _table.AutosaveName = Combined ? "TrackTableCombined" : "TrackTable";
         _table.AutosaveTableColumns = true;
 
@@ -253,6 +269,9 @@ internal sealed partial class TrackListController : NSViewController
             _all = [];
             _shown = [];
             _rows = [];
+            _subfolders = [];
+            _expanded.Clear();
+            _subTracks.Clear();
             _table.ReloadData();
             _title.StringValue = Path.GetFileName(folder.TrimEnd('/'));
             _count.StringValue = "";
@@ -261,14 +280,27 @@ internal sealed partial class TrackListController : NSViewController
         }
 
         List<AudioTrack> tracks;
+        List<(string Path, string Name, int Count)> subs;
         try
         {
             tracks = await Task.Run(() => FolderScanner.Tracks(folder, cts.Token).ToList(), cts.Token);
+            subs = await Task.Run(() => FolderScanner.AudioSubfolders(folder), cts.Token);
         }
         catch (OperationCanceledException) { return; }
         if (cts.IsCancellationRequested) return;
 
         _all = tracks;
+        _subfolders = subs;
+        // Ein Ordner ohne eigene Lieder, etwa der eines Interpreten: Dann
+        // gehört der Platz den Unterordnern, und sie stehen offen.
+        if (changed && tracks.Count == 0)
+            foreach (var sub in subs.Take(12)) _expanded.Add(sub.Path);
+        _subTracks.Clear();
+        foreach (var path in _expanded.ToList())
+        {
+            try { _subTracks[path] = await Task.Run(() => FolderScanner.Tracks(path, cts.Token).ToList(), cts.Token); }
+            catch (OperationCanceledException) { return; }
+        }
         Refresh();
         ShowEmpty();
         Loaded?.Invoke();
@@ -284,7 +316,8 @@ internal sealed partial class TrackListController : NSViewController
         _count.StringValue = Folder is null ? "" : $"{_all.Count} Track{(_all.Count == 1 ? "" : "s")}";
         _empty.StringValue = Folder is null
             ? Strings.T("Choose a folder on the left.")
-            : _all.Count == 0 ? Strings.T("No audio files in this folder.")
+            : _all.Count == 0 && _subfolders.Count == 0 ? Strings.T("No audio files in this folder.")
+            : _all.Count == 0 ? ""
             : _shown.Count == 0 ? Strings.T("Nothing found for \"{0}\".", _filter)
             : "";
         _empty.Hidden = _empty.StringValue.Length == 0;
@@ -334,7 +367,45 @@ internal sealed partial class TrackListController : NSViewController
             }
             _rows.Add(t);
         }
+
+        _ownEnd = _rows.Count;
+        if (_subfolders.Count > 0)
+        {
+            _rows.Add(new SubfoldersTitle(_subfolders.Count));
+            foreach (var (path, name, count) in _subfolders)
+            {
+                _rows.Add(new SubfolderRow(path, name, count));
+                if (!_expanded.Contains(path) || !_subTracks.TryGetValue(path, out var subTracks)) continue;
+                IEnumerable<AudioTrack> subList = subTracks;
+                if (_filter.Length > 0) subList = subList.Where(t => Matches(t, _filter));
+                _rows.AddRange(TrackSorting.Apply(subList, _sort, _descending, Settings.SortByDiscThenTrack));
+            }
+        }
         _table.ReloadData();
+    }
+
+    /// <summary>Einen Unterordner auf- oder zuklappen; seine Lieder werden beim ersten Mal gelesen.</summary>
+    private async void Toggle(SubfolderRow sub)
+    {
+        if (!_expanded.Remove(sub.Path))
+        {
+            _expanded.Add(sub.Path);
+            if (!_subTracks.ContainsKey(sub.Path))
+                _subTracks[sub.Path] = await Task.Run(() => FolderScanner.Tracks(sub.Path).ToList());
+        }
+        var keep = SelectedTracks.Select(t => t.Path).ToList();
+        Refresh();
+        Select(keep);
+    }
+
+    /// <summary>Alle Lieder, die gerade zu sehen sind, in Reihenfolge, Unterordner eingeschlossen.</summary>
+    private List<AudioTrack> Visible => [.. _rows.OfType<AudioTrack>()];
+
+    [Export("rowClicked:")]
+    public void RowClicked(NSObject sender)
+    {
+        var row = _table.ClickedRow;
+        if (row >= 0 && row < _rows.Count && _rows[(int)row] is SubfolderRow sub) Toggle(sub);
     }
 
     private static bool Matches(AudioTrack t, string q) =>
@@ -375,21 +446,25 @@ internal sealed partial class TrackListController : NSViewController
     public bool MoveRows(int[] block, int row)
     {
         if (!CanReorder) return false;
-        var moving = block.Where(i => i >= 0 && i < _rows.Count && _rows[i] is AudioTrack).Order().ToList();
+        // Umsortiert wird nur im Ordner selbst; die Unterordner sind eigene Playlists.
+        if (block.Any(i => i >= _ownEnd) || row > _ownEnd) return false;
+        var moving = block.Where(i => i >= 0 && i < _ownEnd && _rows[i] is AudioTrack).Order().ToList();
         if (moving.Count == 0) return false;
 
-        var items = moving.Select(i => _rows[i]).ToList();
-        var rest = _rows.Where((_, i) => !moving.Contains(i)).ToList();
+        var own = _rows.Take(_ownEnd).ToList();
+        var tail = _rows.Skip(_ownEnd).ToList();
+        var items = moving.Select(i => own[i]).ToList();
+        var rest = own.Where((_, i) => !moving.Contains(i)).ToList();
         var at = Math.Clamp(row - moving.Count(i => i < row), 0, rest.Count);
         var rows = rest.Take(at).Concat(items).Concat(rest.Skip(at)).ToList();
-        if (rows.SequenceEqual(_rows)) return false;
+        if (rows.SequenceEqual(own)) return false;
 
         var tracks = rows.OfType<AudioTrack>().ToList();
         uint[]? discs = _sectioned
             ? RowReorder.Sections([.. rows.Select(r => r is DiscRow d ? d.Disc : (uint?)null)])
             : null;
 
-        _rows = rows;
+        _rows = [.. rows, .. tail];
         _shown = tracks;
         _table.ReloadData();
         Select(items.OfType<AudioTrack>().Select(t => t.Path));
@@ -404,16 +479,20 @@ internal sealed partial class TrackListController : NSViewController
     /// <summary>Das Lied nach oder vor dem laufenden, in der angezeigten Reihenfolge.</summary>
     public AudioTrack? Neighbour(string? path, int step)
     {
-        var i = _shown.FindIndex(t => t.Path == path);
+        var list = Visible;
+        var i = list.FindIndex(t => t.Path == path);
         var j = i + step;
-        return i >= 0 && j >= 0 && j < _shown.Count ? _shown[j] : null;
+        return i >= 0 && j >= 0 && j < list.Count ? list[j] : null;
     }
 
     [Export("rowDoubleClicked:")]
     public void RowDoubleClicked(NSObject sender)
     {
         var row = _table.ClickedRow;
-        if (row >= 0 && row < _rows.Count && _rows[(int)row] is AudioTrack t) PlayRequested?.Invoke(t);
+        if (row < 0 || row >= _rows.Count) return;
+        if (_rows[(int)row] is AudioTrack t) PlayRequested?.Invoke(t);
+        else if (_rows[(int)row] is SubfolderRow sub)
+            (View.Window?.WindowController as MainWindowController)?.OpenFolder(sub.Path);
     }
 
     public void FocusTable() => View.Window?.MakeFirstResponder(_table);
@@ -499,6 +578,7 @@ internal sealed partial class TrackListController : NSViewController
             if (info.DraggingSource == tableView)
             {
                 if (!owner.CanReorder || owner._dragRows is null) return NSDragOperation.None;
+                if (row > owner._ownEnd || owner._dragRows.Any(i => i >= owner._ownEnd)) return NSDragOperation.None;
                 if (dropOperation == NSTableViewDropOperation.On)
                     tableView.SetDropRowDropOperation(row, NSTableViewDropOperation.Above);
                 return NSDragOperation.Move;
@@ -526,7 +606,7 @@ internal sealed partial class TrackListController : NSViewController
             {
                 // Die Stelle in der Playlist, ohne Disc-Zeilen gezählt. Sortiert
                 // oder gefiltert gibt es keine: ans Ende.
-                var at = owner.CanReorder
+                var at = owner.CanReorder && row <= owner._ownEnd
                     ? owner._rows.Take((int)row).Count(r => r is AudioTrack)
                     : owner._all.Count;
                 var move = NSEvent.CurrentModifierFlags.HasFlag(NSEventModifierMask.CommandKeyMask);
@@ -560,13 +640,43 @@ internal sealed partial class TrackListController : NSViewController
         private static readonly NSFont Mono = NSFont.MonospacedDigitSystemFontOfSize(12, NSFontWeight.Regular);
         private static readonly NSFont Small = NSFont.MonospacedSystemFont(10.5f, NSFontWeight.Regular);
 
-        public override nfloat GetRowHeight(NSTableView tableView, nint row) =>
-            owner._rows[(int)row] is DiscRow ? 36 : Combined ? 46 : 28;
+        public override nfloat GetRowHeight(NSTableView tableView, nint row) => owner._rows[(int)row] switch
+        {
+            DiscRow => 36,
+            SubfoldersTitle => 34,
+            SubfolderRow => 46,
+            _ => Combined ? 46 : 28,
+        };
+
+        /// <summary>Kopfzeilen der Unterordner laufen über die ganze Breite.</summary>
+        public override bool IsGroupRow(NSTableView tableView, nint row) =>
+            owner._rows[(int)row] is SubfoldersTitle or SubfolderRow;
 
         public override bool ShouldSelectRow(NSTableView tableView, nint row) => owner._rows[(int)row] is AudioTrack;
 
-        public override NSView GetViewForItem(NSTableView tableView, NSTableColumn tableColumn, nint row)
+        public override NSView GetViewForItem(NSTableView tableView, NSTableColumn? tableColumn, nint row)
         {
+            if (owner._rows[(int)row] is SubfoldersTitle title)
+            {
+                var l = Theme.Section($"{Strings.T("SUBFOLDERS")}  {title.Count}");
+                var box = new NSView();
+                l.TranslatesAutoresizingMaskIntoConstraints = false;
+                box.AddSubview(l);
+                NSLayoutConstraint.ActivateConstraints([
+                    l.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor, 14),
+                    l.BottomAnchor.ConstraintEqualTo(box.BottomAnchor, -6),
+                ]);
+                return box;
+            }
+            if (owner._rows[(int)row] is SubfolderRow sub)
+            {
+                var sc = tableView.MakeView("sub", this) as SubfolderCell ?? new SubfolderCell { Identifier = "sub" };
+                sc.Show(sub, owner._expanded.Contains(sub.Path), () => owner.Toggle(sub),
+                        () => (owner.View.Window?.WindowController as MainWindowController)?.OpenFolder(sub.Path));
+                return sc;
+            }
+            if (tableColumn is null) return new NSView();
+
             if (owner._rows[(int)row] is DiscRow disc)
             {
                 // Die Disc-Zeile steht in der ersten Spalte, die übrigen bleiben leer.
@@ -732,6 +842,76 @@ internal sealed partial class TrackListController : NSViewController
             _art.ContentTintColor = NSColor.TertiaryLabel;
             _art.ImageScaling = art is null ? NSImageScale.ProportionallyDown : NSImageScale.ProportionallyUpOrDown;
             _art.Layer!.BackgroundColor = NSColor.FromWhite(1, 0.05f).CGColor;
+        }
+    }
+
+    /// <summary>
+    /// Kopf eines Unterordner-Abschnitts: Pfeil, Cover, Name, Zahl der Dateien
+    /// und ein Knopf, der den Unterordner selbst öffnet, wie unter Windows.
+    /// </summary>
+    private sealed class SubfolderCell : NSTableCellView
+    {
+        private readonly NSButton _chevron = NSButton.CreateButton(NSImage.GetSystemSymbol("chevron.right", null)!, () => { });
+        private readonly NSImageView _art = new() { ImageScaling = NSImageScale.ProportionallyUpOrDown, WantsLayer = true };
+        private readonly NSTextField _name = NSTextField.CreateLabel("");
+        private readonly NSTextField _count = NSTextField.CreateLabel("");
+        private readonly NSButton _open = NSButton.CreateButton(NSImage.GetSystemSymbol("arrow.up.forward.square", null)!, () => { });
+        private Action? _toggle, _openFolder;
+
+        public SubfolderCell()
+        {
+            WantsLayer = true;
+            Layer!.BackgroundColor = NSColor.FromWhite(1, 0.04f).CGColor;
+            Layer.CornerRadius = 8;
+            _chevron.Bordered = _open.Bordered = false;
+            _chevron.Activated += (_, _) => _toggle?.Invoke();
+            _open.Activated += (_, _) => _openFolder?.Invoke();
+            _open.ToolTip = Strings.T("Open this folder");
+            _art.Layer!.CornerRadius = 4;
+            _art.Layer.MasksToBounds = true;
+            _name.Font = NSFont.SystemFontOfSize(13, NSFontWeight.Semibold);
+            _count.Font = NSFont.MonospacedSystemFont(10.5f, NSFontWeight.Regular);
+            _count.TextColor = NSColor.TertiaryLabel;
+            foreach (var v in new NSView[] { _chevron, _art, _name, _count, _open })
+            {
+                v.TranslatesAutoresizingMaskIntoConstraints = false;
+                AddSubview(v);
+            }
+            NSLayoutConstraint.ActivateConstraints([
+                _chevron.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 10),
+                _chevron.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _art.LeadingAnchor.ConstraintEqualTo(_chevron.TrailingAnchor, 8),
+                _art.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _art.WidthAnchor.ConstraintEqualTo(30),
+                _art.HeightAnchor.ConstraintEqualTo(30),
+                _name.LeadingAnchor.ConstraintEqualTo(_art.TrailingAnchor, 10),
+                _name.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _open.TrailingAnchor.ConstraintEqualTo(TrailingAnchor, -12),
+                _open.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _count.TrailingAnchor.ConstraintEqualTo(_open.LeadingAnchor, -10),
+                _count.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+                _name.TrailingAnchor.ConstraintLessThanOrEqualTo(_count.LeadingAnchor, -10),
+            ]);
+        }
+
+        public void Show(SubfolderRow sub, bool open, Action toggle, Action openFolder)
+        {
+            _toggle = toggle;
+            _openFolder = openFolder;
+            _chevron.Image = NSImage.GetSystemSymbol(open ? "chevron.down" : "chevron.right", null);
+            _name.StringValue = sub.Name;
+            _count.StringValue = Strings.T("{0} files", sub.Count);
+            if (FolderLook.TryGet(sub.Path, out var look))
+                _art.Image = look.Cover ?? NSImage.GetSystemSymbol("folder", null);
+            else
+            {
+                _art.Image = NSImage.GetSystemSymbol("folder", null);
+                FolderLook.Load(sub.Path, () =>
+                {
+                    if (_name.StringValue == sub.Name && FolderLook.TryGet(sub.Path, out var l))
+                        _art.Image = l.Cover ?? NSImage.GetSystemSymbol("folder", null);
+                });
+            }
         }
     }
 

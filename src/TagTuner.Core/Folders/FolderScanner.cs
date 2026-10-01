@@ -161,6 +161,37 @@ public static class FolderScanner
         }
     }
 
+    /// <summary>
+    /// Die Unterordner eines Ordners, in denen irgendwo Musik liegt, mit der
+    /// Zahl der Lieder direkt darin. Für die Unterordner-Abschnitte unter der
+    /// Trackliste. Ab <paramref name="max"/> Unterordnern ist es kein Album und
+    /// kein Interpret mehr, sondern eine Bibliothek: dann gibt es keine.
+    /// </summary>
+    public static List<(string Path, string Name, int Count)> AudioSubfolders(string folder, int max = 80)
+    {
+        try
+        {
+            // Erst zählen, dann in die Tiefe schauen: Das Nachsehen, ob unter
+            // einem Ordner Musik liegt, kostet je Ordner einen Plattenzugriff.
+            var all = Subfolders(folder);
+            if (all.Count > max) return [];
+
+            return [.. all
+                .Where(f => HasAudioBelow(f.Path))
+                .Select(f => (f.Path, f.Name, Count: CountAudio(f.Path)))];
+        }
+        catch { return []; }
+
+        static int CountAudio(string path)
+        {
+            try
+            {
+                return Directory.EnumerateFiles(path).Count(f => AudioFormats.IsAudioFile(System.IO.Path.GetFileName(f)));
+            }
+            catch { return 0; }
+        }
+    }
+
     /// <summary>Grobe Vorabzählung für die Rückfrage vor dem rekursiven Sichten.</summary>
     public static int CountRecursive(string path, int stopAt = 5000)
     {
