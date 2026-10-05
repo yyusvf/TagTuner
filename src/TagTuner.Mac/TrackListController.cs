@@ -126,11 +126,13 @@ internal sealed partial class TrackListController : NSViewController
         _table.SetDraggingSourceOperationMask(NSDragOperation.Move, true);
         _table.SetDraggingSourceOperationMask(NSDragOperation.Copy, false);
 
+        // Ohne waagerechten Bildlauf: Die Spalten teilen sich die Breite wie im
+        // Finder, statt dass rechts etwas hinter dem Rand verschwindet.
         var scroll = new NSScrollView
         {
             DocumentView = _table,
             HasVerticalScroller = true,
-            HasHorizontalScroller = true,
+            HasHorizontalScroller = false,
             AutohidesScrollers = true,
             DrawsBackground = false,
         };
@@ -179,6 +181,22 @@ internal sealed partial class TrackListController : NSViewController
         ShowEmpty();
     }
 
+    /// <summary>
+    /// Die Spalten in die verfügbare Breite bringen. Gespeicherte Breiten
+    /// können größer sein als der Platz, etwa nach einem kleineren Fenster;
+    /// dann geben die Textspalten nach, Nummern und Kürzel nicht.
+    /// </summary>
+    public override void ViewDidLayout()
+    {
+        base.ViewDidLayout();
+        if (_table.Superview is { } clip && Math.Abs(_table.Frame.Width - clip.Bounds.Width) > 1)
+        {
+            _rebuilding = true;
+            _table.SizeToFit();
+            _rebuilding = false;
+        }
+    }
+
     // ── Spalten ──────────────────────────────────────────────────
 
     private static IEnumerable<TrackColumn> VisibleColumns()
@@ -197,6 +215,7 @@ internal sealed partial class TrackListController : NSViewController
         _rebuilding = true;
         foreach (var c in _table.TableColumns()) _table.RemoveColumn(c);
         foreach (var col in VisibleColumns()) _table.AddColumn(NewColumn(col));
+        _table.SizeToFit();
         _rebuilding = false;
         _table.ReloadData();
     }
@@ -234,7 +253,7 @@ internal sealed partial class TrackListController : NSViewController
                 ? $"{Strings.T("TITLE")} · {Strings.T("ARTIST")}"
                 : Strings.T(col.Header),
             Width = (nfloat)width,
-            MinWidth = col.IsCover ? 36 : 30,
+            MinWidth = col.IsCover ? 36 : col.Id == "title" ? 140 : col.Look == ColumnLook.Text ? 70 : 30,
             Editable = false,
         };
         if (col.IsCover) c.MaxWidth = 36;
@@ -711,7 +730,7 @@ internal sealed partial class TrackListController : NSViewController
 
         /// <summary>Kopfzeilen der Unterordner laufen über die ganze Breite.</summary>
         public override bool IsGroupRow(NSTableView tableView, nint row) =>
-            owner._rows[(int)row] is SubfoldersTitle or SubfolderRow;
+            owner._rows[(int)row] is SubfoldersTitle or SubfolderRow or DiscRow;
 
         public override bool ShouldSelectRow(NSTableView tableView, nint row) => owner._rows[(int)row] is AudioTrack;
 
@@ -738,17 +757,15 @@ internal sealed partial class TrackListController : NSViewController
                         () => (owner.View.Window?.WindowController as MainWindowController)?.OpenFolder(sub.Path));
                 return sc;
             }
-            if (tableColumn is null) return new NSView();
-
             if (owner._rows[(int)row] is DiscRow disc)
             {
-                // Die Disc-Zeile steht in der ersten Spalte, die übrigen bleiben leer.
+                // Über die ganze Breite, eingerückt wie die Nummern darunter.
                 var dv = tableView.MakeView("disc", this) as NSTableCellView ?? NewDiscCell();
-                var first = tableView.TableColumns().FirstOrDefault() == tableColumn;
-                dv.TextField!.StringValue = first ? Strings.T("Disc {0}", disc.Disc) : "";
-                dv.ImageView!.Hidden = !first;
+                dv.TextField!.StringValue = Strings.T("Disc {0}", disc.Disc);
                 return dv;
             }
+            if (tableColumn is null) return new NSView();
+
 
             var track = (AudioTrack)owner._rows[(int)row];
             var col = TrackColumn.ById(tableColumn.Identifier);
@@ -844,7 +861,7 @@ internal sealed partial class TrackListController : NSViewController
             cell.ImageView = icon;
             cell.TextField = text;
             NSLayoutConstraint.ActivateConstraints([
-                icon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 2),
+                icon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 18),
                 icon.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor, 2),
                 text.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 6),
                 text.CenterYAnchor.ConstraintEqualTo(icon.CenterYAnchor),

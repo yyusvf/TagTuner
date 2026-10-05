@@ -62,14 +62,15 @@ public sealed partial class MainWindowController : NSWindowController
         list.MinimumThickness = 380;
         list.HoldingPriority = 200;
         var panel = NSSplitViewItem.CreateInspector(_panel);
-        panel.MinimumThickness = 240;
-        panel.MaximumThickness = 380;
-        panel.PreferredThicknessFraction = 0.14f;
+        // Ein Inspektor, kein zweiter Inhalt: schmal wie in Apples eigenen Apps.
+        panel.MinimumThickness = 220;
+        panel.MaximumThickness = 290;
+        panel.PreferredThicknessFraction = 0.15f;
         _split.AddSplitViewItem(meta);
         _split.AddSplitViewItem(lib);
         _split.AddSplitViewItem(list);
         _split.AddSplitViewItem(panel);
-        _split.SplitView.AutosaveName = "MainSplit5";
+        _split.SplitView.AutosaveName = "MainSplit6";
 
         Window.ContentViewController = new RootController(_split, _bar);
         if (first) Window.FrameAutosaveName = "MainWindow";
@@ -768,8 +769,8 @@ internal sealed class RootController(NSSplitViewController split, PlayerBar bar)
     {
         var root = new NSView();
         AddChildViewController(split);
-        var line = new NSBox { BoxType = NSBoxType.NSBoxSeparator };
-        foreach (var v in new NSView[] { split.View, line, bar })
+        // Keine Trennlinie: Die Kapsel aus Glas schwebt über dem Inhalt.
+        foreach (var v in new NSView[] { split.View, bar })
         {
             v.TranslatesAutoresizingMaskIntoConstraints = false;
             root.AddSubview(v);
@@ -778,14 +779,11 @@ internal sealed class RootController(NSSplitViewController split, PlayerBar bar)
             split.View.TopAnchor.ConstraintEqualTo(root.TopAnchor),
             split.View.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
             split.View.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            split.View.BottomAnchor.ConstraintEqualTo(line.TopAnchor),
-            line.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
-            line.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            line.BottomAnchor.ConstraintEqualTo(bar.TopAnchor),
+            split.View.BottomAnchor.ConstraintEqualTo(bar.TopAnchor),
             bar.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
             bar.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
             bar.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
-            bar.HeightAnchor.ConstraintEqualTo(50),
+            bar.HeightAnchor.ConstraintEqualTo(64),
         ]);
         View = root;
     }

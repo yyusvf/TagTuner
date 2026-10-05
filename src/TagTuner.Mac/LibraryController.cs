@@ -116,8 +116,8 @@ internal sealed partial class LibraryController : NSViewController
         // Die eine Spalte füllt immer die Breite, damit Namen gekürzt statt abgeschnitten werden.
         _outline.ColumnAutoresizingStyle = NSTableViewColumnAutoresizingStyle.FirstColumnOnly;
         _outline.HeaderView = null;
-        _outline.RowHeight = 44;
-        _outline.IndentationPerLevel = 14;
+        _outline.RowHeight = 30;
+        _outline.IndentationPerLevel = 12;
         _outline.AutosaveExpandedItems = false;
         var column = new NSTableColumn("name") { Editable = false, ResizingMask = NSTableColumnResizing.Autoresizing };
         _outline.AddColumn(column);
@@ -408,6 +408,14 @@ internal sealed partial class LibraryController : NSViewController
     {
         public override NSTableRowView RowViewForItem(NSOutlineView outlineView, NSObject item) => new SelectionRowView(bar: true);
 
+        /// <summary>
+        /// Kompakt wie im Finder; zweizeilig nur, wo es etwas zu zeigen gibt:
+        /// ein Album mit Cover oder Interpret.
+        /// </summary>
+        public override nfloat GetRowHeight(NSOutlineView outlineView, NSObject item) =>
+            item is FolderNode { Parent: not null } n && FolderLook.TryGet(n.Entry.Path, out var look)
+            && (look.Cover is not null || look.Artist.Length > 0) ? 44 : 30;
+
         public override NSView GetView(NSOutlineView outlineView, NSTableColumn? tableColumn, NSObject item)
         {
             var node = (FolderNode)item;
@@ -432,7 +440,10 @@ internal sealed partial class LibraryController : NSViewController
                 FolderLook.Load(path, () =>
                 {
                     var row = outlineView.RowForItem(node);
-                    if (row >= 0) outlineView.ReloadData(NSIndexSet.FromIndex(row), NSIndexSet.FromIndex(0));
+                    if (row < 0) return;
+                    outlineView.ReloadData(NSIndexSet.FromIndex(row), NSIndexSet.FromIndex(0));
+                    // Mit Cover oder Interpret wird die Zeile zweizeilig.
+                    outlineView.NoteHeightOfRowsWithIndexesChanged(NSIndexSet.FromIndex(row));
                 });
             }
             return cell;
@@ -488,11 +499,11 @@ internal sealed class FolderCell : NSTableCellView
         }
         _size = _image.WidthAnchor.ConstraintEqualTo(32);
         NSLayoutConstraint.ActivateConstraints([
-            _image.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 2),
+            _image.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 4),
             _image.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
             _size,
             _image.HeightAnchor.ConstraintEqualTo(_image.WidthAnchor),
-            _text.LeadingAnchor.ConstraintEqualTo(_image.TrailingAnchor, 9),
+            _text.LeadingAnchor.ConstraintEqualTo(_image.TrailingAnchor, 8),
             _text.TrailingAnchor.ConstraintLessThanOrEqualTo(TrailingAnchor, -4),
             _text.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
             _name.WidthAnchor.ConstraintLessThanOrEqualTo(_text.WidthAnchor),
@@ -506,13 +517,14 @@ internal sealed class FolderCell : NSTableCellView
         _name.StringValue = name;
         _artist.StringValue = artist;
         _artist.Hidden = artist.Length == 0;
-        _size.Constant = size;
+        // Ein Cover füllt sein Feld; ein Symbol steht schlicht und ungerahmt
+        // da wie im Finder, in der Akzentfarbe gedämpft.
+        _size.Constant = isCover ? size : 18;
         _image.Image = image;
-        // Ein Symbol wird klein und grau gezeichnet, ein Cover füllt das Feld.
         _image.ImageScaling = isCover ? NSImageScale.ProportionallyUpOrDown : NSImageScale.ProportionallyDown;
-        _image.ContentTintColor = isCover ? null : NSColor.SecondaryLabel;
-        _image.SymbolConfiguration = NSImageSymbolConfiguration.Create(17, NSFontWeight.Regular);
-        _image.Layer!.BackgroundColor = isCover ? null : NSColor.FromWhite(1, 0.05f).CGColor;
+        _image.ContentTintColor = isCover ? null : Theme.Accent.ColorWithAlphaComponent(0.85f);
+        _image.SymbolConfiguration = NSImageSymbolConfiguration.Create(14, NSFontWeight.Regular);
+        _image.Layer!.BackgroundColor = null;
         ToolTip = artist.Length > 0 ? $"{name}\n{artist}" : name;
     }
 }
