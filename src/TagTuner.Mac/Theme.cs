@@ -66,4 +66,31 @@ internal static class Theme
         ]);
         return box;
     }
+
+}
+
+/// <summary>
+/// Die Auswahl wie unter Windows: eine dezente helle Fläche statt der vollen
+/// Akzentfarbe, auf der weiße Schrift auf Lindgrün kaum zu lesen wäre. Mit
+/// <see cref="Bar"/> dazu der grüne Strich am linken Rand, wie in der
+/// Bibliothek und der Leiste der Einstellungen.
+/// </summary>
+internal sealed class SelectionRowView : NSTableRowView
+{
+    public SelectionRowView(bool bar) => Bar = bar;
+
+    public bool Bar { get; }
+
+    public override void DrawSelection(CGRect dirtyRect)
+    {
+        var r = Bounds.Inset(4, 1);
+        NSColor.FromWhite(1, Emphasized ? 0.11f : 0.07f).SetFill();
+        NSBezierPath.FromRoundedRect(r, 6, 6).Fill();
+        if (!Bar) return;
+        Theme.Accent.SetFill();
+        NSBezierPath.FromRoundedRect(new CGRect(r.X, r.GetMidY() - 8, 3, 16), 1.5f, 1.5f).Fill();
+    }
+
+    /// <summary>Die Schrift bleibt, wie sie ist: Auf der hellen Fläche braucht sie keine Umkehrung.</summary>
+    public override NSBackgroundStyle InteriorBackgroundStyle => NSBackgroundStyle.Normal;
 }

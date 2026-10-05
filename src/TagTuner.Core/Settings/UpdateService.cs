@@ -47,9 +47,22 @@ public static class UpdateService
     public const string SilentArguments =
         "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SP- /RELAUNCH=1";
 
+    /// <summary>Das Setup für Windows: nur der Installer kann sich über die laufende Fassung legen.</summary>
+    public static bool IsWindowsSetup(string assetName) =>
+        assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+        && assetName.Contains("setup", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Das Disk-Image für macOS.</summary>
+    public static bool IsMacImage(string assetName) =>
+        assetName.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Fragt GitHub nach der neuesten Veröffentlichung.</summary>
+    public static Task<UpdateCheck> CheckAsync(string currentVersion, CancellationToken ct = default) =>
+        CheckAsync(currentVersion, IsWindowsSetup, ct);
+
+    /// <param name="pickAsset">Welche Datei des Releases die richtige ist; landet in <see cref="UpdateCheck.SetupUrl"/>.</param>
     public static async Task<UpdateCheck> CheckAsync(
-        string currentVersion, CancellationToken ct = default)
+        string currentVersion, Func<string, bool> pickAsset, CancellationToken ct = default)
     {
         try
         {
@@ -77,8 +90,7 @@ public static class UpdateService
                 foreach (var asset in assets.EnumerateArray())
                 {
                     var name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                    if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!name.Contains("setup", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!pickAsset(name)) continue;
 
                     setup = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
                     break;
@@ -96,8 +108,12 @@ public static class UpdateService
     /// Die Suche beim Start, mit allen Regeln der Einstellung.
     /// Liefert null, wenn nichts zu melden ist.
     /// </summary>
+    public static Task<UpdateCheck?> CheckOnStartAsync(
+        AppSettings settings, string currentVersion, CancellationToken ct = default) =>
+        CheckOnStartAsync(settings, currentVersion, IsWindowsSetup, ct);
+
     public static async Task<UpdateCheck?> CheckOnStartAsync(
-        AppSettings settings, string currentVersion, CancellationToken ct = default)
+        AppSettings settings, string currentVersion, Func<string, bool> pickAsset, CancellationToken ct = default)
     {
         if (settings.UpdateBehavior == "never") return null;
 
@@ -112,7 +128,7 @@ public static class UpdateService
         settings.LastUpdateCheck = DateTime.Now.ToString("o");
         settings.Save();
 
-        var found = await CheckAsync(currentVersion, ct);
+        var found = await CheckAsync(currentVersion, pickAsset, ct);
         if (!found.HasUpdate || found.Failed) return null;
 
         // Im Hintergrund nicht mit einer Version nerven, die schon abgelehnt

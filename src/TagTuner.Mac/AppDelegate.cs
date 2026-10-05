@@ -64,6 +64,8 @@ public sealed class AppDelegate : NSApplicationDelegate
         var args = Environment.GetCommandLineArgs().Skip(1)
             .FirstOrDefault(a => !a.StartsWith('-') && Directory.Exists(a));
         NSApplication.SharedApplication.ServicesProvider = this;
+        // Wie unter Windows: nach dem Start im Hintergrund, nach den Regeln der Einstellung.
+        MacUpdates.CheckOnStart(_main.Window);
         if (_pendingOpen is { } pending) { _pendingOpen = null; Open(pending); }
         else if (args is not null) _main.OpenFolder(args);
         else _main.OpenLastFolder();

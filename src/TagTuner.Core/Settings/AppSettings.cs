@@ -64,6 +64,29 @@ public sealed class AppSettings
     public List<TrackColumnState> TrackColumns { get; set; } = [];
 
     /// <summary>
+    /// Bringt <see cref="TrackColumns"/> auf den vollen Katalog: Unbekanntes
+    /// fällt weg, Doppeltes auch, und was fehlt, kommt mit seiner Vorgabe ans
+    /// Ende. Danach steht jede Spalte genau einmal in der Liste, sichtbar oder
+    /// nicht, in der Reihenfolge, die der Nutzer gewählt hat. (Bis zur
+    /// Mac-App stand das als TrackColumns.EnsureStates in der Windows-App.)
+    /// </summary>
+    public void EnsureTrackColumns()
+    {
+        var known = TrackColumns
+            .Where(s => Model.TrackColumn.ById(s.Id) is not null)
+            .GroupBy(s => s.Id, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToList();
+        var seen = known.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var column in Model.TrackColumn.All)
+        {
+            if (seen.Contains(column.Id)) continue;
+            known.Add(new TrackColumnState { Id = column.Id, Visible = column.OnByDefault, Width = column.Width });
+        }
+        TrackColumns = known;
+    }
+
+    /// <summary>
     /// Titel und Interpret in einer Spalte, der Interpret klein darunter.
     /// Aus heißt: zwei eigene Spalten.
     /// </summary>

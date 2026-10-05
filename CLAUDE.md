@@ -115,8 +115,16 @@ Shell: `export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
 **Die Mac-App lebt auf dem Zweig `mac`, getrennt von `master`** (Wunsch des Nutzers, „eigener Fork im
 TagTuner-Repo“). `master` bleibt die Windows-App und wird von dort veröffentlicht. Auf dem Mac auf `mac`
 arbeiten und dorthin pushen; Neues von `master` mit `git merge master` hereinholen. Was auf `mac` in
-Core gewandert ist (`AlbumCover`, `FolderImport`, `FileNaming.Plan`, `build-strings.py`, neue
+Core gewandert ist (`AlbumCover`, `FolderImport`, `FileNaming.Plan`, `FolderScanner.AudioSubfolders`,
+`AppSettings.EnsureTrackColumns`, `UpdateService`-Überladung mit Dateiwahl, `build-strings.py`, neue
 Übersetzungen), ist auf `master` noch nicht; nur auf Wunsch zurück nach `master` bringen.
+
+**Ziel 1:1 mit Windows:** Bereich für Bereich die Windows-Quellen lesen und nachbauen, dieselben
+Texte (Schlüssel) und dieselbe Gliederung. Erledigt: Einstellungen (`SettingsWindow` folgt
+`SettingsCatalog`: Allgemein, Ordner, Bibliothek, Tags, Trackliste, Sicherungen). Spalten-Reihenfolge
+und Breiten stehen wie unter Windows in `TrackColumns`, nicht in den macOS-Voreinstellungen.
+Auswahl in Listen: `SelectionRowView` (helle Fläche, in Seitenleisten mit grünem Strich), dafür
+müssen die Listen `NSTableViewStyle.Plain` sein; im Seitenleisten-Stil zeichnet AppKit selbst.
 
 `src/TagTuner.Mac` steht (Schritte 1 und 2 größtenteils, siehe Tabelle unten). AppKit ganz im Code,
 kein Storyboard. **Visuell wie die Windows-App aufgebaut** (Wunsch des Nutzers): `MainWindowController`
@@ -190,6 +198,6 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 | Sicherungen vor jeder Änderung, Verlauf, Rückgängig, Sicherungen-Seite | ✓ | ✓ |
 | Player mit Fortschritt, Lautstärke, Systemmedienanzeige | ✓ | ✓ |
 | Kontextmenü im Dateimanager inkl. kleines Bearbeiten-Fenster | ✓ (Explorer) | ✓ (Finder-Dienste „In TagTuner öffnen“ und „Metadaten bearbeiten“, „Öffnen mit“, Dock) |
-| Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | teils (ohne Updates) |
+| Einstellungen (Sprache, Updates, Standards, Spalten, Sicherungen) | ✓ | ✓ (gleiche Kategorien und Zeilen; Update = DMG laden und öffnen) |
 | Stille Updates | ✓ (Inno Setup) | offen (Sparkle) |
 | 13 Sprachen | ✓ | ✓ |

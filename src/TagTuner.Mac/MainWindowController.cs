@@ -112,6 +112,7 @@ public sealed partial class MainWindowController : NSWindowController
         _player.Finished += OnFinished;
         AppDelegate.History.Added += OnHistoryAdded;
         BackupsWindow.Restored += OnRestored;
+        SettingsWindow.Changed += OnSettingsChanged;
 
         _ticker = NSTimer.CreateRepeatingScheduledTimer(0.5, _ => Tick());
         UpdatePlayer();
@@ -373,6 +374,30 @@ public sealed partial class MainWindowController : NSWindowController
             AfterWrite(paths, Strings.T("{0} backup(s) restored", paths.Count));
     }
 
+    /// <summary>Was die Einstellungen geändert haben, nur an der Stelle nachziehen, die es angeht.</summary>
+    private void OnSettingsChanged(string what)
+    {
+        var panes = new[] { _paneA, _paneB }.OfType<TrackListController>().ToList();
+        switch (what)
+        {
+            case "library":
+                Core.Folders.FolderScanner.ForgetAudioScan();
+                _library.Reload();
+                if (_tracks.Folder is { } f) _library.Reveal(f);
+                break;
+            case "columns":
+                foreach (var p in panes) { p.RebuildColumns(); p.Refresh(); }
+                break;
+            case "sorting":
+                foreach (var p in panes) p.Refresh();
+                break;
+            case "rules":
+                _panel.Show(_tracks.Folder, _tracks.Tracks);
+                foreach (var p in panes) p.Refresh();
+                break;
+        }
+    }
+
     public void SaveState()
     {
         Settings.Volume = _player.Volume;
@@ -389,6 +414,7 @@ public sealed partial class MainWindowController : NSWindowController
         _player.Finished -= OnFinished;
         AppDelegate.History.Added -= OnHistoryAdded;
         BackupsWindow.Restored -= OnRestored;
+        SettingsWindow.Changed -= OnSettingsChanged;
         if (_player.Owner == this) _player.Stop();
         SaveState();
         Closed?.Invoke(this);

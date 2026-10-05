@@ -47,6 +47,13 @@ public sealed partial class MainWindowController
                     case "openwith": OpenFolder(Path.GetDirectoryName(parts[1].Split('|')[0])!, parts[1].Split('|')); break;
                     case "selected": Console.Error.WriteLine("SELECTED " + string.Join(",", _tracks.SelectedTracks.Select(t => t.FileName))); break;
                     case "quickedit": QuickEditWindow.Show(parts[1].Split('|')); break;
+                    case "combine":
+                        AppDelegate.Settings.CombineTitleAndArtist = parts[1] == "on";
+                        SettingsWindow.Notify("columns"); break;
+                    case "column":
+                        AppDelegate.Settings.EnsureTrackColumns();
+                        AppDelegate.Settings.TrackColumns.First(c => c.Id == parts[1]).Visible = parts[2] == "on";
+                        SettingsWindow.Notify("columns"); break;
                     case "split": ToggleSplit(Window); break;
                     case "pane": Activate(parts[1] == "b" && _paneB is not null ? _paneB : _paneA); break;
                     case "backups": BackupsWindow.Show(); break;
@@ -59,7 +66,7 @@ public sealed partial class MainWindowController
                     case "dropmove": OnFilesDropped([.. parts[2].Split('|')], int.Parse(parts[1]), true); break;
                     case "copytags": CopyTags(Window); break;
                     case "pastetags": PasteTags(Window); break;
-                    case "settings": SettingsWindow.Show(); break;
+                    case "settings": SettingsWindow.Show(parts.Length > 1 ? parts[1] : null); break;
                     case "history": ShowHistory(Window); break;
                     case "open": OpenFolder(parts[1]); break;
                     case "wait": await Task.Delay(int.Parse(parts[1])); break;

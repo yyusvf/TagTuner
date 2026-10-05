@@ -109,8 +109,10 @@ internal sealed partial class TrackListController : NSViewController
         _table.Action = new Selector("rowClicked:");
         _table.Target = this;
         _table.FloatsGroupRows = false;
-        _table.AutosaveName = Combined ? "TrackTableCombined" : "TrackTable";
-        _table.AutosaveTableColumns = true;
+        // Reihenfolge und Breiten stehen wie unter Windows in den Einstellungen
+        // (TrackColumns), nicht in den macOS-Voreinstellungen: Sonst stritten
+        // sich zwei Stellen darum, und die Spaltenliste der Einstellungen
+        // hätte nicht das letzte Wort.
 
         foreach (var col in VisibleColumns()) _table.AddColumn(NewColumn(col));
 
@@ -181,16 +183,51 @@ internal sealed partial class TrackListController : NSViewController
 
     private static IEnumerable<TrackColumn> VisibleColumns()
     {
-        IEnumerable<TrackColumn> cols = Settings.TrackColumns.Count == 0
-            ? TrackColumn.All.Where(c => c.OnByDefault)
-            : Settings.TrackColumns.Where(s => s.Visible).Select(s => TrackColumn.ById(s.Id)).OfType<TrackColumn>();
+        Settings.EnsureTrackColumns();
+        var cols = Settings.TrackColumns.Where(s => s.Visible).Select(s => TrackColumn.ById(s.Id)).OfType<TrackColumn>();
         // Vereint steckt das Cover in der Titelspalte, und der Interpret darunter.
         return Combined ? cols.Where(c => !c.IsCover && c.Id != "artist") : cols;
     }
 
+    private bool _rebuilding;
+
+    /// <summary>Die Spalten neu aufbauen, nach einer Änderung in den Einstellungen.</summary>
+    public void RebuildColumns()
+    {
+        _rebuilding = true;
+        foreach (var c in _table.TableColumns()) _table.RemoveColumn(c);
+        foreach (var col in VisibleColumns()) _table.AddColumn(NewColumn(col));
+        _rebuilding = false;
+        _table.ReloadData();
+    }
+
+    /// <summary>
+    /// Reihenfolge und Breiten aus der Tabelle in die Einstellungen. Was die
+    /// Tabelle nicht zeigt (ausgeblendet oder vereint), behält seinen Platz
+    /// relativ zu den anderen.
+    /// </summary>
+    private void RememberColumns()
+    {
+        if (_rebuilding) return;
+        Settings.EnsureTrackColumns();
+        var shown = _table.TableColumns().Select(c => c.Identifier).ToList();
+        var states = Settings.TrackColumns;
+        foreach (var c in _table.TableColumns())
+            if (states.FirstOrDefault(s => s.Id == c.Identifier) is { } st && !(c.Identifier == "title" && Combined))
+                st.Width = c.Width;
+
+        // Die gezeigten Spalten in ihrer neuen Reihenfolge auf die Plätze, die
+        // gezeigte Spalten vorher hatten.
+        var slots = states.Select((st, i) => (st, i)).Where(x => shown.Contains(x.st.Id)).Select(x => x.i).ToList();
+        var ordered = shown.Select(id => states.First(st => st.Id == id)).ToList();
+        for (var k = 0; k < slots.Count && k < ordered.Count; k++) states[slots[k]] = ordered[k];
+        Settings.Save();
+    }
+
     private static NSTableColumn NewColumn(TrackColumn col)
     {
-        var width = col.IsCover ? 36 : col.Id == "title" && Combined ? 280 : col.Width;
+        var saved = Settings.TrackColumns.FirstOrDefault(s => s.Id == col.Id)?.Width ?? 0;
+        var width = col.IsCover ? 36 : col.Id == "title" && Combined ? 280 : saved > 20 ? saved : col.Width;
         var c = new NSTableColumn(col.Id)
         {
             Title = col.Id == "title" && Combined
@@ -238,33 +275,12 @@ internal sealed partial class TrackListController : NSViewController
 
     private void ToggleColumn(TrackColumn col)
     {
-        var at = _table.FindColumn(new NSString(col.Id));
-        if (at >= 0)
-        {
-            if (_table.ColumnCount <= 2) return;   // eine Textspalte bleibt immer
-            _table.RemoveColumn(_table.TableColumns()[at]);
-        }
-        else
-        {
-            _table.AddColumn(NewColumn(col));
-            // An ihren Platz aus dem Katalog, nicht einfach ans Ende.
-            var all = TrackColumn.All.ToList();
-            var wanted = all.IndexOf(col);
-            var target = _table.TableColumns().Count(c =>
-                TrackColumn.ById(c.Identifier) is { } other && all.IndexOf(other) < wanted);
-            _table.MoveColumn(_table.ColumnCount - 1, target);
-        }
-
-        // Vereint fehlen Cover und Interpret in der Tabelle, gemeint sind sie trotzdem.
-        var ids = _table.TableColumns().Select(c => c.Identifier).ToList();
-        if (Combined)
-        {
-            ids.Insert(Math.Min(1, ids.Count), "cover");
-            ids.Insert(Math.Min(3, ids.Count), "artist");
-        }
-        Settings.TrackColumns = [.. ids.Select(id => new TrackColumnState { Id = id, Visible = true })];
+        Settings.EnsureTrackColumns();
+        var state = Settings.TrackColumns.First(s => s.Id == col.Id);
+        if (state.Visible && _table.ColumnCount <= 2) return;   // eine Textspalte bleibt immer
+        state.Visible = !state.Visible;
         Settings.Save();
-        _table.ReloadData();
+        RebuildColumns();
     }
 
     // ── Laden ────────────────────────────────────────────────────
@@ -699,6 +715,8 @@ internal sealed partial class TrackListController : NSViewController
 
         public override bool ShouldSelectRow(NSTableView tableView, nint row) => owner._rows[(int)row] is AudioTrack;
 
+        public override NSTableRowView CoreGetRowView(NSTableView tableView, nint row) => new SelectionRowView(bar: false);
+
         public override NSView GetViewForItem(NSTableView tableView, NSTableColumn? tableColumn, nint row)
         {
             if (owner._rows[(int)row] is SubfoldersTitle title)
@@ -836,6 +854,10 @@ internal sealed partial class TrackListController : NSViewController
 
         public override void SelectionDidChange(NSNotification notification) =>
             owner.SelectionChanged?.Invoke();
+
+        public override void ColumnDidMove(NSNotification notification) => owner.RememberColumns();
+
+        public override void ColumnDidResize(NSNotification notification) => owner.RememberColumns();
     }
 
     /// <summary>Cover, daneben der Titel, klein darunter der Interpret.</summary>

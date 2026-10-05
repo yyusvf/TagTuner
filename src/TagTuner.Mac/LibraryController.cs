@@ -109,12 +109,17 @@ internal sealed partial class LibraryController : NSViewController
         _search.SendsSearchStringImmediately = true;
 
         // ── Baum ─────────────────────────────────────────────────
-        _outline.Style = NSTableViewStyle.SourceList;
+        // Schlichter Stil statt Seitenleiste: Nur so zeichnet SelectionRowView die
+        // Auswahl, die Seitenleiste nähme sonst die volle Akzentfarbe.
+        _outline.Style = NSTableViewStyle.Plain;
+        _outline.BackgroundColor = NSColor.Clear;
+        // Die eine Spalte füllt immer die Breite, damit Namen gekürzt statt abgeschnitten werden.
+        _outline.ColumnAutoresizingStyle = NSTableViewColumnAutoresizingStyle.FirstColumnOnly;
         _outline.HeaderView = null;
         _outline.RowHeight = 44;
         _outline.IndentationPerLevel = 14;
         _outline.AutosaveExpandedItems = false;
-        var column = new NSTableColumn("name") { Editable = false };
+        var column = new NSTableColumn("name") { Editable = false, ResizingMask = NSTableColumnResizing.Autoresizing };
         _outline.AddColumn(column);
         _outline.OutlineTableColumn = column;
         _outline.Delegate = new Delegate(this);
@@ -126,10 +131,12 @@ internal sealed partial class LibraryController : NSViewController
         _treeScroll.AutohidesScrollers = true;
 
         // ── Suchtreffer ──────────────────────────────────────────
-        _results.Style = NSTableViewStyle.SourceList;
+        _results.Style = NSTableViewStyle.Plain;
+        _results.BackgroundColor = NSColor.Clear;
+        _results.ColumnAutoresizingStyle = NSTableViewColumnAutoresizingStyle.FirstColumnOnly;
         _results.HeaderView = null;
         _results.RowHeight = 36;
-        _results.AddColumn(new NSTableColumn("hit") { Editable = false });
+        _results.AddColumn(new NSTableColumn("hit") { Editable = false, ResizingMask = NSTableColumnResizing.Autoresizing });
         _results.DataSource = new HitSource(this);
         _results.Delegate = new HitDelegate(this);
         _resultScroll.DocumentView = _results;
@@ -282,6 +289,8 @@ internal sealed partial class LibraryController : NSViewController
 
     private sealed class HitDelegate(LibraryController owner) : NSTableViewDelegate
     {
+        public override NSTableRowView CoreGetRowView(NSTableView tableView, nint row) => new SelectionRowView(bar: true);
+
         public override NSView GetViewForItem(NSTableView tableView, NSTableColumn tableColumn, nint row)
         {
             var hit = owner._hits[(int)row];
@@ -397,6 +406,8 @@ internal sealed partial class LibraryController : NSViewController
 
     private sealed class Delegate(LibraryController owner) : NSOutlineViewDelegate
     {
+        public override NSTableRowView RowViewForItem(NSOutlineView outlineView, NSObject item) => new SelectionRowView(bar: true);
+
         public override NSView GetView(NSOutlineView outlineView, NSTableColumn? tableColumn, NSObject item)
         {
             var node = (FolderNode)item;
