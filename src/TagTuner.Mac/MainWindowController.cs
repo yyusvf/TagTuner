@@ -783,7 +783,7 @@ internal sealed class RootController(NSSplitViewController split, PlayerBar bar)
             bar.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
             bar.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
             bar.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
-            bar.HeightAnchor.ConstraintEqualTo(64),
+            bar.HeightAnchor.ConstraintEqualTo(46),
         ]);
         View = root;
     }
