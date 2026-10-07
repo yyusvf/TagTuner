@@ -20,8 +20,32 @@ public sealed partial class MainWindow
 {
     // ══ Metadatenspalte ══════════════════════════════════════════
 
+    /// <summary>
+    /// Ein Cover für Dateien, die selbst keins tragen können (WAV, AIFF,
+    /// OGG). Es wird beim Anwenden geschrieben, wenn dabei in ein Format mit
+    /// Cover umgewandelt wird. Gehört zur Auswahl und verfällt mit ihr.
+    /// </summary>
+    private (byte[] Data, string Mime)? _pendingCover;
+
+    private void StagePendingCover(byte[] data, string mime)
+    {
+        _pendingCover = (data, mime);
+        try
+        {
+            var bmp = new BitmapImage();
+            using var ms = new MemoryStream(data);
+            bmp.SetSource(ms.AsRandomAccessStream());
+            CoverImage.Source = bmp;
+        }
+        catch { }
+        CoverMime.Text = Strings.T("pending");
+        CoverInfo.Text = Strings.T("Set when you apply");
+        UpdatePlan();
+    }
+
     private void UpdateMetaPanel()
     {
+        _pendingCover = null;
         var sel = TargetTracks();
         _suppressSelection = true;
 
@@ -231,12 +255,22 @@ public sealed partial class MainWindow
                 jobs.Add(Strings.T("bring to {0}", FormatRate(hz)));
         }
 
+        // Ein vorgemerktes Cover kommt nur mit, wenn das Ziel es tragen kann.
+        string? coverHint = null;
+        if (_pendingCover is not null)
+        {
+            if (FFormat.SelectedItem is string target && AudioFormats.CanCarryCover(target))
+                jobs.Add(Strings.T("set cover"));
+            else
+                coverHint = Strings.T("The cover needs MP3, FLAC or M4A as file format.");
+        }
+
         var was = Strings.T("{0} file(s)", sel.Count);
 
         ApplyBtn.IsEnabled = jobs.Count > 0;
-        PlanText.Text = jobs.Count > 0
+        PlanText.Text = (jobs.Count > 0
             ? $"{was}: {string.Join(" · ", jobs)}"
-            : was;
+            : was) + (coverHint is null ? "" : Environment.NewLine + coverHint);
     }
 
     // ══ Schreiben ════════════════════════════════════════════════
@@ -297,8 +331,15 @@ public sealed partial class MainWindow
             ? Strings.T("Converting {0} file(s)", sel.Count)
             : Strings.T("Writing tags to {0} file(s)", sel.Count);
 
+        // Das vorgemerkte Cover geht in die umgewandelten Dateien, sofern das
+        // neue Format es tragen kann; der Rest bleibt, wie er ist.
+        var withCover = _pendingCover is { } pending && wantFormat is not null
+                        && AudioFormats.CanCarryCover(wantFormat)
+            ? edit with { Cover = pending.Data, CoverMimeType = pending.Mime }
+            : edit;
+
         var ok = await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel,
-            track => (Converts(track), wantFormat, wantRate, edit), doing);
+            track => (Converts(track), wantFormat, wantRate, Converts(track) ? withCover : edit), doing);
 
         // Das kleine Fenster aus dem Explorer hat seine Aufgabe erledigt.
         // Bei Fehlern bleibt es offen, damit man es noch einmal versuchen kann.

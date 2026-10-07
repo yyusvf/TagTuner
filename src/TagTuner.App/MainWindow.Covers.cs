@@ -354,6 +354,16 @@ public sealed partial class MainWindow
         var able = targets.Where(t => AudioFormats.CanCarryCover(t.Format)).ToList();
         var unable = targets.Except(able).ToList();
 
+        // Keine der Dateien kann ein Cover tragen, aber vielleicht soll sie
+        // gerade umgewandelt werden, etwa WAV zu MP3. Dann wird das Cover
+        // vorgemerkt und beim Anwenden in die neue Datei geschrieben, statt
+        // zwei Durchgänge zu verlangen.
+        if (able.Count == 0 && edit.Cover is { Length: > 0 } cover)
+        {
+            StagePendingCover(cover, edit.CoverMimeType ?? "image/jpeg");
+            return;
+        }
+
         if (able.Count == 0)
         {
             await Inform(Strings.T("Format carries no cover"),
