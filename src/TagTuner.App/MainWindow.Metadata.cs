@@ -46,26 +46,42 @@ public sealed partial class MainWindow
         UpdatePlan();
     }
 
-    /// <summary>Die Formate der Auswahl, etwa „WAV" oder „WAV, AIFF".</summary>
+    /// <summary>
+    /// Die Formate der Auswahl, die kein Cover tragen, etwa „WAV" oder
+    /// „WAV, AIFF". Bei MP3 und WAV gemischt also nur „WAV".
+    /// </summary>
     private string PendingFormats() =>
-        string.Join(", ", TargetTracks().Select(t => t.Format.ToUpperInvariant()).Distinct());
+        string.Join(", ", TargetTracks()
+            .Where(t => !AudioFormats.CanCarryCover(t.Format))
+            .Select(t => t.Format.ToUpperInvariant()).Distinct());
+
+    /// <summary>Das gewählte Zielformat, oder null wenn keins gewählt ist.</summary>
+    private string? CoverTarget => FFormat.SelectedItem as string;
 
     /// <summary>
-    /// Vor dem Anwenden mit vorgemerktem Cover: sagen, ob es mitkommt oder
-    /// verloren geht. Falsch heißt abbrechen.
+    /// Vor dem Anwenden mit vorgemerktem Cover sagen, welche Dateien es
+    /// bekommen und welche nicht. Falsch heißt abbrechen.
     /// </summary>
-    private async Task<bool> ConfirmPendingCover(string? wantFormat, int count)
+    private async Task<bool> ConfirmPendingCover(List<AudioTrack> sel, string? wantFormat)
     {
         if (_pendingCover is null) return true;
 
-        return wantFormat is not null && AudioFormats.CanCarryCover(wantFormat)
-            ? await Confirm(Strings.T("Cover"),
-                Strings.T("{0} file(s) are converted to {1} and get the cover.", count, wantFormat),
-                Strings.T("Apply"))
-            : await Confirm(Strings.T("Cover"),
+        var gets = sel.Count(t => AudioFormats.CarriesCoverAfter(t.Format, wantFormat));
+        var misses = sel.Count - gets;
+        var missing = string.Join(", ", sel
+            .Where(t => !AudioFormats.CarriesCoverAfter(t.Format, wantFormat))
+            .Select(t => (wantFormat ?? t.Format).ToUpperInvariant()).Distinct());
+
+        if (gets == 0)
+            return await Confirm(Strings.T("Cover"),
                 Strings.T("{0} cannot store a cover, so the cover is not saved. The other changes are applied.",
-                          PendingFormats()),
+                          missing),
                 Strings.T("Apply anyway"));
+
+        var text = Strings.T("{0} file(s) get the cover.", gets);
+        if (misses > 0)
+            text += " " + Strings.T("{0} cannot store a cover, so {1} file(s) stay without one.", missing, misses);
+        return await Confirm(Strings.T("Cover"), text, Strings.T("Apply"));
     }
 
     private void UpdateMetaPanel()
@@ -280,10 +296,10 @@ public sealed partial class MainWindow
                 jobs.Add(Strings.T("bring to {0}", FormatRate(hz)));
         }
 
-        // Ein vorgemerktes Cover kommt nur mit, wenn das Ziel es tragen kann.
-        // Sonst kein zweiter Hinweis hier: Der beim Cover genügt.
+        // Ein vorgemerktes Cover kommt in jede Datei, die danach eines
+        // tragen kann. Sonst kein zweiter Hinweis hier: Der beim Cover genügt.
         if (_pendingCover is not null
-            && FFormat.SelectedItem is string target && AudioFormats.CanCarryCover(target))
+            && sel.Any(t => AudioFormats.CarriesCoverAfter(t.Format, CoverTarget)))
             jobs.Add(Strings.T("set cover"));
 
         var was = Strings.T("{0} file(s)", sel.Count);
@@ -347,22 +363,22 @@ public sealed partial class MainWindow
                  .Equals(AudioFormats.TargetExtension(wantFormat), StringComparison.OrdinalIgnoreCase))
             || (wantRate is int hz && track.SampleRate != hz);
 
-        if (!await ConfirmPendingCover(wantFormat, sel.Count(Converts))) return;
+        if (!await ConfirmPendingCover(sel, wantFormat)) return;
 
         // Im Verlauf reicht die Zahl; oben in der Leiste soll stehen, was passiert.
         var doing = sel.Any(Converts)
             ? Strings.T("Converting {0} file(s)", sel.Count)
             : Strings.T("Writing tags to {0} file(s)", sel.Count);
 
-        // Das vorgemerkte Cover geht in die umgewandelten Dateien, sofern das
-        // neue Format es tragen kann; der Rest bleibt, wie er ist.
-        var withCover = _pendingCover is { } pending && wantFormat is not null
-                        && AudioFormats.CanCarryCover(wantFormat)
+        // Das vorgemerkte Cover geht in jede Datei, die danach eines tragen
+        // kann: umgewandelte in ihr neues Format, die übrigen, wie sie sind.
+        var withCover = _pendingCover is { } pending
             ? edit with { Cover = pending.Data, CoverMimeType = pending.Mime }
             : edit;
 
         var ok = await RunJobAsync(Strings.T("{0} file(s)", sel.Count), sel,
-            track => (Converts(track), wantFormat, wantRate, Converts(track) ? withCover : edit), doing);
+            track => (Converts(track), wantFormat, wantRate,
+                      AudioFormats.CarriesCoverAfter(track.Format, wantFormat) ? withCover : edit), doing);
 
         // Das kleine Fenster aus dem Explorer hat seine Aufgabe erledigt.
         // Bei Fehlern bleibt es offen, damit man es noch einmal versuchen kann.

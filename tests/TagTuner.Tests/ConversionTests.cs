@@ -44,3 +44,18 @@ public class ConversionTests
         Assert.Equal("Ufer", AudioProbe.Read(mp3)?.Title);
     }
 }
+
+/// <summary>Wer nach dem Anwenden ein Cover tragen kann, bei gemischter Auswahl.</summary>
+public class CoverAfterTests
+{
+    [Theory]
+    [InlineData("MP3", null, true)]     // bleibt MP3
+    [InlineData("WAV", null, false)]    // bleibt WAV
+    [InlineData("WAV", "MP3", true)]    // wird MP3
+    [InlineData("MP3", "WAV", false)]   // wird WAV, verliert die Möglichkeit
+    [InlineData("WAV", "WAV", false)]
+    [InlineData("AIFF", "FLAC", true)]
+    [InlineData("OGG", "M4A", true)]
+    public void Decides_by_the_format_after_applying(string now, string? target, bool expected) =>
+        Assert.Equal(expected, AudioFormats.CarriesCoverAfter(now, target));
+}

@@ -50,6 +50,15 @@ public static class AudioFormats
     public static bool CanCarryCover(string formatOrPath) =>
         CoverCapable.Contains(Normalize(formatOrPath));
 
+    /// <summary>
+    /// Ob eine Datei nach dem Anwenden ein Cover tragen kann: Mit gewähltem
+    /// Zielformat zählt dieses, sonst bleibt es beim jetzigen Format. So
+    /// bekommt bei MP3 und WAV mit Ziel MP3 beides das Cover, ohne Ziel nur
+    /// die MP3.
+    /// </summary>
+    public static bool CarriesCoverAfter(string currentFormat, string? targetFormat) =>
+        CanCarryCover(targetFormat ?? currentFormat);
+
     public static bool IsLossy(string formatOrPath) =>
         Lossy.Contains(Normalize(formatOrPath));
 
