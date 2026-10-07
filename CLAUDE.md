@@ -114,6 +114,7 @@ Neue Windows-Features hier mit „offen“ in der Mac-Spalte eintragen, damit ni
 | Ordner als Playlist, Bibliothek mit eigenen/ausgeblendeten Ordnern | ✓ | offen |
 | Metadaten-Spalte (nur Auswahl, `<mixed>`), Anwenden, Zurücksetzen | ✓ | offen |
 | Cover setzen/einfügen/kopieren/zuschneiden/entfernen, aus dem Ordner wählen | ✓ | offen |
+| Cover für WAV/AIFF/OGG vormerken, beim Umwandeln mitschreiben | ✓ | offen |
 | Format/Samplerate umwandeln (ffmpeg), Ordner angleichen mit Protokoll | ✓ | offen |
 | Album-Modus (Basis-Tags, Cover, Nummerierung, Dateinamen folgen) | ✓ | offen |
 | Umsortieren per Ziehen mit Aufleuchten, Disc-Zeilen | ✓ | offen |
