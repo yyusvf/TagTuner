@@ -38,9 +38,34 @@ public sealed partial class MainWindow
             CoverImage.Source = bmp;
         }
         catch { }
-        CoverMime.Text = Strings.T("pending");
-        CoverInfo.Text = Strings.T("Set when you apply");
+        // Ein einziger Hinweis, dort wo das Cover steht. Was beim Anwenden
+        // genau passiert, sagt die Rückfrage dann noch einmal.
+        CoverMime.Text = "";
+        CoverInfo.Text = Strings.T("{0} cannot store a cover. It is added when you convert to MP3, FLAC or M4A.",
+                                   PendingFormats());
         UpdatePlan();
+    }
+
+    /// <summary>Die Formate der Auswahl, etwa „WAV" oder „WAV, AIFF".</summary>
+    private string PendingFormats() =>
+        string.Join(", ", TargetTracks().Select(t => t.Format.ToUpperInvariant()).Distinct());
+
+    /// <summary>
+    /// Vor dem Anwenden mit vorgemerktem Cover: sagen, ob es mitkommt oder
+    /// verloren geht. Falsch heißt abbrechen.
+    /// </summary>
+    private async Task<bool> ConfirmPendingCover(string? wantFormat, int count)
+    {
+        if (_pendingCover is null) return true;
+
+        return wantFormat is not null && AudioFormats.CanCarryCover(wantFormat)
+            ? await Confirm(Strings.T("Cover"),
+                Strings.T("{0} file(s) are converted to {1} and get the cover.", count, wantFormat),
+                Strings.T("Apply"))
+            : await Confirm(Strings.T("Cover"),
+                Strings.T("{0} cannot store a cover, so the cover is not saved. The other changes are applied.",
+                          PendingFormats()),
+                Strings.T("Apply anyway"));
     }
 
     private void UpdateMetaPanel()
@@ -256,21 +281,17 @@ public sealed partial class MainWindow
         }
 
         // Ein vorgemerktes Cover kommt nur mit, wenn das Ziel es tragen kann.
-        string? coverHint = null;
-        if (_pendingCover is not null)
-        {
-            if (FFormat.SelectedItem is string target && AudioFormats.CanCarryCover(target))
-                jobs.Add(Strings.T("set cover"));
-            else
-                coverHint = Strings.T("The cover needs MP3, FLAC or M4A as file format.");
-        }
+        // Sonst kein zweiter Hinweis hier: Der beim Cover genügt.
+        if (_pendingCover is not null
+            && FFormat.SelectedItem is string target && AudioFormats.CanCarryCover(target))
+            jobs.Add(Strings.T("set cover"));
 
         var was = Strings.T("{0} file(s)", sel.Count);
 
         ApplyBtn.IsEnabled = jobs.Count > 0;
-        PlanText.Text = (jobs.Count > 0
+        PlanText.Text = jobs.Count > 0
             ? $"{was}: {string.Join(" · ", jobs)}"
-            : was) + (coverHint is null ? "" : Environment.NewLine + coverHint);
+            : was;
     }
 
     // ══ Schreiben ════════════════════════════════════════════════
@@ -325,6 +346,8 @@ public sealed partial class MainWindow
              !AudioFormats.TargetExtension(track.Format)
                  .Equals(AudioFormats.TargetExtension(wantFormat), StringComparison.OrdinalIgnoreCase))
             || (wantRate is int hz && track.SampleRate != hz);
+
+        if (!await ConfirmPendingCover(wantFormat, sel.Count(Converts))) return;
 
         // Im Verlauf reicht die Zahl; oben in der Leiste soll stehen, was passiert.
         var doing = sel.Any(Converts)
