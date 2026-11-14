@@ -8,6 +8,8 @@ tags, covers, track order and file format, all in one window.
 
 **Website:** [tagtuner.app](https://tagtuner.app)
 
+![The TagTuner window with metadata, library, track list and folder analysis](site/assets/main.webp)
+
 ## What it's for
 
 You have a folder with an album in it, and the files are a mess: the track
